@@ -6,6 +6,10 @@
   "permissions": [
     "allow-workspace-get-state",
     "allow-search-execute",
+    "allow-source-capture",
+    "allow-library-get",
+    "allow-graph-get",
+    "allow-assistant-ask",
     "allow-workspace-open",
     "allow-document-open",
     "allow-document-save",

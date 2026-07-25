@@ -10,6 +10,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum SettingsError {
@@ -65,6 +66,7 @@ pub enum ProviderKind {
     Anthropic,
     #[serde(rename = "deepseek")]
     DeepSeek,
+    Compatible,
 }
 
 impl ProviderKind {
@@ -74,6 +76,7 @@ impl ProviderKind {
             Self::OpenAi => "openai",
             Self::Anthropic => "anthropic",
             Self::DeepSeek => "deepseek",
+            Self::Compatible => "compatible",
         }
     }
 
@@ -82,6 +85,7 @@ impl ProviderKind {
             "openai" => Ok(Self::OpenAi),
             "anthropic" => Ok(Self::Anthropic),
             "deepseek" => Ok(Self::DeepSeek),
+            "compatible" => Ok(Self::Compatible),
             _ => Err(SettingsError::Database(format!(
                 "unknown provider kind: {value}"
             ))),
@@ -147,7 +151,7 @@ impl fmt::Debug for SecretInput {
     }
 }
 
-/// Write-only secret lifecycle required from the Phase 5 Stronghold adapter.
+/// Native-only secret lifecycle implemented by the Stronghold adapter.
 ///
 /// Deliberately no read method exists: provider adapters consume secrets behind this boundary.
 pub trait CredentialVault {
@@ -168,6 +172,18 @@ pub trait CredentialVault {
     ///
     /// Returns a storage error without exposing the secret.
     fn remove(&mut self, credential: &CredentialRef) -> Result<(), SettingsError>;
+
+    /// Resolves a secret only for native provider execution. Implementations must return
+    /// zeroizing memory and this value must never cross IPC.
+    ///
+    /// # Errors
+    ///
+    /// Returns a secure-store error when this vault cannot resolve credentials.
+    fn resolve(&self, _credential: &CredentialRef) -> Result<Zeroizing<String>, SettingsError> {
+        Err(SettingsError::SecureStore(
+            "credential resolution is unavailable".to_owned(),
+        ))
+    }
 }
 
 pub trait ProviderProbe {
@@ -184,11 +200,9 @@ pub trait ProviderProbe {
     ) -> Result<(), SettingsError>;
 }
 
-/// Phase 2's deterministic provider boundary.
-///
-/// Network-backed health checks arrive with provider adapters in Phase 5. Until then this
-/// validates only the already-scoped endpoint and opaque credential reference, so desktop tests
-/// and offline startup never make an implicit network request.
+/// Deterministic provider boundary used by service tests and offline startup checks.
+/// The production Tauri command performs an authenticated `/models` request before persisting
+/// healthy state; this lightweight probe keeps pure settings tests independent of the network.
 #[derive(Default)]
 pub struct Phase2ProviderProbe;
 
@@ -336,6 +350,23 @@ impl CredentialVault for StrongholdCredentialVault {
         self.stronghold
             .save()
             .map_err(|error| SettingsError::SecureStore(error.to_string()))
+    }
+
+    fn resolve(&self, credential: &CredentialRef) -> Result<Zeroizing<String>, SettingsError> {
+        let client = self
+            .stronghold
+            .get_client(Self::CLIENT)
+            .map_err(|error| SettingsError::SecureStore(error.to_string()))?;
+        let bytes = Zeroizing::new(
+            client
+                .store()
+                .get(credential.as_str().as_bytes())
+                .map_err(|error| SettingsError::SecureStore(error.to_string()))?
+                .ok_or(SettingsError::ProviderNotConfigured)?,
+        );
+        let secret = String::from_utf8(bytes.to_vec())
+            .map_err(|_| SettingsError::SecureStore("credential is not UTF-8".to_owned()))?;
+        Ok(Zeroizing::new(secret))
     }
 }
 
@@ -996,5 +1027,38 @@ impl<V: CredentialVault, P: ProviderProbe> ProviderConnectionService<V, P> {
     #[must_use]
     pub fn credential_ref(&self, provider: ProviderKind) -> Option<&CredentialRef> {
         self.credential_refs.get(&provider)
+    }
+
+    /// Returns native-only provider endpoint and zeroizing credential for one request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed settings error when the provider or credential is unavailable.
+    pub fn native_provider(
+        &self,
+        provider: ProviderKind,
+    ) -> Result<(String, Zeroizing<String>), SettingsError> {
+        let record = self
+            .repository
+            .provider_record(provider)?
+            .ok_or(SettingsError::ProviderNotConfigured)?;
+        let secret = self.vault.resolve(&record.credential_ref)?;
+        Ok((record.endpoint, secret))
+    }
+
+    /// Persists the result of a native provider probe without exposing credentials to IPC.
+    ///
+    /// # Errors
+    ///
+    /// Returns a database error or `ProviderNotConfigured` for an unknown provider.
+    pub fn mark_health(
+        &mut self,
+        provider: ProviderKind,
+        health: HealthStatus,
+    ) -> Result<(), SettingsError> {
+        if !self.credential_refs.contains_key(&provider) {
+            return Err(SettingsError::ProviderNotConfigured);
+        }
+        self.repository.update_health(provider, health)
     }
 }

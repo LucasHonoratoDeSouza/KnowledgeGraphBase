@@ -18,9 +18,10 @@ pedantic = "warn"
 [workspace.dependencies]
 blake3 = "=1.8.5"
 pdf-extract = "=0.12.0"
-reqwest = { version = "=0.13.4", default-features = false, features = ["blocking", "brotli", "gzip", "json", "rustls"] }
+reqwest = { version = "=0.13.4", default-features = false, features = ["blocking", "brotli", "gzip", "json", "multipart", "rustls"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
+sha2 = "=0.10.9"
 rusqlite = { version = "=0.39.0", features = ["bundled"] }
 getrandom = "=0.4.3"
 thiserror = "=2.0.19"

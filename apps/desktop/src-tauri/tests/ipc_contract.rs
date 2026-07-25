@@ -12,6 +12,10 @@ fn manifest_declares_only_scoped_desktop_foundation_commands() {
         &[
             "workspace_get_state",
             "search_execute",
+            "source_capture",
+            "library_get",
+            "graph_get",
+            "assistant_ask",
             "workspace_open",
             "document_open",
             "document_save",
@@ -96,6 +100,10 @@ fn capability_grants_only_manifest_permissions_to_main() {
         json!([
             "allow-workspace-get-state",
             "allow-search-execute",
+            "allow-source-capture",
+            "allow-library-get",
+            "allow-graph-get",
+            "allow-assistant-ask",
             "allow-workspace-open",
             "allow-document-open",
             "allow-document-save",
