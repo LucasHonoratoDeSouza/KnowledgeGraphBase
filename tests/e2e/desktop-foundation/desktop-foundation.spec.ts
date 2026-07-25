@@ -388,6 +388,81 @@ test("collapses an Explorer folder and keeps it collapsed after restart", async 
   ).toBeVisible();
 });
 
+test("renames a note from the Explorer context menu", async ({ page }) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  const explorer = page.getByRole("region", { name: "Explorer" });
+
+  await explorer.getByRole("button", { name: "Knowledge OS" }).click({
+    button: "right",
+  });
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const name = explorer.getByRole("textbox", { name: "New name" });
+  await expect(name).toHaveValue("Knowledge OS");
+  await name.fill("Knowledge OS rewritten");
+  await name.press("Enter");
+
+  await expect(
+    explorer.getByRole("button", { name: "Knowledge OS rewritten" }),
+  ).toBeVisible();
+  await expect(
+    explorer.getByRole("button", { name: "Knowledge OS", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("switches a note between source and reading views", async ({ page }) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  await page.getByRole("tab", { name: "Welcome.md" }).click();
+  await page
+    .getByRole("textbox", { name: "Edit notes/Welcome.md" })
+    .fill("# Reading check\n\nSome **bold** copy.\n");
+
+  await page.getByRole("button", { name: "Reading" }).click();
+
+  const rendered = page.getByRole("article", { name: "Rendered note" });
+  await expect(
+    rendered.getByRole("heading", { name: "Reading check" }),
+  ).toBeVisible();
+  await expect(rendered.getByText("bold")).toBeVisible();
+
+  await page
+    .getByRole("group", { name: "View mode" })
+    .getByRole("button", { name: "Source" })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Edit notes/Welcome.md" }),
+  ).toContainText("Some **bold** copy.");
+});
+
+test("resizes the Explorer by dragging its divider and keeps it after restart", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  const divider = page.getByRole("separator", { name: "Resize Explorer" });
+  const box = await divider.boundingBox();
+  if (!box) throw new Error("divider has no box");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 70, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+
+  // The pointer lands on a sub-pixel boundary, so the exact width is not
+  // predictable — what matters is that it grew past the 240px default and that
+  // the same width comes back after a restart.
+  const workspace = page.locator(".retrieve-workspace");
+  await expect(workspace).toHaveCSS("grid-template-columns", /^3\d\d(\.\d+)?px /);
+  const resized = await workspace.evaluate(
+    (element) => getComputedStyle(element).gridTemplateColumns,
+  );
+
+  await page.reload();
+
+  await expect(workspace).toHaveCSS("grid-template-columns", resized);
+});
+
 test("assistant surface stays read-only with no action or research tools", async ({
   page,
 }) => {
