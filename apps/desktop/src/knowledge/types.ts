@@ -29,12 +29,29 @@ export interface DocumentRecord {
   contentHash: string;
 }
 
+export type OrganizeMode = "auto" | "folder" | "none";
+
 export interface CaptureRequest {
   kind: "auto" | "url" | "text" | "meeting_note" | "markdown" | "pdf";
   title: string;
   content: string;
   fileName: string;
   bytes: number[];
+  organize?: OrganizeMode;
+  organizeFolder?: string;
+}
+
+export interface LibrarianMove {
+  from: string;
+  to: string;
+  reason: string;
+}
+
+export interface LibrarianOutcome {
+  folder: string;
+  moves: LibrarianMove[];
+  skipped: string[];
+  library: LibrarySnapshot;
 }
 
 export interface CaptureResponse {
@@ -137,7 +154,13 @@ export interface AssistantAnswer {
 export interface KnowledgeClient {
   capture(request: CaptureRequest): Promise<CaptureResponse>;
   createFolder(path: string): Promise<LibrarySnapshot>;
+  deleteEntry(path: string): Promise<LibrarySnapshot>;
   getLibrary(): Promise<LibrarySnapshot>;
+  moveEntry(path: string, destination: string): Promise<LibrarySnapshot>;
+  renameEntry(path: string, name: string): Promise<LibrarySnapshot>;
+  reorganizeFolder(folder: string): Promise<LibrarianOutcome>;
+  undoReorganization(): Promise<LibrarianOutcome>;
+  crowdedFolders(): Promise<string[]>;
   getOrganization(): Promise<OrganizationSnapshot>;
   getGraph(): Promise<GraphView>;
   search(query: string): Promise<RetrievalResult>;
