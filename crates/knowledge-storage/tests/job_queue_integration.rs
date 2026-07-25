@@ -52,6 +52,51 @@ fn lease_selects_oldest_queued_job_and_increments_attempt() {
 }
 
 #[test]
+fn targeted_lease_selects_requested_job_without_reordering_queue() {
+    let (store, sources) = store_with_sources(2);
+    let first = store.enqueue_job(&sources[0], "first-key").unwrap();
+    let second = store.enqueue_job(&sources[1], "second-key").unwrap();
+    let leased = store
+        .lease_job(&second.id, "worker-b", 100, 30)
+        .unwrap()
+        .unwrap();
+    assert_eq!(leased.id, second.id);
+    assert_eq!(leased.attempt, 1);
+    assert_eq!(
+        store.job(&first.id).unwrap().unwrap().state,
+        JobState::Queued
+    );
+}
+
+#[test]
+fn targeted_lease_respects_two_job_vault_limit() {
+    let (store, sources) = store_with_sources(3);
+    let jobs = sources
+        .iter()
+        .enumerate()
+        .map(|(index, source)| store.enqueue_job(source, &format!("key-{index}")).unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        store
+            .lease_job(&jobs[0].id, "a", 100, 30)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        store
+            .lease_job(&jobs[1].id, "b", 100, 30)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        store
+            .lease_job(&jobs[2].id, "c", 100, 30)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
 fn at_most_two_unexpired_jobs_are_leased() {
     let (store, sources) = store_with_sources(3);
     for (index, source) in sources.iter().enumerate() {

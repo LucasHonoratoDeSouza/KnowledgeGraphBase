@@ -434,6 +434,18 @@ impl KnowledgeStore {
         source_by_id(&connection, id)
     }
 
+    pub fn list_sources(&self) -> Result<Vec<SourceRecord>, StorageError> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare("SELECT id FROM sources ORDER BY updated_at DESC, created_at DESC, id DESC")?;
+        let ids = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        ids.into_iter()
+            .map(|id| source_by_id(&connection, &id)?.ok_or(StorageError::NotFound("source")))
+            .collect()
+    }
+
     pub fn source_by_identity_parts(
         &self,
         normalized_uri: &str,
@@ -487,6 +499,34 @@ impl KnowledgeStore {
     pub fn document(&self, id: &str) -> Result<Option<DocumentRecord>, StorageError> {
         let connection = self.lock()?;
         document_by_id(&connection, id)
+    }
+
+    pub fn document_for_source(
+        &self,
+        source_id: &str,
+    ) -> Result<Option<DocumentRecord>, StorageError> {
+        let connection = self.lock()?;
+        connection
+            .query_row(
+                "SELECT id FROM documents WHERE source_id = ? ORDER BY revision DESC LIMIT 1",
+                [source_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .map(|id| document_by_id(&connection, &id)?.ok_or(StorageError::NotFound("document")))
+            .transpose()
+    }
+
+    pub fn list_documents(&self) -> Result<Vec<DocumentRecord>, StorageError> {
+        let connection = self.lock()?;
+        let mut statement =
+            connection.prepare("SELECT id FROM documents ORDER BY updated_at DESC, id DESC")?;
+        let ids = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        ids.into_iter()
+            .map(|id| document_by_id(&connection, &id)?.ok_or(StorageError::NotFound("document")))
+            .collect()
     }
 
     pub fn chunks_for_document(&self, document_id: &str) -> Result<Vec<ChunkDraft>, StorageError> {

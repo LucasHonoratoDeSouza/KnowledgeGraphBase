@@ -13,12 +13,14 @@ use url::Url;
 
 mod adapters;
 mod capture;
+mod pipeline;
 
 pub use adapters::{
     ExtractedContent, NativeContentAdapter, TranscriptSegment, extract_article_html,
     extract_youtube_page,
 };
 pub use capture::{CaptureReceipt, CaptureRequest, CaptureService};
+pub use pipeline::{DeterministicPipeline, PipelineResult};
 
 pub const PIPELINE_VERSION: &str = "ingestion-v1";
 pub const MAX_URL_LENGTH: usize = 2_048;
@@ -52,6 +54,8 @@ pub enum IngestionError {
     MissingTranscript,
     #[error("local knowledge storage failed: {0}")]
     Storage(String),
+    #[error("the local ingestion queue is currently at capacity")]
+    PipelineBusy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

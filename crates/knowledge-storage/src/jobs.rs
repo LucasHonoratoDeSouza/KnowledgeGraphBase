@@ -88,6 +88,45 @@ impl KnowledgeStore {
         Ok(Some(job))
     }
 
+    /// Leases one known queued job while preserving the per-vault concurrency bound.
+    pub fn lease_job(
+        &self,
+        id: &str,
+        worker: &str,
+        now_epoch_seconds: i64,
+        lease_seconds: i64,
+    ) -> Result<Option<IngestionJob>, StorageError> {
+        if worker.trim().is_empty() || lease_seconds <= 0 {
+            return Err(StorageError::Constraint(
+                "worker and positive lease duration are required".to_owned(),
+            ));
+        }
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        let active: i64 = transaction.query_row(
+            "SELECT COUNT(*) FROM ingestion_jobs WHERE state = 'RUNNING' AND lease_expires_at > ? AND id <> ?",
+            params![now_epoch_seconds, id],
+            |row| row.get(0),
+        )?;
+        if active >= 2 {
+            transaction.commit()?;
+            return Ok(None);
+        }
+        let affected = transaction.execute(
+            "UPDATE ingestion_jobs SET state = 'RUNNING', attempt = attempt + 1,
+             lease_owner = ?, lease_expires_at = ?, error = NULL, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND attempt < 3 AND (state = 'QUEUED' OR (state = 'RUNNING' AND lease_expires_at <= ?))",
+            params![worker, now_epoch_seconds + lease_seconds, id, now_epoch_seconds],
+        )?;
+        if affected == 0 {
+            transaction.commit()?;
+            return Ok(None);
+        }
+        let job = job_by_id(&transaction, id)?.ok_or(StorageError::NotFound("ingestion job"))?;
+        transaction.commit()?;
+        Ok(Some(job))
+    }
+
     /// Marks a leased job completed only for its current owner.
     pub fn complete_job(&self, id: &str, worker: &str) -> Result<(), StorageError> {
         let affected = self.lock()?.execute(
