@@ -2301,6 +2301,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "knowledge-ai"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "zeroize",
+]
+
+[[package]]
 name = "knowledge-domain"
 version = "0.1.0"
 dependencies = [
