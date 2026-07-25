@@ -5,6 +5,7 @@ import { App } from "./App";
 import {
   browserE2EEditorClient,
   browserE2EFolderPicker,
+  browserE2EKnowledgeClient,
   browserE2ESettingsClient,
 } from "./e2e/client";
 import "./styles.css";
@@ -15,6 +16,7 @@ const e2eClients = import.meta.env.VITE_E2E
   ? {
       editorClient: browserE2EEditorClient,
       folderPicker: browserE2EFolderPicker,
+      knowledgeClient: browserE2EKnowledgeClient,
       online: localStorage.getItem("knowledge-os:e2e:offline") !== "true",
       settingsClient: browserE2ESettingsClient,
     }

@@ -9,9 +9,11 @@ import {
   KeyRound,
   LockKeyhole,
   Network,
+  Plus,
   RotateCw,
   ShieldCheck,
   Trash2,
+  X,
 } from "lucide-react";
 
 import type { ProviderId, SettingsClient, SettingsSnapshot } from "./types";
@@ -27,7 +29,7 @@ const providers: Array<{
   {
     accent: "provider-openai",
     description: "GPT models for reasoning, extraction and embeddings.",
-    endpoint: "https://api.openai.com",
+    endpoint: "https://api.openai.com/v1",
     id: "openai",
     label: "OpenAI",
     monogram: "O",
@@ -35,7 +37,7 @@ const providers: Array<{
   {
     accent: "provider-anthropic",
     description: "Claude models for long context and careful synthesis.",
-    endpoint: "https://api.anthropic.com",
+    endpoint: "https://api.anthropic.com/v1",
     id: "anthropic",
     label: "Anthropic",
     monogram: "A",
@@ -47,6 +49,14 @@ const providers: Array<{
     id: "deepseek",
     label: "DeepSeek",
     monogram: "D",
+  },
+  {
+    accent: "provider-compatible",
+    description: "LiteLLM or another OpenAI-compatible gateway you control.",
+    endpoint: "http://127.0.0.1:4000/v1",
+    id: "compatible",
+    label: "Compatible / LiteLLM",
+    monogram: "L",
   },
 ];
 
@@ -60,9 +70,29 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
   const [settings, setSettings] = useState(initial);
   const [keys, setKeys] = useState<Record<ProviderId, string>>({
     anthropic: "",
+    compatible: "",
     deepseek: "",
     openai: "",
   });
+  const [providerEndpoints, setProviderEndpoints] = useState<
+    Record<ProviderId, string>
+  >({
+    anthropic:
+      initial.providers.find(({ provider }) => provider === "anthropic")
+        ?.endpoint ?? "https://api.anthropic.com/v1",
+    compatible:
+      initial.providers.find(({ provider }) => provider === "compatible")
+        ?.endpoint ?? "http://127.0.0.1:4000/v1",
+    deepseek:
+      initial.providers.find(({ provider }) => provider === "deepseek")
+        ?.endpoint ?? "https://api.deepseek.com",
+    openai:
+      initial.providers.find(({ provider }) => provider === "openai")
+        ?.endpoint ?? "https://api.openai.com/v1",
+  });
+  const [newModelId, setNewModelId] = useState("");
+  const [newModelProvider, setNewModelProvider] =
+    useState<ProviderId>("openai");
 
   function clearKey(provider: ProviderId) {
     setKeys((current) => ({ ...current, [provider]: "" }));
@@ -104,6 +134,43 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
       ai: {
         ...current.ai,
         routing: { ...current.ai.routing, [field]: value || null },
+      },
+    }));
+  }
+
+  function addModel() {
+    const id = newModelId.trim();
+    if (!id) return;
+    setSettings((current) => ({
+      ...current,
+      ai: {
+        ...current.ai,
+        models: [
+          ...current.ai.models.filter((model) => model.id !== id),
+          {
+            id,
+            provider: newModelProvider,
+            displayName: id,
+            enabled: true,
+          },
+        ],
+      },
+    }));
+    setNewModelId("");
+  }
+
+  function removeModel(id: string) {
+    setSettings((current) => ({
+      ...current,
+      ai: {
+        ...current.ai,
+        models: current.ai.models.filter((model) => model.id !== id),
+        routing: Object.fromEntries(
+          Object.entries(current.ai.routing).map(([role, modelId]) => [
+            role,
+            modelId === id ? null : modelId,
+          ]),
+        ) as SettingsSnapshot["ai"]["routing"],
       },
     }));
   }
@@ -220,8 +287,14 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
                     Endpoint
                     <input
                       aria-label={`${provider.label} endpoint`}
-                      readOnly
-                      value={connection?.endpoint ?? provider.endpoint}
+                      onChange={(event) => {
+                        const endpoint = event.currentTarget.value;
+                        setProviderEndpoints((current) => ({
+                          ...current,
+                          [provider.id]: endpoint,
+                        }));
+                      }}
+                      value={providerEndpoints[provider.id]}
                     />
                   </label>
                   <label className="field-label">
@@ -290,7 +363,10 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
                       <button
                         className="primary-button"
                         onClick={() => {
-                          void connect(provider.id, provider.endpoint);
+                          void connect(
+                            provider.id,
+                            providerEndpoints[provider.id],
+                          );
                         }}
                         type="button"
                       >
@@ -313,6 +389,95 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
             <div>
               <h2 id="models-heading">Models &amp; Routing</h2>
               <p>Stable roles keep automatic organization predictable.</p>
+            </div>
+          </div>
+          <div className="model-catalog">
+            <div className="model-add-row">
+              <label className="field-label">
+                Provider
+                <select
+                  aria-label="New model provider"
+                  onChange={(event) => {
+                    setNewModelProvider(event.currentTarget.value as ProviderId);
+                  }}
+                  value={newModelProvider}
+                >
+                  {providers.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field-label model-id-field">
+                Model identifier
+                <input
+                  aria-label="New model identifier"
+                  onChange={(event) => {
+                    setNewModelId(event.currentTarget.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addModel();
+                    }
+                  }}
+                  placeholder="e.g. gpt-4.1-mini, claude-sonnet-4-5"
+                  value={newModelId}
+                />
+              </label>
+              <button
+                className="secondary-button model-add-button"
+                disabled={!newModelId.trim()}
+                onClick={addModel}
+                type="button"
+              >
+                <Plus aria-hidden="true" size={14} /> Add model
+              </button>
+            </div>
+            <div aria-label="Configured models" className="configured-models">
+              {settings.ai.models.map((model) => (
+                <div className="configured-model-row" key={model.id}>
+                  <label>
+                    <input
+                      aria-label={`Enable ${model.displayName}`}
+                      checked={model.enabled}
+                      onChange={(event) => {
+                        const enabled = event.currentTarget.checked;
+                        setSettings((current) => ({
+                          ...current,
+                          ai: {
+                            ...current.ai,
+                            models: current.ai.models.map((candidate) =>
+                              candidate.id === model.id
+                                ? { ...candidate, enabled }
+                                : candidate,
+                            ),
+                          },
+                        }));
+                      }}
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>{model.displayName}</strong>
+                      <small>{model.provider}</small>
+                    </span>
+                  </label>
+                  <button
+                    aria-label={`Remove ${model.displayName}`}
+                    className="bare-icon-button"
+                    onClick={() => {
+                      removeModel(model.id);
+                    }}
+                    type="button"
+                  >
+                    <X aria-hidden="true" size={14} />
+                  </button>
+                </div>
+              ))}
+              {settings.ai.models.length === 0 ? (
+                <p>No models configured yet.</p>
+              ) : null}
             </div>
           </div>
           <div className="routing-grid">

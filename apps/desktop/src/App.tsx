@@ -5,12 +5,14 @@ import type {
   SettingsClient,
   SettingsSnapshot,
 } from "./settings";
+import type { KnowledgeClient } from "./knowledge";
 
 interface AppProps {
   editorClient?: EditorClient;
   folderPicker?: FolderPicker;
   initialMode?: PrimaryMode;
   initialSettings?: SettingsSnapshot;
+  knowledgeClient?: KnowledgeClient;
   online?: boolean;
   settingsClient?: SettingsClient;
   setupComplete?: boolean;

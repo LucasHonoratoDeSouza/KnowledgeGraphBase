@@ -1,8 +1,161 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 
 import { App } from "../App";
+import type {
+  AssistantAnswer,
+  CaptureRequest,
+  CaptureResponse,
+  GraphView,
+  KnowledgeClient,
+  LibrarySnapshot,
+  RetrievalResult,
+} from "../knowledge";
+import type { SettingsSnapshot } from "../settings";
+
+function createKnowledgeClient() {
+  const capture = vi.fn(
+    (request: CaptureRequest): Promise<CaptureResponse> =>
+      Promise.resolve({
+      source: {
+        id: "source-1",
+        kind: "text",
+        originalUri: request.title,
+        normalizedUri: "local:source-1",
+        contentHash: "content-hash",
+        pipelineVersion: "ingestion-v1",
+        state: "COMPLETED",
+        title: request.title,
+      },
+      document: {
+        id: "document-1",
+        sourceId: "source-1",
+        path: "Inbox/quick-capture.md",
+        title: request.title,
+        summary: request.content,
+        revision: 1,
+        contentHash: "document-hash",
+      },
+      reused: false,
+      }),
+  );
+  const getLibrary = vi.fn(
+    (): Promise<LibrarySnapshot> =>
+      Promise.resolve({
+      entries: [
+        {
+          name: "Research",
+          path: "Research",
+          kind: "folder",
+          children: [
+            {
+              name: "Transformers.md",
+              path: "Research/Transformers.md",
+              kind: "markdown",
+              children: [],
+            },
+          ],
+        },
+      ],
+      documents: [],
+      sources: [],
+      noteCount: 1,
+      }),
+  );
+  const getGraph = vi.fn(
+    (): Promise<GraphView> =>
+      Promise.resolve({
+      concepts: [
+        {
+          id: "concept-1",
+          normalizedName: "transformers",
+          displayName: "Transformers",
+        },
+      ],
+      edges: [],
+      truncated: false,
+      }),
+  );
+  const search = vi.fn(
+    (query: string): Promise<RetrievalResult> =>
+      Promise.resolve({
+      plan: { lexicalQuery: query, filters: {}, expandGraph: false },
+      hits: [
+        {
+          sourceId: "source-1",
+          documentId: "document-1",
+          chunkId: "chunk-1",
+          title: "Transformer research",
+          snippet: "Grounded <mark>evidence</mark> from the local note.",
+          locator: "section:Evidence",
+          path: "Research/Transformers.md",
+          score: 1,
+        },
+      ],
+      lexicalFallback: true,
+      }),
+  );
+  const ask = vi.fn(
+    (_question: string, modelId: string): Promise<AssistantAnswer> =>
+      Promise.resolve({
+      answer: "The evidence links transformers to retrieval.",
+      citations: [
+        {
+          number: 1,
+          title: "Transformer research",
+          path: "Research/Transformers.md",
+          locator: "section:Evidence",
+          snippet: "Grounded evidence from the local note.",
+        },
+      ],
+      modelId,
+      usage: { inputTokens: 100, outputTokens: 30 },
+      supported: true,
+      }),
+  );
+  const client: KnowledgeClient = {
+    capture,
+    getLibrary,
+    getGraph,
+    search,
+    ask,
+  };
+  return { ask, capture, client, getGraph, getLibrary, search };
+}
+
+const configuredSettings: SettingsSnapshot = {
+  setupComplete: true,
+  vaultName: "teste n1",
+  activeMode: "Retrieve",
+  layoutJson: "{}",
+  aiEnabled: true,
+  providers: [
+    {
+      provider: "openai",
+      endpoint: "https://api.openai.com/v1",
+      credentialStatus: "configured_masked",
+      health: "healthy",
+    },
+  ],
+  ai: {
+    models: [
+      {
+        id: "gpt-4.1-mini",
+        provider: "openai",
+        displayName: "GPT 4.1 mini",
+        enabled: true,
+      },
+    ],
+    routing: {
+      mainModelId: "gpt-4.1-mini",
+      assistantDefaultModelId: "gpt-4.1-mini",
+      explicitFallbackModelId: null,
+    },
+    budgets: { dailyCents: 100, monthlyCents: 1_000 },
+    privacy: { allowSourceContent: true, storePrompts: false },
+  },
+};
 
 describe("application shell", () => {
   it("gates the primary modes until onboarding is complete", () => {
@@ -183,6 +336,87 @@ describe("application shell", () => {
     expect(screen.getByRole("tab", { name: "Ingest" })).toHaveAttribute(
       "tabindex",
       "-1",
+    );
+  });
+
+  it("submits a source to the native knowledge client and reports its path", async () => {
+    const { capture, client } = createKnowledgeClient();
+    render(<App knowledgeClient={client} setupComplete />);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Add knowledge" }), {
+      target: { value: "A detailed meeting record about retrieval." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Process source" }));
+
+    await waitFor(() => {
+      expect(capture).toHaveBeenCalledOnce();
+    });
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "auto",
+        content: "A detailed meeting record about retrieval.",
+      }),
+    );
+    expect(await screen.findByText("Saved · Inbox/quick-capture.md")).toBeVisible();
+  });
+
+  it("loads the real library and graph when Retrieve opens", async () => {
+    const { client, getGraph, getLibrary } = createKnowledgeClient();
+    render(
+      <App
+        initialMode="Retrieve"
+        knowledgeClient={client}
+        setupComplete
+      />,
+    );
+
+    expect((await screen.findAllByText("Transformers"))[0]).toBeVisible();
+    expect(screen.getByRole("img", { name: "Knowledge graph" })).toBeVisible();
+    expect(getLibrary).toHaveBeenCalledOnce();
+    expect(getGraph).toHaveBeenCalledOnce();
+  });
+
+  it("runs local retrieval from the Explorer and renders resolvable evidence", async () => {
+    const { client, search: searchClient } = createKnowledgeClient();
+    render(
+      <App
+        initialMode="Retrieve"
+        knowledgeClient={client}
+        setupComplete
+      />,
+    );
+    const search = screen.getByRole("textbox", { name: "Filter knowledge" });
+    fireEvent.change(search, { target: { value: "evidence" } });
+    fireEvent.keyDown(search, { key: "Enter" });
+
+    expect(await screen.findByText("Transformer research")).toBeVisible();
+    expect(screen.getByText("Grounded evidence from the local note.")).toBeVisible();
+    expect(searchClient).toHaveBeenCalledWith("evidence");
+  });
+
+  it("asks the selected provider model and keeps the citation visible", async () => {
+    const { ask, client } = createKnowledgeClient();
+    render(
+      <App
+        initialSettings={configuredSettings}
+        knowledgeClient={client}
+      />,
+    );
+    const question = screen.getByRole("textbox", {
+      name: "Ask your knowledge base",
+    });
+    fireEvent.change(question, {
+      target: { value: "How does retrieval connect to transformers?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send question" }));
+
+    expect(
+      await screen.findByText("The evidence links transformers to retrieval."),
+    ).toBeVisible();
+    expect(screen.getByText("[1] Transformer research")).toBeVisible();
+    expect(ask).toHaveBeenCalledWith(
+      "How does retrieval connect to transformers?",
+      "gpt-4.1-mini",
     );
   });
 
