@@ -93,10 +93,10 @@
 ## Handoff
 
 - **Feature**: Knowledge OS MVP / `.specs/features/knowledge-os-mvp/`
-- **Phase / Task**: Execute — Phase 3+ em andamento; commits até `c1d7df7`/`9d575a9`/`5148d00` (settings/model catalog, wiring do workbench a `knowledge`, e2e de vault) implementam trabalho além de T30 mas ainda não foram lançados na tabela de `tasks.md`
-- **Completed**: T01–T14 (fundação), T15–T20/T22/T24–T30/T36/T38–T40 (tabela `tasks.md`) todos commitados em `dev`; build nativo `.deb` + `.AppImage` gerado e verificado nesta sessão; suíte completa (`test-contracts`, `test-ui`, `test-python`, `test-rust`) verde
-- **In-progress**: `.specs/features/knowledge-os-mvp/tasks.md` está desatualizado — os 4 últimos commits (wiring de UI/IPC a `knowledge.rs`, catálogo de modelos/Stronghold) cobrem parte de T21/T23/T31/T35/T41 mas não foram marcados nem auditados contra os critérios de aceite de cada task
-- **Next step**: auditar os últimos 4 commits linha a linha contra os ACs de T21/T23/T31–T35/T37/T41–T42, marcar `tasks.md` com o que já está coberto e continuar a cadeia sequencial a partir da primeira task genuinamente incompleta
-- **Blockers**: none
-- **Uncommitted files**: none — árvore de trabalho limpa após o commit `b91ba4e` (auto-updater dev channel + CI)
-- **Branch**: `dev` (18+1 commits à frente do que estava documentado; push liberado e `origin/dev` sincronizado nesta sessão)
+- **Phase / Task**: Execute — Phases 1–6 audited complete except two confirmed gaps: T33 (entity resolution beyond exact/alias dedup) and T37 (optional embeddings, non-blocking per spec)
+- **Completed**: T01–T32, T34–T36, T38–T42 verified this session by re-running `make check` (lint/format/typecheck/lock-check/build) and `make test-full` (Rust unit+integration, Tauri IPC contract, UI, Python, Playwright e2e) against the real `dev` HEAD, all green; native `.deb` + `.AppImage` build fixed and verified; dev-channel CI (`.github/workflows/dev-build.yml`) publishes a signed, auto-incrementing `dev` prerelease on every push, and the installed app self-updates from it; `README.md` added
+- **In-progress**: none — this is a clean stopping point
+- **Next step**: implement T33 (entity resolution: fuzzy/vector candidates + ambiguous-AI-fallback escalation, currently only exact/alias dedup) and, if desired, T37 (sqlite-vec embedding adapter, optional per spec); then continue into Phase 7 (Optional Server) / Phase 8 (Production Engineering) only if the owner wants the remote/ops layers
+- **Blockers**: none. Two open decisions for the owner: (1) LICENSE is unset (README notes this); (2) whether Phase 7/8 (optional server, k8s/terraform, code signing) are in scope for this project at all
+- **Uncommitted files**: none — working tree clean
+- **Branch**: `dev`, synced with `origin/dev`
