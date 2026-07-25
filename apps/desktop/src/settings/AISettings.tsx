@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import {
   Bot,
@@ -17,6 +17,19 @@ import {
 } from "lucide-react";
 
 import type { ProviderId, SettingsClient, SettingsSnapshot } from "./types";
+
+/**
+ * A provider's default model (#15). Connecting with none configured adds and
+ * enables this one, so the happy path is "paste key → connect" instead of a
+ * multi-screen manual setup. The Compatible gateway has no default because
+ * only its operator knows what it serves.
+ */
+const defaultModels: Partial<Record<ProviderId, string>> = {
+  openai: "gpt-4.1-mini",
+  anthropic: "claude-sonnet-4-5",
+  deepseek: "deepseek-chat",
+  groq: "llama-3.3-70b-versatile",
+};
 
 const providers: Array<{
   accent: string;
@@ -68,6 +81,33 @@ const providers: Array<{
   },
 ];
 
+/**
+ * Provider marks drawn inline (AD-011 keeps the app offline, so no remote
+ * logo assets) — recognisable shapes rather than a coloured letter.
+ */
+function ProviderMark({ id }: { id: ProviderId }) {
+  const marks: Record<ProviderId, ReactNode> = {
+    openai: (
+      <path d="M12 3.2 19 7.2v9.6L12 20.8 5 16.8V7.2ZM12 6 8 8.3v4.6L12 15.2l4-2.3V8.3Z" />
+    ),
+    anthropic: (
+      <path d="M6 20 12 4h3l6 16h-3.4l-1.3-3.6H9.5L8.2 20Zm4.5-6.4h3.6L12.3 8Z" />
+    ),
+    deepseek: (
+      <path d="M4 12a8 8 0 0 1 8-8v3.2A4.8 4.8 0 1 0 16.8 12H20a8 8 0 1 1-16 0Zm8-2.2a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Z" />
+    ),
+    groq: (
+      <path d="M12 3 21 8v8l-9 5-9-5V8Zm0 3.5L6.5 9.6v4.8L12 17.5l5.5-3.1V9.6Z" />
+    ),
+    compatible: <path d="M4 6h7v5H4Zm9 0h7v5h-7ZM4 13h7v5H4Zm9 0h7v5h-7Z" />,
+  };
+  return (
+    <span aria-hidden="true" className="provider-mark">
+      <svg viewBox="0 0 24 24">{marks[id]}</svg>
+    </span>
+  );
+}
+
 interface AISettingsProps {
   client: SettingsClient;
   initial: SettingsSnapshot;
@@ -76,6 +116,7 @@ interface AISettingsProps {
 
 export function AISettings({ client, initial, onChange }: AISettingsProps) {
   const [settings, setSettings] = useState(initial);
+  const [defaultsNotice, setDefaultsNotice] = useState("");
   const [keys, setKeys] = useState<Record<ProviderId, string>>({
     anthropic: "",
     compatible: "",
@@ -117,16 +158,74 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
 
   async function connect(provider: ProviderId, endpoint: string) {
     try {
-      accept(
-        await client.connectProvider({
-          credential: keys[provider],
-          endpoint,
-          provider,
-        }),
-      );
+      const connected = await client.connectProvider({
+        credential: keys[provider],
+        endpoint,
+        provider,
+      });
+      accept(await applyDefaults(connected, provider));
     } finally {
       clearKey(provider);
     }
+  }
+
+  /**
+   * Makes a fresh connection actually usable (#15): adds the provider's
+   * default model when it has none, assigns Main when nothing holds that role,
+   * and turns on AI processing plus source-content privacy on the first
+   * connection — the three steps whose absence silently produced unenriched
+   * captures.
+   */
+  async function applyDefaults(
+    connected: SettingsSnapshot,
+    provider: ProviderId,
+  ): Promise<SettingsSnapshot> {
+    const defaultModel = defaultModels[provider];
+    const alreadyHasModel = connected.ai.models.some(
+      (model) => model.provider === provider,
+    );
+    let next = connected;
+    const applied: string[] = [];
+
+    if (defaultModel && !alreadyHasModel) {
+      const models = [
+        ...connected.ai.models,
+        {
+          id: defaultModel,
+          provider,
+          displayName: defaultModel,
+          enabled: true,
+        },
+      ];
+      const routing = connected.ai.routing.mainModelId
+        ? connected.ai.routing
+        : {
+            ...connected.ai.routing,
+            mainModelId: defaultModel,
+            assistantDefaultModelId:
+              connected.ai.routing.assistantDefaultModelId ?? defaultModel,
+          };
+      applied.push(`${defaultModel} added`);
+      if (routing.mainModelId === defaultModel) applied.push("set as Main");
+      next = await client.saveAiConfiguration({
+        ...connected.ai,
+        models,
+        routing,
+        privacy: { ...connected.ai.privacy, allowSourceContent: true },
+      });
+      if (!connected.ai.privacy.allowSourceContent) {
+        applied.push("source content allowed");
+      }
+    }
+
+    // Decided from the state the user actually had when they connected, not
+    // from whatever the save returned.
+    if (!connected.aiEnabled) {
+      next = await client.setAiEnabled(true);
+      applied.push("AI processing enabled");
+    }
+    setDefaultsNotice(applied.length > 0 ? applied.join(" · ") : "");
+    return next;
   }
 
   async function rotate(provider: ProviderId) {
@@ -257,6 +356,11 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
             </div>
             <span>{settings.providers.length} connected</span>
           </div>
+          {defaultsNotice ? (
+            <p className="provider-defaults-notice" role="status">
+              Ready to use — {defaultsNotice}. Change any of it below.
+            </p>
+          ) : null}
           <div className="provider-grid">
             {providers.map((provider) => {
               const connection = settings.providers.find(
@@ -273,9 +377,7 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
                     {provider.label} connection
                   </legend>
                   <div className="provider-card-header">
-                    <span className="provider-monogram">
-                      {provider.monogram}
-                    </span>
+                    <ProviderMark id={provider.id} />
                     <div>
                       <h3>{provider.label}</h3>
                       <p>{provider.description}</p>
@@ -295,20 +397,26 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
                     </span>
                     <span>Health: {connection?.health ?? "untested"}</span>
                   </div>
-                  <label className="field-label">
-                    Endpoint
-                    <input
-                      aria-label={`${provider.label} endpoint`}
-                      onChange={(event) => {
-                        const endpoint = event.currentTarget.value;
-                        setProviderEndpoints((current) => ({
-                          ...current,
-                          [provider.id]: endpoint,
-                        }));
-                      }}
-                      value={providerEndpoints[provider.id]}
-                    />
-                  </label>
+                  <details
+                    className="provider-advanced"
+                    open={provider.id === "compatible"}
+                  >
+                    <summary>Advanced</summary>
+                    <label className="field-label">
+                      Endpoint
+                      <input
+                        aria-label={`${provider.label} endpoint`}
+                        onChange={(event) => {
+                          const endpoint = event.currentTarget.value;
+                          setProviderEndpoints((current) => ({
+                            ...current,
+                            [provider.id]: endpoint,
+                          }));
+                        }}
+                        value={providerEndpoints[provider.id]}
+                      />
+                    </label>
+                  </details>
                   <label className="field-label">
                     API key
                     <div className="secret-input">

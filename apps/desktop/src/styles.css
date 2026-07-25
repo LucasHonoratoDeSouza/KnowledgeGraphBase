@@ -3137,3 +3137,90 @@ textarea:hover {
   background: var(--accent);
   outline: none;
 }
+
+/* Compact provider cards (#14) and the first-connection notice (#15) */
+
+.provider-card {
+  padding: 12px;
+}
+
+.provider-card-header {
+  margin-bottom: 10px;
+}
+
+.provider-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-bright);
+  border-radius: 3px;
+  background: #33322f;
+}
+
+.provider-mark svg {
+  width: 17px;
+  height: 17px;
+  fill: currentcolor;
+}
+
+.provider-openai .provider-mark {
+  color: #8fd6b4;
+  background: #31413a;
+}
+
+.provider-anthropic .provider-mark {
+  color: #e0a97e;
+  background: #493c34;
+}
+
+.provider-deepseek .provider-mark {
+  color: #93b4e0;
+  background: #343d49;
+}
+
+.provider-groq .provider-mark {
+  color: #e5b170;
+  background: #45362a;
+}
+
+.provider-advanced {
+  margin-bottom: 10px;
+  font-size: 9px;
+}
+
+.provider-advanced > summary {
+  padding: 3px 0;
+  color: var(--subtle);
+  cursor: pointer;
+  list-style: none;
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+
+.provider-advanced > summary::before {
+  content: "▸ ";
+}
+
+.provider-advanced[open] > summary::before {
+  content: "▾ ";
+}
+
+.provider-advanced > summary:hover {
+  color: var(--text-secondary);
+}
+
+.provider-advanced .field-label {
+  margin-top: 7px;
+}
+
+.provider-defaults-notice {
+  margin: 0 0 11px;
+  padding: 8px 10px;
+  color: var(--success);
+  border: 1px solid rgb(154 173 145 / 25%);
+  border-radius: 4px;
+  background: rgb(154 173 145 / 8%);
+  font-size: 10px;
+  animation: ko-status-in var(--motion-base) var(--ease-out) both;
+}
