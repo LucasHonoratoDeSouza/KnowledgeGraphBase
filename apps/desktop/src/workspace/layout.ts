@@ -29,7 +29,7 @@ export interface WorkspaceLayout {
   splits: WorkspaceSplit[];
 }
 
-const paneBounds: Record<PaneId, { min: number; max: number }> = {
+export const PANE_BOUNDS: Record<PaneId, { min: number; max: number }> = {
   explorer: { min: 160, max: 480 },
   canvas: { min: 320, max: 1600 },
   assistant: { min: 240, max: 640 },
@@ -71,7 +71,7 @@ export function resizePane(
   pane: PaneId,
   requestedWidth: number,
 ) {
-  const bounds = paneBounds[pane];
+  const bounds = PANE_BOUNDS[pane];
   const width = Math.min(bounds.max, Math.max(bounds.min, requestedWidth));
   return withPane(layout, pane, { ...layout.panes[pane], width });
 }
@@ -177,7 +177,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isPaneState(value: unknown, pane: PaneId): value is PaneState {
   if (!isRecord(value)) return false;
-  const bounds = paneBounds[pane];
+  const bounds = PANE_BOUNDS[pane];
   return (
     typeof value.width === "number" &&
     Number.isFinite(value.width) &&

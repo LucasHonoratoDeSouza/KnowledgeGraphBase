@@ -62,6 +62,7 @@ import {
 } from "../settings";
 import {
   DEFAULT_LAYOUT,
+  PANE_BOUNDS,
   resizePane,
   restoreLayout,
   serializeLayout,
@@ -349,10 +350,14 @@ function PaneDivider({
   collapsed,
   label,
   onResize,
+  pane,
+  width,
 }: {
   collapsed: boolean;
   label: string;
   onResize: (delta: number) => void;
+  pane: "explorer" | "assistant";
+  width: number;
 }) {
   const last = useRef<number | null>(null);
   if (collapsed) return null;
@@ -360,6 +365,9 @@ function PaneDivider({
     <div
       aria-label={label}
       aria-orientation="vertical"
+      aria-valuemax={PANE_BOUNDS[pane].max}
+      aria-valuemin={PANE_BOUNDS[pane].min}
+      aria-valuenow={width}
       className="pane-divider"
       onKeyDown={(event) => {
         if (event.key === "ArrowLeft") {
@@ -1727,6 +1735,8 @@ function RetrieveSurface({
         <PaneDivider
           collapsed={explorer.collapsed}
           label="Resize Explorer"
+          pane="explorer"
+          width={explorer.width}
           onResize={(delta) => {
             onLayoutChange(
               resizePane(layout, "explorer", explorer.width + delta),
@@ -1849,6 +1859,8 @@ function RetrieveSurface({
         <PaneDivider
           collapsed={assistant.collapsed}
           label="Resize Assistant"
+          pane="assistant"
+          width={assistant.width}
           onResize={(delta) => {
             onLayoutChange(
               resizePane(layout, "assistant", assistant.width - delta),
