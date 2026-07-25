@@ -1,0 +1,49 @@
+# Knowledge OS
+
+A local-first desktop knowledge base. Capture videos, PDFs, web pages and notes; Knowledge OS turns them into durable, traceable Markdown, a navigable knowledge graph and grounded retrieval — with AI use that is observable, deliberately small, and never required.
+
+Full product vision and design: [`knowledge-os-system-design.md`](knowledge-os-system-design.md).
+
+## Status
+
+Active development on `dev`. Core MVP loop (capture → organize → search → grounded assistant) is implemented and tested end to end. See [`.specs/features/knowledge-os-mvp/tasks.md`](.specs/features/knowledge-os-mvp/tasks.md) for the current, audited task-by-task status.
+
+A `dev` prerelease is published automatically on every push and the desktop app self-updates from it — see [Dev channel](#dev-channel) below.
+
+## Architecture
+
+Polyglot monorepo:
+
+- `apps/desktop` — the product: a Tauri 2 + React/TypeScript desktop app. All privileged access and local domain logic live in the Rust runtime.
+- `crates/` — Rust workspace: `knowledge-domain`, `knowledge-storage`, `knowledge-ingestion`, `knowledge-ai`, `knowledge-retrieval`.
+- `apps/api`, `apps/worker` — optional FastAPI/worker services for a future remote/sync mode. The desktop app never depends on them to open or use a local vault.
+- `packages/contracts` — canonical JSON Schemas, generated into TypeScript, shared across Rust/TS/Python.
+- `packages/ui` — shared design tokens and accessible primitives.
+
+Markdown in the vault is the canonical, durable format (AD-002); SQLite holds metadata, full-text index and graph as a reconstructible cache, never the source of truth.
+
+## Getting started
+
+Prerequisites: Node (see `.node-version`) with Corepack enabled, Rust (see `rust-toolchain.toml`), and `uv` for the optional Python services.
+
+```bash
+make install       # pnpm + uv workspace install
+make test-quick     # contracts, UI, Rust unit, Python — fast gate
+make test-full       # + Rust integration, desktop e2e — full gate
+make check           # lint, format, typecheck, test-full, build
+```
+
+Run the desktop app in development:
+
+```bash
+cd apps/desktop
+pnpm tauri dev
+```
+
+## Dev channel
+
+`.github/workflows/dev-build.yml` builds and publishes a signed `dev` prerelease on every push to `dev`. The installed `.AppImage` silently checks for and installs updates from that release on startup — close and reopen the app to pick up the latest push. The `.deb` package does not self-update; use the AppImage for the auto-updating dev channel.
+
+## License
+
+Not yet set.
