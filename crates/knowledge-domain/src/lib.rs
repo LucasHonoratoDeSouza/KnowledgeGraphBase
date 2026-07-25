@@ -143,6 +143,209 @@ pub enum ProcessingMode {
     Deep,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProcessingState {
+    Pending,
+    Fetching,
+    Extracting,
+    Processing,
+    Indexing,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl ProcessingState {
+    #[must_use]
+    pub const fn is_active(self) -> bool {
+        matches!(
+            self,
+            Self::Pending | Self::Fetching | Self::Extracting | Self::Processing | Self::Indexing
+        )
+    }
+
+    /// Validates and applies one persisted processing-state transition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::InvalidProcessingTransition`] when a transition skips a stage,
+    /// moves backwards, or attempts to restart a terminal source without a new version.
+    pub const fn transition_to(self, next: Self) -> Result<Self, DomainError> {
+        let follows_happy_path = matches!(
+            (self, next),
+            (Self::Pending, Self::Fetching)
+                | (Self::Fetching, Self::Extracting)
+                | (Self::Extracting, Self::Processing)
+                | (Self::Processing, Self::Indexing)
+                | (Self::Indexing, Self::Completed)
+        );
+        let terminates_active = self.is_active() && matches!(next, Self::Failed | Self::Cancelled);
+        if follows_happy_path || terminates_active {
+            Ok(next)
+        } else {
+            Err(DomainError::InvalidProcessingTransition {
+                from: self,
+                to: next,
+            })
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RelationType {
+    RelatedTo,
+    IsA,
+    PartOf,
+    Uses,
+    Requires,
+    AppliedTo,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Confidence(u16);
+
+impl Confidence {
+    #[must_use]
+    pub const fn basis_points(self) -> u16 {
+        self.0
+    }
+}
+
+impl TryFrom<u16> for Confidence {
+    type Error = DomainError;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        if value <= 10_000 {
+            Ok(Self(value))
+        } else {
+            Err(DomainError::ConfidenceOutOfRange)
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SourceIdentity {
+    normalized_uri: String,
+    content_hash: String,
+    pipeline_version: String,
+}
+
+impl SourceIdentity {
+    /// Creates the complete identity used to deduplicate source artifacts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::BlankIdentityPart`] if any versioned identity component is blank.
+    pub fn new(
+        normalized_uri: impl Into<String>,
+        content_hash: impl Into<String>,
+        pipeline_version: impl Into<String>,
+    ) -> Result<Self, DomainError> {
+        let normalized_uri = normalized_uri.into();
+        let content_hash = content_hash.into();
+        let pipeline_version = pipeline_version.into();
+        for (name, value) in [
+            ("normalized_uri", normalized_uri.as_str()),
+            ("content_hash", content_hash.as_str()),
+            ("pipeline_version", pipeline_version.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                return Err(DomainError::BlankIdentityPart(name));
+            }
+        }
+        Ok(Self {
+            normalized_uri,
+            content_hash,
+            pipeline_version,
+        })
+    }
+
+    #[must_use]
+    pub fn normalized_uri(&self) -> &str {
+        &self.normalized_uri
+    }
+
+    #[must_use]
+    pub fn content_hash(&self) -> &str {
+        &self.content_hash
+    }
+
+    #[must_use]
+    pub fn pipeline_version(&self) -> &str {
+        &self.pipeline_version
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct KnowledgeEdgeIdentity {
+    pub source: EntityId,
+    pub target: EntityId,
+    pub relation: RelationType,
+    pub origin_document: EntityId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnowledgeEdge {
+    identity: KnowledgeEdgeIdentity,
+    confidence: Confidence,
+}
+
+impl KnowledgeEdge {
+    /// Creates a traceable typed relation between two distinct concepts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::SelfEdge`] when source and target are identical.
+    pub fn new(
+        source: EntityId,
+        target: EntityId,
+        relation: RelationType,
+        confidence: Confidence,
+        origin_document: EntityId,
+    ) -> Result<Self, DomainError> {
+        if source == target {
+            return Err(DomainError::SelfEdge);
+        }
+        Ok(Self {
+            identity: KnowledgeEdgeIdentity {
+                source,
+                target,
+                relation,
+                origin_document,
+            },
+            confidence,
+        })
+    }
+
+    #[must_use]
+    pub const fn identity(&self) -> KnowledgeEdgeIdentity {
+        self.identity
+    }
+
+    #[must_use]
+    pub const fn confidence(&self) -> Confidence {
+        self.confidence
+    }
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum DomainError {
+    #[error("invalid processing transition from {from:?} to {to:?}")]
+    InvalidProcessingTransition {
+        from: ProcessingState,
+        to: ProcessingState,
+    },
+    #[error("confidence must be between 0 and 10000 basis points")]
+    ConfidenceOutOfRange,
+    #[error("knowledge edges cannot link a concept to itself")]
+    SelfEdge,
+    #[error("source identity part {0} must not be blank")]
+    BlankIdentityPart(&'static str),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AppErrorCode {
