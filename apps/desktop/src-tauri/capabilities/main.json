@@ -21,6 +21,7 @@
     "allow-provider-rotate",
     "allow-provider-test",
     "allow-provider-remove",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "core:path:default"
   ]
 }
