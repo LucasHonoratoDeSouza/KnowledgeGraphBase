@@ -37,6 +37,12 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Compute monotonic dev version
+        id: version
+        run: |
+          base=$(jq -r '.version' apps/desktop/src-tauri/tauri.conf.json | cut -d. -f1,2)
+          echo "value=${base}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
       - name: Build and publish dev release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -51,3 +57,4 @@ jobs:
           releaseDraft: false
           prerelease: true
           includeUpdaterJson: true
+          args: --config '{"version":"${{ steps.version.outputs.value }}"}'
