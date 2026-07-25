@@ -14,8 +14,8 @@ use knowledge_ingestion::{
 };
 use knowledge_retrieval::{AssistantAnswer, GroundedAssistant, RetrievalEngine, RetrievalResult};
 use knowledge_storage::{
-    ConceptDraft, DocumentDraft, DocumentRecord, EdgeDraft, FacetMembershipRecord, FacetRecord,
-    GraphView, KnowledgeStore, SourceDraft, SourceRecord,
+    ConceptDraft, DocumentDraft, DocumentRecord, EdgeDraft, FacetDraft, FacetMembershipRecord,
+    FacetRecord, GraphView, KnowledgeStore, OrganizationDecision, SourceDraft, SourceRecord,
 };
 use serde::{Deserialize, Serialize};
 
@@ -213,6 +213,7 @@ pub fn capture_in_vault_with_services(
 
 pub fn library_in_vault(vault_root: &Path) -> Result<LibrarySnapshot, String> {
     let store = open_store(vault_root)?;
+    prune_missing_documents(vault_root, &store)?;
     sync_existing_markdown(vault_root, &store)?;
     let mut count = 0;
     let entries = scan_directory(vault_root, vault_root, &mut count)?;
@@ -242,6 +243,165 @@ pub fn create_folder_in_vault(
     library_in_vault(vault_root)
 }
 
+/// Renames one note or folder in place. The new name is a single path
+/// component — moving between folders is [`move_entry_in_vault`]'s job.
+pub fn rename_entry_in_vault(
+    vault_root: &Path,
+    relative: &str,
+    new_name: &str,
+) -> Result<LibrarySnapshot, String> {
+    let source = resolve_vault_child(vault_root, relative)?;
+    if !source.exists() {
+        return Err("the item no longer exists".to_owned());
+    }
+    let name = new_name.trim();
+    if name.is_empty() || name.contains('/') || name.contains('\\') {
+        return Err("a name must be a single item name".to_owned());
+    }
+    let name =
+        if source.is_file() && is_markdown(Path::new(relative)) && !is_markdown(Path::new(name)) {
+            format!("{name}.md")
+        } else {
+            name.to_owned()
+        };
+    let parent = Path::new(relative)
+        .parent()
+        .map_or_else(String::new, |value| {
+            value.to_string_lossy().replace('\\', "/")
+        });
+    let target_relative = if parent.is_empty() {
+        name
+    } else {
+        format!("{parent}/{name}")
+    };
+    let target = resolve_vault_child(vault_root, &target_relative)?;
+    if target == source {
+        return library_in_vault(vault_root);
+    }
+    if target.exists() {
+        return Err("an item with that name already exists here".to_owned());
+    }
+    fs::rename(&source, &target).map_err(command_error)?;
+    library_in_vault(vault_root)
+}
+
+/// Deletes one note or folder (folders recursively) from the vault.
+pub fn delete_entry_in_vault(vault_root: &Path, relative: &str) -> Result<LibrarySnapshot, String> {
+    let target = resolve_vault_child(vault_root, relative)?;
+    if !target.exists() {
+        return Err("the item no longer exists".to_owned());
+    }
+    if target.is_dir() {
+        fs::remove_dir_all(&target).map_err(command_error)?;
+    } else {
+        fs::remove_file(&target).map_err(command_error)?;
+    }
+    library_in_vault(vault_root)
+}
+
+/// Moves one note or folder into `destination` (empty string = vault root),
+/// recording the move as a pinned organization correction so later captures
+/// can follow the user's own filing (KOS-051).
+pub fn move_entry_in_vault(
+    vault_root: &Path,
+    relative: &str,
+    destination: &str,
+) -> Result<LibrarySnapshot, String> {
+    let source = resolve_vault_child(vault_root, relative)?;
+    if !source.exists() {
+        return Err("the item no longer exists".to_owned());
+    }
+    let destination = destination.trim().trim_matches('/');
+    let destination_path = if destination.is_empty() {
+        vault_root.to_path_buf()
+    } else {
+        let path = resolve_vault_child(vault_root, destination)?;
+        if !path.is_dir() {
+            return Err("the destination folder does not exist".to_owned());
+        }
+        path
+    };
+    if destination_path == source || destination_path.starts_with(&source) {
+        return Err("a folder cannot be moved inside itself".to_owned());
+    }
+    let name = source
+        .file_name()
+        .ok_or_else(|| "the item has no name".to_owned())?;
+    let target = destination_path.join(name);
+    if target == source {
+        return library_in_vault(vault_root);
+    }
+    if target.exists() {
+        return Err("an item with that name already exists there".to_owned());
+    }
+    fs::rename(&source, &target).map_err(command_error)?;
+    let name = name.to_string_lossy();
+    let moved_relative = if destination.is_empty() {
+        name.into_owned()
+    } else {
+        format!("{destination}/{name}")
+    };
+    // The refresh re-indexes the note at its new path (and prunes the old row),
+    // so the correction is pinned against the surviving source afterwards —
+    // pinning first would be cascaded away by that prune.
+    let snapshot = library_in_vault(vault_root)?;
+    if let Some(document) = open_store(vault_root)?
+        .document_by_path(&moved_relative)
+        .map_err(command_error)?
+    {
+        record_manual_placement(vault_root, &document.source_id, destination)?;
+    }
+    Ok(snapshot)
+}
+
+/// Pins the destination folder as the user's own placement decision, so the
+/// deterministic resolver and the enrichment prompt both outrank the model's
+/// earlier inference with it.
+fn record_manual_placement(
+    vault_root: &Path,
+    source_id: &str,
+    destination: &str,
+) -> Result<(), String> {
+    let (kind, name) = match destination.split_once('/') {
+        Some(("Projects", rest)) => ("project", rest),
+        Some(("Areas", rest)) => ("area", rest),
+        _ if destination.is_empty() => return Ok(()),
+        _ => ("tag", destination),
+    };
+    let leaf = name.rsplit('/').next().unwrap_or(name);
+    if leaf.is_empty() {
+        return Ok(());
+    }
+    let store = open_store(vault_root)?;
+    let facet = store
+        .upsert_facet(&FacetDraft::new(kind, leaf))
+        .map_err(command_error)?;
+    store
+        .apply_organization(
+            source_id,
+            &[OrganizationDecision {
+                facet_id: facet.id,
+                confidence_basis_points: 10_000,
+                pinned: true,
+            }],
+            "manual move in the Explorer",
+        )
+        .map_err(command_error)?;
+    Ok(())
+}
+
+/// The user's most recent manual filing decisions, newest first.
+pub fn recent_corrections(vault_root: &Path, limit: u32) -> Result<Vec<String>, String> {
+    open_store(vault_root)?
+        .recent_pinned_facets(limit)
+        .map_err(command_error)
+}
+
+fn is_markdown(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|value| value.eq_ignore_ascii_case("md"))
+}
+
 fn resolve_vault_child(vault_root: &Path, relative: &str) -> Result<std::path::PathBuf, String> {
     if !vault_root.is_absolute() || !vault_root.is_dir() {
         return Err("local vault is unavailable".to_owned());
@@ -260,6 +420,21 @@ fn resolve_vault_child(vault_root: &Path, relative: &str) -> Result<std::path::P
         }
     }
     Ok(vault_root.join(candidate))
+}
+
+/// Drops index rows whose Markdown file is gone. Markdown on disk is the
+/// canonical record (AD-002), so a note that was renamed, moved or deleted —
+/// inside the app or with any other tool — must not keep answering searches
+/// from its old path.
+fn prune_missing_documents(vault_root: &Path, store: &KnowledgeStore) -> Result<(), String> {
+    for document in store.list_documents().map_err(command_error)? {
+        if !vault_root.join(&document.path).is_file() {
+            store
+                .delete_source(&document.source_id)
+                .map_err(command_error)?;
+        }
+    }
+    Ok(())
 }
 
 fn sync_existing_markdown(vault_root: &Path, store: &KnowledgeStore) -> Result<(), String> {

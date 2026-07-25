@@ -22,8 +22,9 @@ use crate::{
     enrichment::MainModelEnricher,
     knowledge::{
         CaptureCommandRequest, CaptureCommandResponse, LibrarySnapshot, OrganizationSnapshot,
-        ask_in_vault, capture_in_vault_with_services, create_folder_in_vault, graph_in_vault,
-        library_in_vault, organization_in_vault, search_in_vault,
+        ask_in_vault, capture_in_vault_with_services, create_folder_in_vault,
+        delete_entry_in_vault, graph_in_vault, library_in_vault, move_entry_in_vault,
+        organization_in_vault, rename_entry_in_vault, search_in_vault,
     },
     settings::{
         AiConfiguration, BudgetSettings, HealthStatus, ModelProfile, OnboardingInput,
@@ -241,6 +242,32 @@ pub fn folder_create(
     state: State<'_, SettingsCommandState>,
 ) -> Result<LibrarySnapshot, String> {
     create_folder_in_vault(&workspace_root(&state)?, &path)
+}
+
+#[tauri::command]
+pub fn entry_rename(
+    path: String,
+    name: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<LibrarySnapshot, String> {
+    rename_entry_in_vault(&workspace_root(&state)?, &path, &name)
+}
+
+#[tauri::command]
+pub fn entry_delete(
+    path: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<LibrarySnapshot, String> {
+    delete_entry_in_vault(&workspace_root(&state)?, &path)
+}
+
+#[tauri::command]
+pub fn entry_move(
+    path: String,
+    destination: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<LibrarySnapshot, String> {
+    move_entry_in_vault(&workspace_root(&state)?, &path, &destination)
 }
 
 #[tauri::command]
