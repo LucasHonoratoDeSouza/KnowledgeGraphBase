@@ -110,6 +110,7 @@ fn artifact() -> ExtractionArtifact {
         original_uri: "https://www.youtube.com/watch?v=ppo".to_owned(),
         content_hash: content_hash(b"transcript"),
         context: "Explains how PPO constrains policy updates in RL training.".to_owned(),
+        framing: String::new(),
         summary: "PPO constrains policy updates.".to_owned(),
         concepts: vec!["PPO".to_owned(), "Reinforcement Learning".to_owned()],
         notes: vec!["Clipping stabilizes training.".to_owned()],
@@ -228,4 +229,23 @@ fn deterministic_context_takes_the_first_sentence_and_caps_it() {
 #[test]
 fn deterministic_context_falls_back_to_the_title_for_an_empty_body() {
     assert_eq!(deterministic_context("Reading list", "   "), "Reading list");
+}
+
+#[test]
+fn framing_renders_in_its_own_section_and_is_omitted_when_absent() {
+    let plain = render_markdown(&artifact());
+    assert!(!plain.contains("## Notes from you"));
+
+    let mut framed = artifact();
+    framed.framing = "assisti esse video para o projeto de RL".to_owned();
+    let markdown = render_markdown(&framed);
+    let notes = markdown
+        .split("## Notes from you\n\n")
+        .nth(1)
+        .expect("framing section is rendered");
+    assert!(notes.starts_with("assisti esse video para o projeto de RL"));
+    assert!(
+        markdown.find("## Summary").unwrap() < markdown.find("## Notes from you").unwrap(),
+        "framing follows the human summary"
+    );
 }

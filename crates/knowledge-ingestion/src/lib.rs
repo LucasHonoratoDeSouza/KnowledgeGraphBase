@@ -20,7 +20,9 @@ pub use adapters::{
     extract_article_html, extract_youtube_page,
 };
 pub use capture::{CaptureReceipt, CaptureRequest, CaptureService};
-pub use pipeline::{ConceptDefinition, DeterministicPipeline, KnowledgeEnrichment, PipelineResult};
+pub use pipeline::{
+    ConceptDefinition, DeterministicPipeline, KnowledgeEnrichment, PipelineResult, PlacementRequest,
+};
 
 pub const PIPELINE_VERSION: &str = "ingestion-v1";
 pub const MAX_URL_LENGTH: usize = 2_048;
@@ -116,6 +118,9 @@ pub struct ExtractionArtifact {
     /// features (vault-aware filing, the Librarian pass) read this instead of
     /// the body so their cost scales with note count, not note size.
     pub context: String,
+    /// The user's own framing typed alongside the link or file, kept verbatim
+    /// so their intent survives next to the extracted source (#4).
+    pub framing: String,
     pub summary: String,
     pub concepts: Vec<String>,
     pub notes: Vec<String>,
@@ -338,6 +343,14 @@ pub fn render_markdown(artifact: &ExtractionArtifact) -> String {
     writeln!(markdown, "# {}\n", artifact.title).expect("writing a String cannot fail");
     writeln!(markdown, "## Summary\n\n{}\n", artifact.summary)
         .expect("writing a String cannot fail");
+    if !artifact.framing.trim().is_empty() {
+        writeln!(
+            markdown,
+            "## Notes from you\n\n{}\n",
+            artifact.framing.trim()
+        )
+        .expect("writing a String cannot fail");
+    }
     writeln!(markdown, "## Main Concepts\n").expect("writing a String cannot fail");
     for concept in &artifact.concepts {
         writeln!(markdown, "- [[{concept}]]").expect("writing a String cannot fail");
