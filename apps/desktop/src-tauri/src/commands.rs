@@ -293,6 +293,7 @@ const fn ai_provider(provider: ProviderKind) -> AiProvider {
         ProviderKind::OpenAi => AiProvider::OpenAi,
         ProviderKind::Anthropic => AiProvider::Anthropic,
         ProviderKind::DeepSeek => AiProvider::DeepSeek,
+        ProviderKind::Groq => AiProvider::Groq,
         ProviderKind::Compatible => AiProvider::Compatible,
     }
 }
@@ -524,9 +525,10 @@ fn probe_provider_connection(
             .get(url)
             .header("x-api-key", secret)
             .header("anthropic-version", "2023-06-01"),
-        ProviderKind::OpenAi | ProviderKind::DeepSeek | ProviderKind::Compatible => {
-            client.get(url).bearer_auth(secret)
-        }
+        ProviderKind::OpenAi
+        | ProviderKind::DeepSeek
+        | ProviderKind::Groq
+        | ProviderKind::Compatible => client.get(url).bearer_auth(secret),
     };
     let response = request.send().map_err(|error| {
         format!(

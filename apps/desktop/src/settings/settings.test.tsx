@@ -313,6 +313,9 @@ describe("dedicated AI settings", () => {
       screen.getByRole("group", { name: "DeepSeek connection" }),
     ).toBeVisible();
     expect(
+      screen.getByRole("group", { name: "Groq connection" }),
+    ).toBeVisible();
+    expect(
       screen.getByRole("group", {
         name: "Compatible / LiteLLM connection",
       }),

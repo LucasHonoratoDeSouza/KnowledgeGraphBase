@@ -337,6 +337,7 @@ fn each_supported_provider_keeps_an_independent_credential_reference() {
         (ProviderKind::OpenAi, "open-key"),
         (ProviderKind::Anthropic, "anthropic-key"),
         (ProviderKind::DeepSeek, "deepseek-key"),
+        (ProviderKind::Groq, "groq-key"),
     ] {
         service
             .connect(
@@ -348,8 +349,8 @@ fn each_supported_provider_keeps_an_independent_credential_reference() {
     }
 
     let snapshot = service.public_snapshot().unwrap();
-    assert_eq!(snapshot.providers.len(), 3);
-    assert_eq!(service.vault().secrets.len(), 3);
+    assert_eq!(snapshot.providers.len(), 4);
+    assert_eq!(service.vault().secrets.len(), 4);
     assert_ne!(
         service.credential_ref(ProviderKind::OpenAi).unwrap(),
         service.credential_ref(ProviderKind::Anthropic).unwrap()

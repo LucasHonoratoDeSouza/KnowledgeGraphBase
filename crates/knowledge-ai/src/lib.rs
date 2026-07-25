@@ -41,6 +41,7 @@ pub enum AiProvider {
     OpenAi,
     Anthropic,
     DeepSeek,
+    Groq,
     Compatible,
 }
 
@@ -462,9 +463,10 @@ impl<R: SecretResolver> AiPort for NativeHttpAiPort<R> {
         let secret = self.resolver.resolve(connection.provider)?;
         match connection.provider {
             AiProvider::Anthropic => self.request_anthropic(connection, request, &secret),
-            AiProvider::OpenAi | AiProvider::DeepSeek | AiProvider::Compatible => {
-                self.request_openai(connection, request, &secret)
-            }
+            AiProvider::OpenAi
+            | AiProvider::DeepSeek
+            | AiProvider::Groq
+            | AiProvider::Compatible => self.request_openai(connection, request, &secret),
         }
     }
 }
