@@ -16,10 +16,12 @@ use thiserror::Error;
 use uuid::Uuid;
 
 mod graph;
+mod jobs;
 mod organization;
 mod vault;
 
 pub use graph::{GraphEdge, GraphView, SourceBacklink};
+pub use jobs::{IngestionJob, JobState};
 pub use organization::{OrganizationAudit, OrganizationDecision};
 pub use vault::{JournalFault, RecoveryReport, TrashRecord};
 
@@ -111,6 +113,18 @@ CREATE TABLE IF NOT EXISTS write_journal (
   relative_path TEXT NOT NULL,
   staging_path TEXT NOT NULL,
   state TEXT NOT NULL CHECK(state IN ('PREPARED', 'PUBLISHED'))
+);
+CREATE TABLE IF NOT EXISTS ingestion_jobs (
+  id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  state TEXT NOT NULL CHECK(state IN ('QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')),
+  attempt INTEGER NOT NULL DEFAULT 0 CHECK(attempt BETWEEN 0 AND 3),
+  lease_owner TEXT,
+  lease_expires_at INTEGER,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_sources_state ON sources(processing_state);
 CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_id);
@@ -615,6 +629,7 @@ impl KnowledgeStore {
             "facet_memberships",
             "organization_audit",
             "write_journal",
+            "ingestion_jobs",
         ];
         if !ALLOWED.contains(&table) {
             return Err(StorageError::InvalidTable);
