@@ -34,6 +34,76 @@ pub struct SourceBacklink {
 }
 
 impl KnowledgeStore {
+    /// Returns a stable whole-vault graph bounded for desktop rendering.
+    pub fn full_graph(&self, max_concepts: usize) -> Result<GraphView, StorageError> {
+        if max_concepts == 0 {
+            return Ok(GraphView {
+                concepts: Vec::new(),
+                edges: Vec::new(),
+                truncated: true,
+            });
+        }
+        let connection = self.lock()?;
+        let mut concept_statement = connection.prepare(
+            "SELECT id, normalized_name, display_name FROM concepts ORDER BY normalized_name LIMIT ?",
+        )?;
+        let concepts = concept_statement
+            .query_map([i64::try_from(max_concepts).unwrap_or(i64::MAX)], |row| {
+                Ok(ConceptRecord {
+                    id: row.get(0)?,
+                    normalized_name: row.get(1)?,
+                    display_name: row.get(2)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let ids = concepts
+            .iter()
+            .map(|concept| concept.id.as_str())
+            .collect::<HashSet<_>>();
+        let mut edge_statement = connection.prepare(
+            "SELECT id, source_concept_id, target_concept_id, relation_type, confidence_basis_points
+             FROM knowledge_edges ORDER BY id",
+        )?;
+        let raw_edges = edge_statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, u16>(4)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut edges = Vec::new();
+        for (id, source, target, relation, confidence) in raw_edges {
+            if !ids.contains(source.as_str()) || !ids.contains(target.as_str()) {
+                continue;
+            }
+            let mut evidence = connection.prepare(
+                "SELECT origin_document_id FROM edge_evidence WHERE edge_id = ? ORDER BY origin_document_id",
+            )?;
+            let origin_document_ids = evidence
+                .query_map([&id], |row| row.get(0))?
+                .collect::<Result<Vec<String>, _>>()?;
+            edges.push(GraphEdge {
+                id,
+                source_concept_id: source,
+                target_concept_id: target,
+                relation: parse_relation_type(&relation)?,
+                confidence_basis_points: confidence,
+                origin_document_ids,
+            });
+        }
+        let total: i64 =
+            connection.query_row("SELECT COUNT(*) FROM concepts", [], |row| row.get(0))?;
+        Ok(GraphView {
+            truncated: usize::try_from(total).unwrap_or(usize::MAX) > concepts.len(),
+            concepts,
+            edges,
+        })
+    }
+
     /// Returns a stable, cycle-safe neighborhood limited by depth and concept count.
     pub fn graph_view(
         &self,
