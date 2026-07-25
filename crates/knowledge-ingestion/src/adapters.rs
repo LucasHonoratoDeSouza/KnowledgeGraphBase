@@ -31,6 +31,10 @@ pub struct NativeContentAdapter {
     client: Client,
 }
 
+pub trait YouTubeTranscriptionFallback {
+    fn transcribe(&self, url: &str, title: &str) -> Result<ExtractedContent, IngestionError>;
+}
+
 impl NativeContentAdapter {
     pub fn new() -> Result<Self, IngestionError> {
         let client = Client::builder()
@@ -49,20 +53,54 @@ impl NativeContentAdapter {
     }
 
     pub fn extract_youtube(&self, input: &str) -> Result<ExtractedContent, IngestionError> {
+        self.extract_youtube_page(input, None)
+    }
+
+    pub fn extract_youtube_with_fallback(
+        &self,
+        input: &str,
+        fallback: &dyn YouTubeTranscriptionFallback,
+    ) -> Result<ExtractedContent, IngestionError> {
+        self.extract_youtube_page(input, Some(fallback))
+    }
+
+    fn extract_youtube_page(
+        &self,
+        input: &str,
+        fallback: Option<&dyn YouTubeTranscriptionFallback>,
+    ) -> Result<ExtractedContent, IngestionError> {
         let (_, page) = self.fetch_with_safe_redirects(input, 3)?;
-        let (title, caption_url) = extract_youtube_page(&page)?;
+        let title = youtube_title(&page);
+        let caption_url = match extract_youtube_page(&page) {
+            Ok((_, caption_url)) => caption_url,
+            Err(IngestionError::MissingTranscript) => {
+                return fallback.map_or(Err(IngestionError::MissingTranscript), |fallback| {
+                    fallback.transcribe(input, &title)
+                });
+            }
+            Err(error) => return Err(error),
+        };
         let (_, captions) = self.fetch_with_safe_redirects(&caption_url, 1)?;
         let segments = parse_caption_xml(&captions);
         if segments.is_empty() {
-            return Err(IngestionError::MissingTranscript);
+            return fallback.map_or(Err(IngestionError::MissingTranscript), |fallback| {
+                fallback.transcribe(input, &title)
+            });
         }
         Ok(ExtractedContent {
             title,
             body: segments
                 .iter()
-                .map(|segment| segment.text.as_str())
+                .map(|segment| {
+                    format!(
+                        "[{:02}:{:02}] {}",
+                        segment.start_seconds / 60,
+                        segment.start_seconds % 60,
+                        segment.text
+                    )
+                })
                 .collect::<Vec<_>>()
-                .join(" "),
+                .join("\n"),
             locators: segments
                 .iter()
                 .map(|segment| SourceLocator::YouTube {
@@ -173,12 +211,7 @@ pub fn extract_article_html(url: &str, html: &str) -> ExtractedContent {
 }
 
 pub fn extract_youtube_page(page: &str) -> Result<(String, String), IngestionError> {
-    let title = extract_between_case_insensitive(page, "<title", "</title>")
-        .and_then(|value| value.split_once('>').map(|(_, text)| sanitize_html(text)))
-        .map_or_else(
-            || "YouTube video".to_owned(),
-            |value| value.trim_end_matches(" - YouTube").to_owned(),
-        );
+    let title = youtube_title(page);
     let marker = "\"captionTracks\":";
     let start = page.find(marker).ok_or(IngestionError::MissingTranscript)? + marker.len();
     let array = balanced_json_array(&page[start..]).ok_or(IngestionError::MissingTranscript)?;
@@ -190,6 +223,15 @@ pub fn extract_youtube_page(page: &str) -> Result<(String, String), IngestionErr
         .and_then(serde_json::Value::as_str)
         .ok_or(IngestionError::MissingTranscript)?;
     Ok((title, caption_url.to_owned()))
+}
+
+fn youtube_title(page: &str) -> String {
+    extract_between_case_insensitive(page, "<title", "</title>")
+        .and_then(|value| value.split_once('>').map(|(_, text)| sanitize_html(text)))
+        .map_or_else(
+            || "YouTube video".to_owned(),
+            |value| value.trim_end_matches(" - YouTube").to_owned(),
+        )
 }
 
 fn parse_caption_xml(xml: &str) -> Vec<TranscriptSegment> {

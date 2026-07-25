@@ -16,11 +16,11 @@ mod capture;
 mod pipeline;
 
 pub use adapters::{
-    ExtractedContent, NativeContentAdapter, TranscriptSegment, extract_article_html,
-    extract_youtube_page,
+    ExtractedContent, NativeContentAdapter, TranscriptSegment, YouTubeTranscriptionFallback,
+    extract_article_html, extract_youtube_page,
 };
 pub use capture::{CaptureReceipt, CaptureRequest, CaptureService};
-pub use pipeline::{DeterministicPipeline, PipelineResult};
+pub use pipeline::{DeterministicPipeline, KnowledgeEnrichment, PipelineResult};
 
 pub const PIPELINE_VERSION: &str = "ingestion-v1";
 pub const MAX_URL_LENGTH: usize = 2_048;
@@ -113,6 +113,7 @@ pub struct ExtractionArtifact {
     pub concepts: Vec<String>,
     pub notes: Vec<String>,
     pub references: Vec<SourceLocator>,
+    pub full_content: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -332,6 +333,13 @@ pub fn render_markdown(artifact: &ExtractionArtifact) -> String {
     for note in &artifact.notes {
         writeln!(markdown, "- {note}").expect("writing a String cannot fail");
     }
+    let content_heading = match artifact.source_kind.as_str() {
+        "pdf" => "Full extracted document",
+        "youtube" => "Full transcript",
+        _ => "Full captured content",
+    };
+    writeln!(markdown, "\n## {content_heading}\n").expect("writing a String cannot fail");
+    writeln!(markdown, "{}", artifact.full_content).expect("writing a String cannot fail");
     writeln!(markdown, "\n## Source\n").expect("writing a String cannot fail");
     for reference in &artifact.references {
         writeln!(markdown, "- {}", reference.markdown_reference())
