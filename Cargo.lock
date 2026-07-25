@@ -2357,6 +2357,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "knowledge-retrieval"
+version = "0.1.0"
+dependencies = [
+ "knowledge-ai",
+ "knowledge-domain",
+ "knowledge-storage",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "knowledge-storage"
 version = "0.1.0"
 dependencies = [
