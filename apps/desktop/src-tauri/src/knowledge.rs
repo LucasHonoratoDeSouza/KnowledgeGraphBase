@@ -9,7 +9,7 @@ use knowledge_ai::AiPort;
 use knowledge_domain::{ProcessingState, RelationType, SourceKind};
 use knowledge_ingestion::{
     CaptureRequest, CaptureService, DeterministicPipeline, ExtractedContent, KnowledgeEnrichment,
-    NativeContentAdapter, PIPELINE_VERSION, PipelineResult, SourceLocator,
+    NativeContentAdapter, PIPELINE_VERSION, PipelineResult, PlacementRequest, SourceLocator,
     YouTubeTranscriptionFallback, chunk_text, content_hash,
 };
 use knowledge_retrieval::{AssistantAnswer, GroundedAssistant, RetrievalEngine, RetrievalResult};
@@ -21,9 +21,10 @@ use serde::{Deserialize, Serialize};
 
 const MAX_LIBRARY_ENTRIES: usize = 10_000;
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CaptureKind {
+    #[default]
     Auto,
     Url,
     Text,
@@ -32,7 +33,19 @@ pub enum CaptureKind {
     Pdf,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OrganizeMode {
+    /// The Main model picks the project/area (today's only behaviour).
+    #[default]
+    Auto,
+    /// The user picked the destination folder themselves.
+    Folder,
+    /// File it in the Inbox and spend no model call on it.
+    None,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureCommandRequest {
     pub kind: CaptureKind,
@@ -44,6 +57,55 @@ pub struct CaptureCommandRequest {
     pub file_name: String,
     #[serde(default)]
     pub bytes: Vec<u8>,
+    #[serde(default)]
+    pub organize: OrganizeMode,
+    /// Destination folder when `organize` is `Folder`.
+    #[serde(default)]
+    pub organize_folder: String,
+}
+
+/// One submission split into the parts the pipeline understands: the source to
+/// process, the user's framing prose, and any further links they mentioned (#4).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CaptureSegments {
+    pub source_url: Option<String>,
+    pub framing: String,
+    pub extra_urls: Vec<String>,
+}
+
+/// Splits a free-form composer submission into a source plus the user's own
+/// framing, deterministically — finding a link in text needs no model call
+/// (AD-006). The first link becomes the source; the rest are kept as context.
+#[must_use]
+pub fn segment_capture(content: &str, has_attachment: bool) -> CaptureSegments {
+    let mut urls = Vec::new();
+    let mut prose = Vec::new();
+    for token in content.split_whitespace() {
+        let trimmed = token.trim_matches(|c: char| matches!(c, ',' | ';' | ')' | '(' | '"'));
+        if trimmed.starts_with("https://") || trimmed.starts_with("http://") {
+            urls.push(trimmed.to_owned());
+        } else {
+            prose.push(token);
+        }
+    }
+    let framing = prose.join(" ").trim().to_owned();
+    if has_attachment {
+        return CaptureSegments {
+            source_url: None,
+            framing: content.trim().to_owned(),
+            extra_urls: urls,
+        };
+    }
+    if urls.is_empty() {
+        return CaptureSegments::default();
+    }
+    let mut remaining = urls;
+    let source_url = Some(remaining.remove(0));
+    CaptureSegments {
+        source_url,
+        framing,
+        extra_urls: remaining,
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -87,11 +149,21 @@ pub struct OrganizationSnapshot {
     pub memberships: Vec<FacetMembershipRecord>,
 }
 
+/// What the Main model needs beyond the source itself to file a note the way
+/// this particular vault is already organized (#5, #7).
+#[derive(Debug, Clone, Default)]
+pub struct EnrichmentContext {
+    pub framing: String,
+    pub folders: Vec<String>,
+    pub corrections: Vec<String>,
+}
+
 pub trait KnowledgeEnrichmentPort {
     fn enrich(
         &self,
         source: &SourceRecord,
         content: &ExtractedContent,
+        context: &EnrichmentContext,
     ) -> Result<KnowledgeEnrichment, String>;
 }
 
@@ -118,11 +190,14 @@ pub fn capture_in_vault_with_services(
 ) -> Result<CaptureCommandResponse, String> {
     let store = open_store(vault_root)?;
     store.recover_writes(vault_root).map_err(command_error)?;
-    let kind = infer_kind(request);
+    let segments = segment_capture(&request.content, !request.bytes.is_empty());
+    let kind = infer_kind(request, &segments);
     let receipt = {
         let capture = CaptureService::new(&store);
         match kind {
-            CaptureKind::Url => capture.capture(CaptureRequest::Url(&request.content)),
+            CaptureKind::Url => capture.capture(CaptureRequest::Url(
+                segments.source_url.as_deref().unwrap_or(&request.content),
+            )),
             CaptureKind::Text => capture.capture(CaptureRequest::Text {
                 title: non_blank(&request.title, "Quick capture"),
                 content: &request.content,
@@ -194,11 +269,12 @@ pub fn capture_in_vault_with_services(
         },
         CaptureKind::Auto => unreachable!("auto capture kind is resolved before extraction"),
     };
-    let enrichment = enricher
-        .map(|enricher| enricher.enrich(&receipt.source, &extracted))
-        .transpose()?;
+    let enrichment = enrich_for_request(
+        vault_root, request, &segments, &receipt, &extracted, enricher,
+    )?;
+    let placement = placement_for(request, &segments);
     let PipelineResult { document, reused } = DeterministicPipeline::new(&store, vault_root)
-        .process_enriched(&receipt, extracted, enrichment.as_ref())
+        .process_placed(&receipt, extracted, enrichment.as_ref(), &placement)
         .map_err(command_error)?;
     let source = store
         .source(&receipt.source.id)
@@ -209,6 +285,50 @@ pub fn capture_in_vault_with_services(
         document,
         reused,
     })
+}
+
+/// Runs Main-model enrichment when the user asked for automatic organization,
+/// giving the model this vault's taxonomy and the user's own recent
+/// corrections, then snapping its proposals onto folders that already exist.
+fn enrich_for_request(
+    vault_root: &Path,
+    request: &CaptureCommandRequest,
+    segments: &CaptureSegments,
+    receipt: &knowledge_ingestion::CaptureReceipt,
+    extracted: &ExtractedContent,
+    enricher: Option<&dyn KnowledgeEnrichmentPort>,
+) -> Result<Option<KnowledgeEnrichment>, String> {
+    if request.organize == OrganizeMode::None {
+        return Ok(None);
+    }
+    let folders = vault_taxonomy(vault_root);
+    let Some(enricher) = enricher else {
+        return Ok(None);
+    };
+    let mut enrichment = enricher.enrich(
+        &receipt.source,
+        extracted,
+        &EnrichmentContext {
+            framing: framing_block(segments),
+            folders: folders.clone(),
+            corrections: recent_corrections(vault_root, 10).unwrap_or_default(),
+        },
+    )?;
+    align_with_taxonomy(&mut enrichment, &folders);
+    Ok(Some(enrichment))
+}
+
+fn placement_for(request: &CaptureCommandRequest, segments: &CaptureSegments) -> PlacementRequest {
+    PlacementRequest {
+        folder: match request.organize {
+            OrganizeMode::Folder if !request.organize_folder.trim().is_empty() => {
+                Some(request.organize_folder.trim().to_owned())
+            }
+            OrganizeMode::None => Some("Inbox".to_owned()),
+            OrganizeMode::Auto | OrganizeMode::Folder => None,
+        },
+        framing: framing_block(segments),
+    }
 }
 
 pub fn library_in_vault(vault_root: &Path) -> Result<LibrarySnapshot, String> {
@@ -683,20 +803,73 @@ fn open_store(vault_root: &Path) -> Result<KnowledgeStore, String> {
     KnowledgeStore::open(metadata.join("knowledge.sqlite3")).map_err(command_error)
 }
 
-fn infer_kind(request: &CaptureCommandRequest) -> CaptureKind {
+fn infer_kind(request: &CaptureCommandRequest, segments: &CaptureSegments) -> CaptureKind {
     match request.kind {
         CaptureKind::Auto => {
             if !request.bytes.is_empty() {
                 CaptureKind::Pdf
-            } else if request.content.starts_with("https://")
-                || request.content.starts_with("http://")
-            {
+            } else if segments.source_url.is_some() {
                 CaptureKind::Url
             } else {
                 CaptureKind::Text
             }
         }
         kind => kind,
+    }
+}
+
+/// The user's prose plus any further links they mentioned, as one Markdown
+/// block. Empty when they only pasted a link or a file.
+fn framing_block(segments: &CaptureSegments) -> String {
+    let mut block = segments.framing.clone();
+    for url in &segments.extra_urls {
+        if !block.is_empty() {
+            block.push('\n');
+        }
+        block.push_str("- Also mentioned: ");
+        block.push_str(url);
+    }
+    block
+}
+
+/// The vault's existing top-level categories, so the Main model reuses a
+/// folder that already exists instead of inventing a near-duplicate (#5).
+fn vault_taxonomy(vault_root: &Path) -> Vec<String> {
+    let mut folders = Vec::new();
+    for parent in ["Projects", "Areas"] {
+        let Ok(entries) = fs::read_dir(vault_root.join(parent)) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                folders.push(format!("{parent}/{}", entry.file_name().to_string_lossy()));
+            }
+        }
+    }
+    folders.sort();
+    folders
+}
+
+/// Snaps a proposed project/area onto an existing folder whose name matches
+/// case-insensitively, the same way concept resolution already avoids
+/// duplicate concepts through normalized names.
+fn align_with_taxonomy(enrichment: &mut KnowledgeEnrichment, folders: &[String]) {
+    let existing = |parent: &str, value: &str| -> Option<String> {
+        folders.iter().find_map(|folder| {
+            let (folder_parent, leaf) = folder.split_once('/')?;
+            (folder_parent == parent && leaf.eq_ignore_ascii_case(value.trim()))
+                .then(|| leaf.to_owned())
+        })
+    };
+    for project in &mut enrichment.projects {
+        if let Some(matched) = existing("Projects", project) {
+            *project = matched;
+        }
+    }
+    for area in &mut enrichment.areas {
+        if let Some(matched) = existing("Areas", area) {
+            *area = matched;
+        }
     }
 }
 
