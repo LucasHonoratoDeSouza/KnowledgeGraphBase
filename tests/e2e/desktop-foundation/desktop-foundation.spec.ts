@@ -289,13 +289,13 @@ test("supports masked provider connect, test, rotate and remove lifecycle", asyn
   await expect(openAi.getByText("Not configured")).toBeVisible();
 });
 
-test("keeps OpenAI, Anthropic and DeepSeek provider state independent", async ({
+test("keeps OpenAI, Anthropic, DeepSeek and Groq provider state independent", async ({
   page,
 }) => {
   await createLocalKnowledgeBase(page);
   await openSettings(page);
 
-  for (const provider of ["OpenAI", "Anthropic", "DeepSeek"] as const) {
+  for (const provider of ["OpenAI", "Anthropic", "DeepSeek", "Groq"] as const) {
     const group = page.getByRole("group", { name: `${provider} connection` });
     await group.getByLabel(`New ${provider} key`).fill(`${provider}-key`);
     await group.getByRole("button", { name: `Connect ${provider}` }).click();

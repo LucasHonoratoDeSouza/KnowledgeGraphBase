@@ -66,6 +66,7 @@ pub enum ProviderKind {
     Anthropic,
     #[serde(rename = "deepseek")]
     DeepSeek,
+    Groq,
     Compatible,
 }
 
@@ -76,6 +77,7 @@ impl ProviderKind {
             Self::OpenAi => "openai",
             Self::Anthropic => "anthropic",
             Self::DeepSeek => "deepseek",
+            Self::Groq => "groq",
             Self::Compatible => "compatible",
         }
     }
@@ -85,6 +87,7 @@ impl ProviderKind {
             "openai" => Ok(Self::OpenAi),
             "anthropic" => Ok(Self::Anthropic),
             "deepseek" => Ok(Self::DeepSeek),
+            "groq" => Ok(Self::Groq),
             "compatible" => Ok(Self::Compatible),
             _ => Err(SettingsError::Database(format!(
                 "unknown provider kind: {value}"

@@ -29,6 +29,7 @@ const endpoints: Record<ProviderId, string> = {
   anthropic: "https://api.anthropic.com/v1",
   compatible: "http://127.0.0.1:4000/v1",
   deepseek: "https://api.deepseek.com",
+  groq: "https://api.groq.com/openai/v1",
   openai: "https://api.openai.com/v1",
 };
 
@@ -328,6 +329,7 @@ export function Onboarding({
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="deepseek">DeepSeek</option>
+                <option value="groq">Groq</option>
                 <option value="compatible">OpenAI-compatible / LiteLLM</option>
               </select>
             </label>

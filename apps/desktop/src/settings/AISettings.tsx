@@ -51,6 +51,14 @@ const providers: Array<{
     monogram: "D",
   },
   {
+    accent: "provider-groq",
+    description: "Fast open-weight inference with a free tier.",
+    endpoint: "https://api.groq.com/openai/v1",
+    id: "groq",
+    label: "Groq",
+    monogram: "G",
+  },
+  {
     accent: "provider-compatible",
     description: "LiteLLM or another OpenAI-compatible gateway you control.",
     endpoint: "http://127.0.0.1:4000/v1",
@@ -72,6 +80,7 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
     anthropic: "",
     compatible: "",
     deepseek: "",
+    groq: "",
     openai: "",
   });
   const [providerEndpoints, setProviderEndpoints] = useState<
@@ -86,6 +95,9 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
     deepseek:
       initial.providers.find(({ provider }) => provider === "deepseek")
         ?.endpoint ?? "https://api.deepseek.com",
+    groq:
+      initial.providers.find(({ provider }) => provider === "groq")?.endpoint ??
+      "https://api.groq.com/openai/v1",
     openai:
       initial.providers.find(({ provider }) => provider === "openai")
         ?.endpoint ?? "https://api.openai.com/v1",
