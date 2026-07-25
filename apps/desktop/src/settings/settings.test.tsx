@@ -300,7 +300,7 @@ describe("dedicated AI settings", () => {
     ).toEqual(["AI Providers", "Models & Routing", "Costs & Usage", "Privacy"]);
   });
 
-  it("shows separate OpenAI, Anthropic and DeepSeek connections", () => {
+  it("shows separate direct and OpenAI-compatible provider connections", () => {
     render(<AISettings client={client()} initial={snapshot} />);
 
     expect(
@@ -312,6 +312,27 @@ describe("dedicated AI settings", () => {
     expect(
       screen.getByRole("group", { name: "DeepSeek connection" }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("group", {
+        name: "Compatible / LiteLLM connection",
+      }),
+    ).toBeVisible();
+  });
+
+  it("adds an enabled model from any configured provider to routing", () => {
+    render(<AISettings client={client()} initial={snapshot} />);
+    fireEvent.change(screen.getByLabelText("New model provider"), {
+      target: { value: "compatible" },
+    });
+    fireEvent.change(screen.getByLabelText("New model identifier"), {
+      target: { value: "openrouter/auto" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+
+    expect(screen.getByLabelText("Enable openrouter/auto")).toBeChecked();
+    expect(screen.getByLabelText("Main model")).toContainHTML(
+      '<option value="openrouter/auto">openrouter/auto</option>',
+    );
   });
 
   it("renders configured credentials only as masked status", () => {

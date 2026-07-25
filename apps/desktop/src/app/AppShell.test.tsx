@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 
@@ -15,9 +21,8 @@ import type {
 import type { SettingsSnapshot } from "../settings";
 
 function createKnowledgeClient() {
-  const capture = vi.fn(
-    (request: CaptureRequest): Promise<CaptureResponse> =>
-      Promise.resolve({
+  const capture = vi.fn((request: CaptureRequest): Promise<CaptureResponse> =>
+    Promise.resolve({
       source: {
         id: "source-1",
         kind: "text",
@@ -38,11 +43,10 @@ function createKnowledgeClient() {
         contentHash: "document-hash",
       },
       reused: false,
-      }),
+    }),
   );
-  const getLibrary = vi.fn(
-    (): Promise<LibrarySnapshot> =>
-      Promise.resolve({
+  const getLibrary = vi.fn((): Promise<LibrarySnapshot> =>
+    Promise.resolve({
       entries: [
         {
           name: "Research",
@@ -61,11 +65,10 @@ function createKnowledgeClient() {
       documents: [],
       sources: [],
       noteCount: 1,
-      }),
+    }),
   );
-  const getGraph = vi.fn(
-    (): Promise<GraphView> =>
-      Promise.resolve({
+  const getGraph = vi.fn((): Promise<GraphView> =>
+    Promise.resolve({
       concepts: [
         {
           id: "concept-1",
@@ -75,11 +78,10 @@ function createKnowledgeClient() {
       ],
       edges: [],
       truncated: false,
-      }),
+    }),
   );
-  const search = vi.fn(
-    (query: string): Promise<RetrievalResult> =>
-      Promise.resolve({
+  const search = vi.fn((query: string): Promise<RetrievalResult> =>
+    Promise.resolve({
       plan: { lexicalQuery: query, filters: {}, expandGraph: false },
       hits: [
         {
@@ -94,24 +96,24 @@ function createKnowledgeClient() {
         },
       ],
       lexicalFallback: true,
-      }),
+    }),
   );
   const ask = vi.fn(
     (_question: string, modelId: string): Promise<AssistantAnswer> =>
       Promise.resolve({
-      answer: "The evidence links transformers to retrieval.",
-      citations: [
-        {
-          number: 1,
-          title: "Transformer research",
-          path: "Research/Transformers.md",
-          locator: "section:Evidence",
-          snippet: "Grounded evidence from the local note.",
-        },
-      ],
-      modelId,
-      usage: { inputTokens: 100, outputTokens: 30 },
-      supported: true,
+        answer: "The evidence links transformers to retrieval.",
+        citations: [
+          {
+            number: 1,
+            title: "Transformer research",
+            path: "Research/Transformers.md",
+            locator: "section:Evidence",
+            snippet: "Grounded evidence from the local note.",
+          },
+        ],
+        modelId,
+        usage: { inputTokens: 100, outputTokens: 30 },
+        supported: true,
       }),
   );
   const client: KnowledgeClient = {
@@ -357,17 +359,15 @@ describe("application shell", () => {
         content: "A detailed meeting record about retrieval.",
       }),
     );
-    expect(await screen.findByText("Saved · Inbox/quick-capture.md")).toBeVisible();
+    expect(
+      await screen.findByText("Saved · Inbox/quick-capture.md"),
+    ).toBeVisible();
   });
 
   it("loads the real library and graph when Retrieve opens", async () => {
     const { client, getGraph, getLibrary } = createKnowledgeClient();
     render(
-      <App
-        initialMode="Retrieve"
-        knowledgeClient={client}
-        setupComplete
-      />,
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
     );
 
     expect((await screen.findAllByText("Transformers"))[0]).toBeVisible();
@@ -379,28 +379,23 @@ describe("application shell", () => {
   it("runs local retrieval from the Explorer and renders resolvable evidence", async () => {
     const { client, search: searchClient } = createKnowledgeClient();
     render(
-      <App
-        initialMode="Retrieve"
-        knowledgeClient={client}
-        setupComplete
-      />,
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
     );
     const search = screen.getByRole("textbox", { name: "Filter knowledge" });
     fireEvent.change(search, { target: { value: "evidence" } });
     fireEvent.keyDown(search, { key: "Enter" });
 
     expect(await screen.findByText("Transformer research")).toBeVisible();
-    expect(screen.getByText("Grounded evidence from the local note.")).toBeVisible();
+    expect(
+      screen.getByText("Grounded evidence from the local note."),
+    ).toBeVisible();
     expect(searchClient).toHaveBeenCalledWith("evidence");
   });
 
   it("asks the selected provider model and keeps the citation visible", async () => {
     const { ask, client } = createKnowledgeClient();
     render(
-      <App
-        initialSettings={configuredSettings}
-        knowledgeClient={client}
-      />,
+      <App initialSettings={configuredSettings} knowledgeClient={client} />,
     );
     const question = screen.getByRole("textbox", {
       name: "Ask your knowledge base",
