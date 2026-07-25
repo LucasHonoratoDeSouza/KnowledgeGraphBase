@@ -17,6 +17,7 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 | Task | Evidence | Result |
 | --- | --- | --- |
 | T15 | `knowledge-domain` 26/26 tests; workspace Rust library gate passed | ✅ Complete |
+| T16 | `knowledge-storage` 21/21 integration tests; `make test-full` passed including 19/19 desktop E2E | ✅ Complete |
 
 ### Batch 1 / Phase 1 — Complete, independently verified, uncommitted
 
