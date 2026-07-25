@@ -19,7 +19,7 @@ import type {
   OrganizationSnapshot,
   RetrievalResult,
 } from "../knowledge";
-import type { SettingsSnapshot } from "../settings";
+import type { SettingsClient, SettingsSnapshot } from "../settings";
 
 function createKnowledgeClient() {
   const capture = vi.fn((request: CaptureRequest): Promise<CaptureResponse> =>
@@ -254,6 +254,24 @@ const configuredSettings: SettingsSnapshot = {
     privacy: { allowSourceContent: true, storePrompts: false },
   },
 };
+
+/** Settings client that only records what the workspace persisted. */
+function settingsStub(
+  saveWorkspaceState: SettingsClient["saveWorkspaceState"],
+): SettingsClient {
+  const snapshot = () => Promise.resolve(configuredSettings);
+  return {
+    getSettings: snapshot,
+    completeOnboarding: snapshot,
+    connectProvider: snapshot,
+    rotateProvider: snapshot,
+    saveAiConfiguration: snapshot,
+    setAiEnabled: snapshot,
+    saveWorkspaceState,
+    testProvider: snapshot,
+    removeProvider: snapshot,
+  };
+}
 
 describe("application shell", () => {
   // Explorer collapse state persists per vault (#6), so one test's collapsed
@@ -795,6 +813,68 @@ describe("application shell", () => {
     await waitFor(() => {
       expect(undoReorganization).toHaveBeenCalledOnce();
     });
+  });
+
+  it("resizes a pane by dragging its divider and persists the width", async () => {
+    const saveWorkspaceState = vi.fn((_mode: unknown, layoutJson: string) =>
+      Promise.resolve({ ...configuredSettings, layoutJson }),
+    );
+    render(
+      <App
+        initialSettings={configuredSettings}
+        settingsClient={settingsStub(
+          saveWorkspaceState as unknown as SettingsClient["saveWorkspaceState"],
+        )}
+      />,
+    );
+    const divider = screen.getByRole("separator", { name: "Resize Explorer" });
+
+    fireEvent.pointerDown(divider, { clientX: 240, pointerId: 1 });
+    fireEvent.pointerMove(divider, { clientX: 300, pointerId: 1 });
+    fireEvent.pointerUp(divider, { clientX: 300, pointerId: 1 });
+
+    await waitFor(() => {
+      expect(saveWorkspaceState).toHaveBeenCalled();
+    });
+    const [, layoutJson] = saveWorkspaceState.mock.calls.at(-1) ?? [];
+    expect(
+      (
+        JSON.parse(layoutJson ?? "{}") as {
+          panes: { explorer: { width: number } };
+        }
+      ).panes.explorer.width,
+    ).toBe(300);
+  });
+
+  it("resizes a pane with the keyboard from the divider", async () => {
+    const saveWorkspaceState = vi.fn((_mode: unknown, layoutJson: string) =>
+      Promise.resolve({ ...configuredSettings, layoutJson }),
+    );
+    render(
+      <App
+        initialSettings={configuredSettings}
+        settingsClient={settingsStub(
+          saveWorkspaceState as unknown as SettingsClient["saveWorkspaceState"],
+        )}
+      />,
+    );
+
+    fireEvent.keyDown(
+      screen.getByRole("separator", { name: "Resize Assistant" }),
+      { key: "ArrowLeft" },
+    );
+
+    await waitFor(() => {
+      expect(saveWorkspaceState).toHaveBeenCalled();
+    });
+    const [, layoutJson] = saveWorkspaceState.mock.calls.at(-1) ?? [];
+    expect(
+      (
+        JSON.parse(layoutJson ?? "{}") as {
+          panes: { assistant: { width: number } };
+        }
+      ).panes.assistant.width,
+    ).toBe(336);
   });
 
   it("has no detectable accessibility violations in either mode", async () => {
