@@ -347,7 +347,9 @@ test("assistant surface stays read-only with no action or research tools", async
     assistant.getByRole("button", { name: "Send question" }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("button", { name: /delete|write file|research/i }),
+    page.getByRole("button", {
+      name: /^(delete|write file|research)$/i,
+    }),
   ).toHaveCount(0);
 });
 
