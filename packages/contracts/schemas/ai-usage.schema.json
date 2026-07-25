@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://knowledge-os.dev/schemas/ai-usage.schema.json",
+  "title": "AiUsage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "invocation_id",
+    "operation",
+    "provider",
+    "model",
+    "pipeline_version",
+    "prompt_version",
+    "input_tokens",
+    "output_tokens",
+    "estimated_cost_usd",
+    "latency_ms",
+    "cache_hit",
+    "source_or_query_id"
+  ],
+  "properties": {
+    "invocation_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+    "operation": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+    "provider": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+    "model": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+    "pipeline_version": { "$ref": "common.schema.json#/$defs/VersionString" },
+    "prompt_version": { "$ref": "common.schema.json#/$defs/VersionString" },
+    "input_tokens": { "type": "integer", "minimum": 0 },
+    "output_tokens": { "type": "integer", "minimum": 0 },
+    "estimated_cost_usd": { "type": "number", "minimum": 0 },
+    "latency_ms": { "type": "integer", "minimum": 0 },
+    "cache_hit": { "type": "boolean" },
+    "source_or_query_id": { "$ref": "common.schema.json#/$defs/EntityId" }
+  }
+}

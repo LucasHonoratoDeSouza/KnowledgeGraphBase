@@ -1,0 +1,11 @@
+{
+  "fixture_version": 1,
+  "kind": "vault",
+  "case": "vault-document",
+  "payload": {
+    "workspace_id": "018f47a7-7f4a-7d2c-a1b2-123456789abc",
+    "markdown_path": "notes/knowledge-graphs.md",
+    "frontmatter": { "title": "Knowledge graphs", "source": "source-youtube" },
+    "wiki_links": ["Retrieval", "Local first"]
+  }
+}

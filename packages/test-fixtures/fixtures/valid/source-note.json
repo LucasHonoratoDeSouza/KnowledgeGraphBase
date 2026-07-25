@@ -1,0 +1,12 @@
+{
+  "fixture_version": 1,
+  "kind": "source",
+  "case": "source-note",
+  "payload": {
+    "source_kind": "note",
+    "title": "Manual idea",
+    "normalized_text": "A manually authored note enters the same ingestion boundary.",
+    "content_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    "locator": { "section": "Idea" }
+  }
+}

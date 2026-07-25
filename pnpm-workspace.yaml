@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - eslint@10.8.0
+  - "@playwright/test@1.62.0"
+  - playwright-core@1.62.0
+  - playwright@1.62.0

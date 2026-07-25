@@ -1,0 +1,14 @@
+{
+  "fixture_version": 1,
+  "kind": "provider",
+  "case": "provider-usage",
+  "payload": {
+    "operation": "assistant.answer",
+    "model": "fixture-model-v1",
+    "usage": { "input_tokens": 480, "output_tokens": 80, "cache_hit": true },
+    "response": {
+      "answer": "The answer is grounded in fixture sources.",
+      "citations": ["chunk-1"]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+import { invoke } from "@tauri-apps/api/core";
+
+import type {
+  AiConfiguration,
+  OnboardingRequest,
+  ProviderConnectRequest,
+  ProviderId,
+  SettingsClient,
+  SettingsSnapshot,
+} from "./types";
+
+/** Narrow custom commands keep Stronghold itself unavailable to the renderer. */
+export const ipcSettingsClient: SettingsClient = {
+  getSettings: () => invoke<SettingsSnapshot>("settings_get"),
+  completeOnboarding: (request: OnboardingRequest) =>
+    invoke<SettingsSnapshot>("settings_complete_onboarding", { request }),
+  connectProvider: (request: ProviderConnectRequest) =>
+    invoke<SettingsSnapshot>("provider_connect", { request }),
+  rotateProvider: (provider: ProviderId, credential: string) =>
+    invoke<SettingsSnapshot>("provider_rotate", { provider, credential }),
+  saveAiConfiguration: (configuration: AiConfiguration) =>
+    invoke<SettingsSnapshot>("settings_update_ai", { configuration }),
+  saveWorkspaceState: (activeMode, layoutJson) =>
+    invoke<SettingsSnapshot>("settings_update_workspace", {
+      activeMode,
+      layoutJson,
+    }),
+  testProvider: (provider: ProviderId) =>
+    invoke<SettingsSnapshot>("provider_test", { provider }),
+  removeProvider: (provider: ProviderId) =>
+    invoke<SettingsSnapshot>("provider_remove", { provider }),
+};

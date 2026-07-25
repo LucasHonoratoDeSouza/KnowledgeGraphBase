@@ -1,0 +1,12 @@
+{
+  "fixture_version": 1,
+  "kind": "source",
+  "case": "source-pdf",
+  "payload": {
+    "source_kind": "pdf",
+    "title": "Retrieval paper",
+    "normalized_text": "A PDF text-layer fixture with page provenance.",
+    "content_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "locator": { "page": 3, "chunk": 1 }
+  }
+}

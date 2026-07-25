@@ -1,0 +1,54 @@
+[project]
+name = "knowledge-os-workspace"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "mypy==2.3.0",
+    "pytest==9.1.1",
+    "ruff==0.16.0",
+]
+
+[tool.uv]
+package = false
+required-version = "==0.11.31"
+
+[tool.uv.workspace]
+members = ["apps/api", "apps/worker", "packages/test-fixtures/python"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
+
+[tool.mypy]
+explicit_package_bases = true
+mypy_path = [
+    "apps/api/src",
+    "apps/worker/src",
+    "packages/test-fixtures/python/src",
+]
+python_version = "3.14"
+strict = true
+files = [
+    "apps/api/src",
+    "apps/api/tests",
+    "apps/worker/src",
+    "apps/worker/tests",
+    "packages/test-fixtures/python/src",
+    "packages/test-fixtures/python/tests",
+]
+
+[tool.pytest.ini_options]
+addopts = ["--strict-config", "--strict-markers"]
+minversion = "9.1"
+testpaths = [
+    "apps/api/tests",
+    "apps/worker/tests",
+    "packages/test-fixtures/python/tests",
+]

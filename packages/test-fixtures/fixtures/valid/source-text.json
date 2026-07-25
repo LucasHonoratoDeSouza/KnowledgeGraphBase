@@ -1,0 +1,12 @@
+{
+  "fixture_version": 1,
+  "kind": "source",
+  "case": "source-text",
+  "payload": {
+    "source_kind": "text",
+    "title": "Weekly meeting",
+    "normalized_text": "Decisions and follow-up actions from the meeting.",
+    "content_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "locator": { "section": "Decisions" }
+  }
+}

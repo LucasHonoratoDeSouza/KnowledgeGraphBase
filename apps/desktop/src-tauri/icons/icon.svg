@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Knowledge OS">
+  <rect width="512" height="512" rx="112" fill="#17181b" />
+  <path d="M126 118v276M126 260l190-142M126 260l190 134" fill="none" stroke="#e8e9ed" stroke-linecap="round" stroke-linejoin="round" stroke-width="48" />
+  <circle cx="365" cy="118" r="34" fill="#74c7a5" />
+  <circle cx="365" cy="394" r="34" fill="#74c7a5" />
+</svg>

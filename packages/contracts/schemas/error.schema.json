@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://knowledge-os.dev/schemas/error.schema.json",
+  "title": "AppError",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "message", "retryable", "field_details"],
+  "properties": {
+    "code": {
+      "enum": [
+        "VALIDATION_ERROR",
+        "NOT_FOUND",
+        "CONFLICT",
+        "UNAUTHORIZED_COMMAND",
+        "PROVIDER_UNAVAILABLE",
+        "BUDGET_EXCEEDED",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "message": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+    "retryable": { "type": "boolean" },
+    "field_details": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "message"],
+        "properties": {
+          "field": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+          "message": { "$ref": "common.schema.json#/$defs/NonEmptyString" }
+        }
+      }
+    },
+    "operation_id": { "$ref": "common.schema.json#/$defs/EntityId" }
+  }
+}

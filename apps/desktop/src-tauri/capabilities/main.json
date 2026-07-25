@@ -1,0 +1,22 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-capability",
+  "description": "Minimum local IPC access for the main Knowledge OS window",
+  "windows": ["main"],
+  "permissions": [
+    "allow-workspace-get-state",
+    "allow-search-execute",
+    "allow-workspace-open",
+    "allow-document-open",
+    "allow-document-save",
+    "allow-settings-get",
+    "allow-settings-complete-onboarding",
+    "allow-settings-update-ai",
+    "allow-settings-update-workspace",
+    "allow-provider-connect",
+    "allow-provider-rotate",
+    "allow-provider-test",
+    "allow-provider-remove",
+    "dialog:allow-open"
+  ]
+}

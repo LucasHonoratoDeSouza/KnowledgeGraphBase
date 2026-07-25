@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-settings-update-ai"
+description = "Enables the settings_update_ai command without any pre-configured scope."
+commands.allow = ["settings_update_ai"]
+
+[[permission]]
+identifier = "deny-settings-update-ai"
+description = "Denies the settings_update_ai command without any pre-configured scope."
+commands.deny = ["settings_update_ai"]

@@ -1,0 +1,89 @@
+{
+  "fixture_version": 1,
+  "cases": [
+    {
+      "name": "source-youtube",
+      "path": "valid/source-youtube.json",
+      "kind": "source",
+      "valid": true,
+      "error": null
+    },
+    {
+      "name": "source-pdf",
+      "path": "valid/source-pdf.json",
+      "kind": "source",
+      "valid": true,
+      "error": null
+    },
+    {
+      "name": "source-web",
+      "path": "valid/source-web.json",
+      "kind": "source",
+      "valid": true,
+      "error": null
+    },
+    {
+      "name": "source-text",
+      "path": "valid/source-text.json",
+      "kind": "source",
+      "valid": true,
+      "error": null
+    },
+    {
+      "name": "source-markdown",
+      "path": "valid/source-markdown.json",
+      "kind": "source",
+      "valid": true,
+      "error": null
+    },
+    {
+      "name": "source-note",
+      "path": "valid/source-note.json",
+      "kind": "source",
+      "valid": true,
+      "error": null
+    },
+    {
+      "name": "provider-extraction",
+      "path": "valid/provider-extraction.json",
+      "kind": "provider",
+      "valid": true,
+      "error": null
+    },
+    {
+      "name": "provider-usage",
+      "path": "valid/provider-usage.json",
+      "kind": "provider",
+      "valid": true,
+      "error": null
+    },
+    {
+      "name": "vault-document",
+      "path": "valid/vault-document.json",
+      "kind": "vault",
+      "valid": true,
+      "error": null
+    },
+    {
+      "name": "invalid-source-kind",
+      "path": "invalid/source-kind.json",
+      "kind": "source",
+      "valid": false,
+      "error": "UNSUPPORTED_SOURCE_KIND"
+    },
+    {
+      "name": "invalid-provider-secret",
+      "path": "invalid/provider-secret.json",
+      "kind": "provider",
+      "valid": false,
+      "error": "SECRET_FIELD"
+    },
+    {
+      "name": "invalid-vault-path",
+      "path": "invalid/vault-path.json",
+      "kind": "vault",
+      "valid": false,
+      "error": "UNSAFE_VAULT_PATH"
+    }
+  ]
+}

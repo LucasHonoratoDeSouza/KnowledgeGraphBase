@@ -1,0 +1,12 @@
+{
+  "code": "VALIDATION_ERROR",
+  "message": "The source URL is invalid",
+  "retryable": false,
+  "field_details": [
+    {
+      "field": "url",
+      "message": "Use http or https"
+    }
+  ],
+  "operation_id": "018f47a7-7f4a-7d2c-a1b2-123456789abc"
+}

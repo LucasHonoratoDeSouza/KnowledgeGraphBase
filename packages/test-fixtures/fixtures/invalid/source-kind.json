@@ -1,0 +1,11 @@
+{
+  "fixture_version": 1,
+  "kind": "source",
+  "case": "invalid-source-kind",
+  "payload": {
+    "source_kind": "audio",
+    "title": "Unsupported recording",
+    "normalized_text": "This source kind is outside the capture contract.",
+    "content_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+  }
+}
