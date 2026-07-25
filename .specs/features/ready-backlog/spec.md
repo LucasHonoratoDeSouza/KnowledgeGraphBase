@@ -221,17 +221,17 @@ Eleven issues sit in `Ready` on the project board after the owner's live testing
 
 | Requirement ID | Story | Issue | Status |
 | -------------- | ----- | ----- | ------ |
-| MINI-01 | P1 mini-summary | #17 | Pending |
-| ORG-01 | P1 auto organize | #5 | Pending |
-| MENU-01 | P1 context menu | #29 | Pending |
-| DND-01 | P2 drag and drop | #7 | Pending |
-| READ-01 | P2 reading view | #10 | Pending |
-| PANE-01 | P2 pane dividers | #12 | Pending |
-| GRAPH-01 | P2 graph layout | #13 | Pending |
-| CARD-01 | P3 provider cards | #14 | Pending |
-| DEF-01 | P3 AI defaults | #15 | Pending |
-| MIX-01 | P3 mixed capture | #4 | Pending |
-| LIB-01 | P3 Librarian | #18 | Pending |
+| MINI-01 | P1 mini-summary | #17 | Verified |
+| ORG-01 | P1 auto organize | #5 | Verified |
+| MENU-01 | P1 context menu | #29 | Verified |
+| DND-01 | P2 drag and drop | #7 | Verified |
+| READ-01 | P2 reading view | #10 | Verified |
+| PANE-01 | P2 pane dividers | #12 | Verified |
+| GRAPH-01 | P2 graph layout | #13 | Verified |
+| CARD-01 | P3 provider cards | #14 | Verified |
+| DEF-01 | P3 AI defaults | #15 | Verified |
+| MIX-01 | P3 mixed capture | #4 | Verified |
+| LIB-01 | P3 Librarian | #18 | Verified |
 
 ---
 

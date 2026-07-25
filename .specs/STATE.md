@@ -90,13 +90,29 @@
 - **Date**: 2026-07-24
 - **Status**: active
 
+### AD-012
+- **Decision**: Nenhuma dependência nova de runtime entra no app: renderização de Markdown, layout de grafo e marcas de provedor são implementados no próprio repositório.
+- **Reason**: O app precisa compilar e rodar offline e o gate de lockfile roda com `--frozen-lockfile`; cada dependência adicionada é superfície de suprimento e peso de bundle.
+- **Trade-off**: Menos recursos prontos (sem Markdown completo, sem d3-force) em troca de controle, tamanho e reprodutibilidade.
+- **Scope**: renderer do desktop
+- **Date**: 2026-07-25
+- **Status**: active
+
+### AD-013
+- **Decision**: A organização tem duas metades explícitas: o arquivador incremental por captura (barato, todo capture) e o passe Librarian escopado a uma pasta (raro, deliberado, desfazível em uma ação). Ambos leem apenas a mini-summary `context:` de cada nota, nunca o corpo.
+- **Reason**: Mantém o custo proporcional ao número de notas e cumpre a regra de que o app nunca reorganiza o vault inteiro silenciosamente.
+- **Trade-off**: Toda nota gerada precisa carregar `context:`, e o Librarian depende dessa qualidade.
+- **Scope**: ingestão, organização, Explorer
+- **Date**: 2026-07-25
+- **Status**: active
+
 ## Handoff
 
-- **Feature**: Knowledge OS MVP / `.specs/features/knowledge-os-mvp/`
-- **Phase / Task**: Execute — Phases 1–6 audited complete except two confirmed gaps: T33 (entity resolution beyond exact/alias dedup) and T37 (optional embeddings, non-blocking per spec)
-- **Completed**: T01–T32, T34–T36, T38–T42 verified this session by re-running `make check` (lint/format/typecheck/lock-check/build) and `make test-full` (Rust unit+integration, Tauri IPC contract, UI, Python, Playwright e2e) against the real `dev` HEAD, all green; native `.deb` + `.AppImage` build fixed and verified; dev-channel CI (`.github/workflows/dev-build.yml`) publishes a signed, auto-incrementing `dev` prerelease on every push, and the installed app self-updates from it; `README.md` added
-- **In-progress**: none — this is a clean stopping point
-- **Next step**: implement T33 (entity resolution: fuzzy/vector candidates + ambiguous-AI-fallback escalation, currently only exact/alias dedup) and, if desired, T37 (sqlite-vec embedding adapter, optional per spec); then continue into Phase 7 (Optional Server) / Phase 8 (Production Engineering) only if the owner wants the remote/ops layers
-- **Blockers**: none. Two open decisions for the owner: (1) LICENSE is unset (README notes this); (2) whether Phase 7/8 (optional server, k8s/terraform, code signing) are in scope for this project at all
-- **Uncommitted files**: none — working tree clean
-- **Branch**: `dev`, synced with `origin/dev`
+- **Feature**: Ready backlog / `.specs/features/ready-backlog/`
+- **Phase / Task**: Execute complete — all 25 tasks done, independent validation pass written to `validation.md` (PASS)
+- **Completed**: issues #4, #5, #7, #10, #12, #13, #14, #15, #17, #18 and #29, each with tests; full gates green (lint, typecheck, format, 117 desktop + 45 package unit tests, 26 Playwright e2e, Rust workspace suite, clippy, builds)
+- **In-progress**: none
+- **Next step**: owner testing of the branch, then PR into `dev`; remaining board items are the Blocked agent epic (#19–#26)
+- **Blockers**: none. Pre-existing repo drift: `cargo fmt --check` disagrees with five files this branch never touched (newer rustfmt)
+- **Uncommitted files**: none
+- **Branch**: `feat/ready-backlog`
