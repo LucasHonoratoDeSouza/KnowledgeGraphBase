@@ -28,6 +28,8 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 | T26 | PDF text-layer extraction preserves page locators and returns a typed OCR-boundary state when no text is usable | ✅ Complete |
 | T27 | normalized YouTube capture extracts timestamped public captions and returns a typed transcription-boundary state when captions are unavailable | ✅ Complete |
 | T28 | all four deterministic vertical fixtures complete through Markdown/chunks/concepts/edges; duplicate artifact reuse performs zero second processing; ingestion+storage suites 107/107 | ✅ Complete |
+| T29 | provider-neutral AI port, deterministic fake, strict structured schema and versioned normalized cache key covered by 8 focused cases | ✅ Complete |
+| T30 | fail-closed Main/assistant/deep/fallback routing and daily/monthly budget policy covered by 9 focused cases | ✅ Complete |
 
 ### Batch 1 / Phase 1 — Complete, independently verified, uncommitted
 
