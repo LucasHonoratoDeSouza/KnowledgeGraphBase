@@ -93,10 +93,10 @@
 ## Handoff
 
 - **Feature**: Knowledge OS MVP / `.specs/features/knowledge-os-mvp/`
-- **Phase / Task**: Execute — consolidating verified T01–T14, then T15 / Phase 3
-- **Completed**: frontend aprovado pelo proprietário; fundação funcional T01–T14; linguagem AD-010; 19/19 E2E Chromium; axe sem violações; checkpoint de commits liberado
-- **In-progress** (file:line): `.specs/features/knowledge-os-mvp/tasks.md` — retomada da cadeia de implementação
-- **Next step**: registrar o baseline aprovado T01–T14 e executar T15 em diante com gates e commits atômicos
+- **Phase / Task**: Execute — Phase 3+ em andamento; commits até `c1d7df7`/`9d575a9`/`5148d00` (settings/model catalog, wiring do workbench a `knowledge`, e2e de vault) implementam trabalho além de T30 mas ainda não foram lançados na tabela de `tasks.md`
+- **Completed**: T01–T14 (fundação), T15–T20/T22/T24–T30/T36/T38–T40 (tabela `tasks.md`) todos commitados em `dev`; build nativo `.deb` + `.AppImage` gerado e verificado nesta sessão; suíte completa (`test-contracts`, `test-ui`, `test-python`, `test-rust`) verde
+- **In-progress**: `.specs/features/knowledge-os-mvp/tasks.md` está desatualizado — os 4 últimos commits (wiring de UI/IPC a `knowledge.rs`, catálogo de modelos/Stronghold) cobrem parte de T21/T23/T31/T35/T41 mas não foram marcados nem auditados contra os critérios de aceite de cada task
+- **Next step**: auditar os últimos 4 commits linha a linha contra os ACs de T21/T23/T31–T35/T37/T41–T42, marcar `tasks.md` com o que já está coberto e continuar a cadeia sequencial a partir da primeira task genuinamente incompleta
 - **Blockers**: none
-- **Uncommitted files**: T01–T14 aprovados, a serem consolidados antes da próxima implementação
-- **Branch**: `dev`
+- **Uncommitted files**: none — árvore de trabalho limpa após o commit `b91ba4e` (auto-updater dev channel + CI)
+- **Branch**: `dev` (18+1 commits à frente do que estava documentado; push liberado e `origin/dev` sincronizado nesta sessão)
