@@ -7,6 +7,7 @@ pub mod settings;
 mod transcription;
 
 use tauri::Manager;
+use tauri_plugin_updater::UpdaterExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Starts the native Knowledge OS shell.
@@ -17,11 +18,16 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(editor::DocumentCommandState::default())
         .setup(|app| {
             let data_directory = app.path().app_local_data_dir()?;
             std::fs::create_dir_all(&data_directory)?;
             app.manage(commands::SettingsCommandState::open(&data_directory)?);
+            let update_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                check_for_updates(&update_handle).await;
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -45,4 +51,18 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Knowledge OS");
+}
+
+/// Silently installs any available dev-channel update and relaunches.
+///
+/// Runs once at startup so a closed-and-reopened dev build always ends up
+/// on the latest `dev` branch push without any user interaction.
+async fn check_for_updates(app: &tauri::AppHandle) {
+    let Ok(updater) = app.updater() else {
+        return;
+    };
+    let Ok(Some(update)) = updater.check().await else {
+        return;
+    };
+    let _ = update.download_and_install(|_, _| {}, || {}).await;
 }
