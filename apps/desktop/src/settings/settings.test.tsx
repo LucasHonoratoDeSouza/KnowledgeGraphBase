@@ -373,6 +373,101 @@ describe("dedicated AI settings", () => {
     expect(key).toHaveValue("");
   });
 
+  it("hides the endpoint behind Advanced except for the compatible gateway", () => {
+    render(<AISettings client={client()} initial={snapshot} />);
+
+    expect(screen.getByLabelText("OpenAI endpoint")).not.toBeVisible();
+    expect(
+      screen.getByLabelText("Compatible / LiteLLM endpoint"),
+    ).toBeVisible();
+
+    fireEvent.click(
+      within(
+        screen.getByRole("group", { name: "OpenAI connection" }),
+      ).getByText("Advanced"),
+    );
+
+    expect(screen.getByLabelText("OpenAI endpoint")).toBeVisible();
+  });
+
+  it("configures a usable default model, routing and privacy on connect", async () => {
+    const settingsClient = client();
+    const fresh: SettingsSnapshot = {
+      ...snapshot,
+      aiEnabled: false,
+      providers: [],
+      ai: {
+        ...snapshot.ai,
+        models: [],
+        routing: {
+          mainModelId: null,
+          assistantDefaultModelId: null,
+          explicitFallbackModelId: null,
+        },
+        privacy: { allowSourceContent: false, storePrompts: false },
+      },
+    };
+    settingsClient.connectProvider.mockResolvedValue(fresh);
+    render(<AISettings client={settingsClient} initial={fresh} />);
+    const anthropic = screen.getByRole("group", {
+      name: "Anthropic connection",
+    });
+    fireEvent.change(within(anthropic).getByLabelText("New Anthropic key"), {
+      target: { value: "anthropic-secret" },
+    });
+
+    fireEvent.click(
+      within(anthropic).getByRole("button", { name: "Connect Anthropic" }),
+    );
+
+    await waitFor(() => {
+      expect(settingsClient.saveAiConfiguration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          models: [
+            {
+              id: "claude-sonnet-4-5",
+              provider: "anthropic",
+              displayName: "claude-sonnet-4-5",
+              enabled: true,
+            },
+          ],
+          routing: {
+            mainModelId: "claude-sonnet-4-5",
+            assistantDefaultModelId: "claude-sonnet-4-5",
+            explicitFallbackModelId: null,
+          },
+          privacy: { allowSourceContent: true, storePrompts: false },
+        }),
+      );
+    });
+    expect(settingsClient.setAiEnabled).toHaveBeenCalledWith(true);
+    expect(await screen.findByText(/claude-sonnet-4-5 added/)).toBeVisible();
+  });
+
+  it("keeps an existing Main model when another provider connects", async () => {
+    const settingsClient = client();
+    settingsClient.connectProvider.mockResolvedValue(snapshot);
+    render(<AISettings client={settingsClient} initial={snapshot} />);
+    const groq = screen.getByRole("group", { name: "Groq connection" });
+    fireEvent.change(within(groq).getByLabelText("New Groq key"), {
+      target: { value: "groq-secret" },
+    });
+
+    fireEvent.click(within(groq).getByRole("button", { name: "Connect Groq" }));
+
+    await waitFor(() => {
+      expect(settingsClient.saveAiConfiguration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          routing: {
+            mainModelId: "openai:gpt",
+            assistantDefaultModelId: "openai:gpt",
+            explicitFallbackModelId: null,
+          },
+        }),
+      );
+    });
+  });
+
   it("rotates a configured key without reading the stored key", async () => {
     const settingsClient = client();
     render(<AISettings client={settingsClient} initial={snapshot} />);
