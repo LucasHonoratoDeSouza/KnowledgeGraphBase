@@ -9,7 +9,10 @@ rust-version.workspace = true
 blake3.workspace = true
 knowledge-domain = { path = "../knowledge-domain" }
 knowledge-storage = { path = "../knowledge-storage" }
+pdf-extract.workspace = true
+reqwest.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 url.workspace = true
 
