@@ -92,6 +92,7 @@ fn sample_ai_configuration() -> AiConfiguration {
             main_model_id: Some("anthropic:claude".to_owned()),
             assistant_default_model_id: Some("anthropic:claude".to_owned()),
             explicit_fallback_model_id: None,
+            librarian_model_id: None,
         },
         budgets: BudgetSettings {
             daily_cents: 250,
