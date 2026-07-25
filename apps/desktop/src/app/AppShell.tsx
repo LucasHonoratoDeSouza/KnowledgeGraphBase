@@ -632,6 +632,25 @@ function documentHits(result: RetrievalResult) {
   return [...best.values()];
 }
 
+/** Resolves a `[[Wiki Link]]` target to a note path in the vault, if any. */
+function findNoteByName(
+  entries: LibraryEntry[],
+  target: string,
+): string | undefined {
+  const wanted = target.trim().toLowerCase();
+  for (const entry of entries) {
+    if (
+      entry.kind === "markdown" &&
+      entry.name.replace(/\.md$/i, "").toLowerCase() === wanted
+    ) {
+      return entry.path;
+    }
+    const nested = findNoteByName(entry.children, target);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
 /** Every folder in the tree, deepest paths included, for placement pickers. */
 function folderPaths(entries: LibraryEntry[]): string[] {
   return entries.flatMap((entry) =>
@@ -1661,6 +1680,10 @@ function RetrieveSurface({
               <MarkdownEditor
                 document={document}
                 onDirtyChange={setNoteDirty}
+                onOpenNote={(target) => {
+                  const match = findNoteByName(library?.entries ?? [], target);
+                  if (match) void openDocument(match);
+                }}
                 onSave={async (content) => {
                   const saved = await editorClient.saveNote(
                     document.path,
