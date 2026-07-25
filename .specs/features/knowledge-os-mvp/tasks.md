@@ -12,6 +12,12 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 
 ## Execution Results
 
+### Phase 3 — In progress
+
+| Task | Evidence | Result |
+| --- | --- | --- |
+| T15 | `knowledge-domain` 26/26 tests; workspace Rust library gate passed | ✅ Complete |
+
 ### Batch 1 / Phase 1 — Complete, independently verified, uncommitted
 
 | Tasks | Evidence | Result |
