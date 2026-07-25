@@ -116,6 +116,7 @@ fn artifact() -> ExtractionArtifact {
             start_seconds: 125,
             segment: "Clipped objective".to_owned(),
         }],
+        full_content: "[02:05] The clipped objective preserves stable policy updates.".to_owned(),
     }
 }
 
@@ -130,6 +131,7 @@ fn rendered_markdown_contains_versioned_frontmatter_and_wiki_links() {
     assert!(markdown.contains(&format!("pipeline_version: {PIPELINE_VERSION}")));
     assert!(markdown.contains("- [[PPO]]"));
     assert!(markdown.contains("YouTube 2:05 — Clipped objective"));
+    assert!(markdown.contains("## Full transcript"));
 }
 
 #[test]

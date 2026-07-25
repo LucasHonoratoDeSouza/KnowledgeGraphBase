@@ -5,7 +5,8 @@ use std::{
 
 use knowledge_domain::{ProcessingState, RelationType, SourceKind};
 use knowledge_storage::{
-    ConceptDraft, DocumentDraft, DocumentRecord, EdgeDraft, JobState, JournalFault, KnowledgeStore,
+    ConceptDraft, DocumentDraft, DocumentRecord, EdgeDraft, FacetDraft, JobState, JournalFault,
+    KnowledgeStore, OrganizationDecision,
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +23,17 @@ const CHUNK_CHARACTERS: usize = 3_200;
 pub struct PipelineResult {
     pub document: DocumentRecord,
     pub reused: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeEnrichment {
+    pub title: String,
+    pub summary: String,
+    pub concepts: Vec<String>,
+    pub projects: Vec<String>,
+    pub areas: Vec<String>,
+    pub tags: Vec<String>,
 }
 
 pub struct DeterministicPipeline<'a> {
@@ -42,6 +54,15 @@ impl<'a> DeterministicPipeline<'a> {
         &self,
         receipt: &CaptureReceipt,
         content: ExtractedContent,
+    ) -> Result<PipelineResult, IngestionError> {
+        self.process_enriched(receipt, content, None)
+    }
+
+    pub fn process_enriched(
+        &self,
+        receipt: &CaptureReceipt,
+        content: ExtractedContent,
+        enrichment: Option<&KnowledgeEnrichment>,
     ) -> Result<PipelineResult, IngestionError> {
         validate_text(&content.body)?;
         if receipt.duplicate && receipt.source.state == ProcessingState::Completed {
@@ -77,7 +98,7 @@ impl<'a> DeterministicPipeline<'a> {
         if leased.is_none() {
             return Err(IngestionError::PipelineBusy);
         }
-        match self.process_leased(receipt, content) {
+        match self.process_leased(receipt, content, enrichment) {
             Ok(result) => Ok(result),
             Err(error) => {
                 if self
@@ -103,12 +124,15 @@ impl<'a> DeterministicPipeline<'a> {
         &self,
         receipt: &CaptureReceipt,
         mut content: ExtractedContent,
+        enrichment: Option<&KnowledgeEnrichment>,
     ) -> Result<PipelineResult, IngestionError> {
         self.transition(&receipt.source.id, ProcessingState::Fetching)?;
         self.transition(&receipt.source.id, ProcessingState::Extracting)?;
         self.transition(&receipt.source.id, ProcessingState::Processing)?;
 
-        if content.title.trim().is_empty() {
+        if content.title.trim().is_empty()
+            || (receipt.source.kind == SourceKind::Pdf && content.title == "PDF document")
+        {
             content.title.clone_from(&receipt.source.title);
         }
         if content.locators.is_empty() {
@@ -116,8 +140,22 @@ impl<'a> DeterministicPipeline<'a> {
                 heading: content.title.clone(),
             });
         }
-        let summary = summarize(&content.body);
-        let concepts = concept_candidates(&content.title, &content.body);
+        if let Some(enrichment) = enrichment
+            && !enrichment.title.trim().is_empty()
+        {
+            content.title.clone_from(&enrichment.title);
+        }
+        let summary = enrichment
+            .map(|value| value.summary.trim())
+            .filter(|value| !value.is_empty())
+            .map_or_else(|| summarize(&content.body), ToOwned::to_owned);
+        let concepts = enrichment
+            .map(|value| value.concepts.as_slice())
+            .filter(|value| !value.is_empty())
+            .map_or_else(
+                || concept_candidates(&content.title, &content.body),
+                <[String]>::to_vec,
+            );
         let mut chunks = chunk_text(&content.body, CHUNK_CHARACTERS);
         for (index, chunk) in chunks.iter_mut().enumerate() {
             let reference = &content.locators[index.min(content.locators.len() - 1)];
@@ -131,8 +169,9 @@ impl<'a> DeterministicPipeline<'a> {
             content_hash: receipt.source.content_hash.clone(),
             summary: summary.clone(),
             concepts: concepts.clone(),
-            notes: chunks.iter().map(|chunk| chunk.text.clone()).collect(),
+            notes: key_points(&content.body),
             references: content.locators,
+            full_content: content.body,
         };
         let markdown = render_markdown(&artifact);
         let path = artifact_path(&content.title, &receipt.source.id);
@@ -160,6 +199,9 @@ impl<'a> DeterministicPipeline<'a> {
             )
             .map_err(storage_error)?;
         self.persist_graph(&concepts, &document)?;
+        if let Some(enrichment) = enrichment {
+            self.persist_organization(&receipt.source.id, enrichment)?;
+        }
         self.transition(&receipt.source.id, ProcessingState::Completed)?;
         self.store
             .complete_job(&receipt.job.id, WORKER)
@@ -196,6 +238,45 @@ impl<'a> DeterministicPipeline<'a> {
         Ok(())
     }
 
+    fn persist_organization(
+        &self,
+        source_id: &str,
+        enrichment: &KnowledgeEnrichment,
+    ) -> Result<(), IngestionError> {
+        let mut decisions = Vec::new();
+        for (kind, values) in [
+            ("project", enrichment.projects.as_slice()),
+            ("area", enrichment.areas.as_slice()),
+            ("tag", enrichment.tags.as_slice()),
+        ] {
+            for value in values
+                .iter()
+                .filter(|value| !value.trim().is_empty())
+                .take(12)
+            {
+                let facet = self
+                    .store
+                    .upsert_facet(&FacetDraft::new(kind, value))
+                    .map_err(storage_error)?;
+                decisions.push(OrganizationDecision {
+                    facet_id: facet.id,
+                    confidence_basis_points: 8_500,
+                    pinned: false,
+                });
+            }
+        }
+        if !decisions.is_empty() {
+            self.store
+                .apply_organization(
+                    source_id,
+                    &decisions,
+                    "Main model structured organization v1",
+                )
+                .map_err(storage_error)?;
+        }
+        Ok(())
+    }
+
     fn transition(&self, source_id: &str, state: ProcessingState) -> Result<(), IngestionError> {
         self.store
             .transition_source(source_id, state)
@@ -205,7 +286,8 @@ impl<'a> DeterministicPipeline<'a> {
 
 fn summarize(body: &str) -> String {
     let normalized = body.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut end = normalized.len().min(600);
+    let target = (normalized.len() / 5).clamp(1_200, 4_000);
+    let mut end = normalized.len().min(target);
     while end > 0 && !normalized.is_char_boundary(end) {
         end -= 1;
     }
@@ -215,6 +297,20 @@ fn summarize(body: &str) -> String {
     } else {
         excerpt.to_owned()
     }
+}
+
+fn key_points(body: &str) -> Vec<String> {
+    let mut points = body
+        .split(['\n', '.', '!', '?'])
+        .map(str::trim)
+        .filter(|value| value.split_whitespace().count() >= 5)
+        .take(8)
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if points.is_empty() {
+        points.push(summarize(body));
+    }
+    points
 }
 
 fn concept_candidates(title: &str, body: &str) -> Vec<String> {

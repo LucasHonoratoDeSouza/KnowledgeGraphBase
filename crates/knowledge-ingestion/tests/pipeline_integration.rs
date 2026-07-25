@@ -2,7 +2,8 @@ use std::fs;
 
 use knowledge_domain::{ProcessingState, SourceKind};
 use knowledge_ingestion::{
-    CaptureRequest, CaptureService, DeterministicPipeline, ExtractedContent, SourceLocator,
+    CaptureRequest, CaptureService, DeterministicPipeline, ExtractedContent, KnowledgeEnrichment,
+    SourceLocator,
 };
 use knowledge_storage::{JobState, KnowledgeStore};
 use tempfile::tempdir;
@@ -48,6 +49,10 @@ fn text_capture_reaches_completed_and_publishes_traceable_markdown() {
     let markdown = fs::read_to_string(directory.path().join(&result.document.path)).unwrap();
     assert!(markdown.contains("# RAG architecture"));
     assert!(markdown.contains("## Summary"));
+    assert!(markdown.contains("## Full captured content"));
+    assert!(
+        markdown.contains("Knowledge graphs preserve concepts, relationships, and provenance.")
+    );
     assert!(markdown.contains("Local note — RAG architecture"));
 }
 
@@ -133,6 +138,68 @@ fn web_pdf_and_youtube_content_share_one_deterministic_pipeline() {
         assert!(directory.path().join(result.document.path).is_file());
     }
     assert_eq!(store.count("documents").unwrap(), 3);
+}
+
+#[test]
+fn pdf_markdown_preserves_complete_extracted_body_without_truncation() {
+    let directory = tempdir().unwrap();
+    let store = KnowledgeStore::open(directory.path().join("index.sqlite3")).unwrap();
+    let receipt = CaptureService::new(&store)
+        .capture(CaptureRequest::Pdf {
+            file_name: "complete-paper.pdf",
+            bytes: b"fixture-pdf",
+        })
+        .unwrap();
+    let full_text = (0..200)
+        .map(|index| format!("Page material {index}: evidence and methodology are preserved."))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let result = DeterministicPipeline::new(&store, directory.path())
+        .process(
+            &receipt,
+            ExtractedContent {
+                title: "PDF document".to_owned(),
+                body: full_text.clone(),
+                locators: vec![SourceLocator::Pdf { page: 1, chunk: 0 }],
+                used_fallback: false,
+            },
+        )
+        .unwrap();
+    let markdown = fs::read_to_string(directory.path().join(result.document.path)).unwrap();
+    assert_eq!(result.document.title, "complete-paper");
+    assert!(markdown.contains("## Full extracted document"));
+    assert!(markdown.contains(&full_text));
+}
+
+#[test]
+fn main_model_enrichment_controls_summary_concepts_and_overlapping_facets() {
+    let directory = tempdir().unwrap();
+    let store = KnowledgeStore::open(directory.path().join("index.sqlite3")).unwrap();
+    let receipt = CaptureService::new(&store)
+        .capture(CaptureRequest::MeetingNote {
+            title: "Weekly sync",
+            content: "The Knowledge OS project uses retrieval and graph evidence.",
+        })
+        .unwrap();
+    let result = DeterministicPipeline::new(&store, directory.path())
+        .process_enriched(
+            &receipt,
+            text_content("Weekly sync"),
+            Some(&KnowledgeEnrichment {
+                title: "Knowledge OS weekly sync".to_owned(),
+                summary: "Detailed decisions, evidence, open questions, and follow-up actions from the weekly architecture discussion.".to_owned(),
+                concepts: vec!["Knowledge OS".to_owned(), "Retrieval".to_owned(), "Knowledge Graph".to_owned()],
+                projects: vec!["Knowledge OS".to_owned()],
+                areas: vec!["AI Engineering".to_owned()],
+                tags: vec!["meeting".to_owned(), "rag".to_owned()],
+            }),
+        )
+        .unwrap();
+    assert_eq!(result.document.title, "Knowledge OS weekly sync");
+    assert!(result.document.summary.starts_with("Detailed decisions"));
+    assert_eq!(store.count("facets").unwrap(), 4);
+    assert_eq!(store.count("facet_memberships").unwrap(), 4);
+    assert_eq!(store.count("organization_audit").unwrap(), 1);
 }
 
 #[test]
