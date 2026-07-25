@@ -474,7 +474,9 @@ describe("application shell", () => {
 
     expect((await screen.findAllByText("Transformers"))[0]).toBeVisible();
     expect(screen.getByRole("img", { name: "Knowledge graph" })).toBeVisible();
-    expect(getLibrary).toHaveBeenCalledOnce();
+    // The shell also reads the library to offer real folders in the Ingest
+    // composer (#5), so this asserts the surface loaded, not the call count.
+    expect(getLibrary).toHaveBeenCalled();
     expect(getGraph).toHaveBeenCalledOnce();
   });
 
@@ -624,6 +626,49 @@ describe("application shell", () => {
       expect(
         screen.queryByRole("textbox", { name: "New folder name" }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  it("sends the chosen organization mode with the capture", async () => {
+    const { capture, client } = createKnowledgeClient();
+    render(<App knowledgeClient={client} setupComplete />);
+    const organize = await screen.findByRole("combobox", {
+      name: "Organize this capture",
+    });
+    expect(organize).toHaveValue("auto");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Add knowledge" }), {
+      target: { value: "A note about retrieval." },
+    });
+    fireEvent.change(organize, { target: { value: "Research" } });
+    fireEvent.click(screen.getByRole("button", { name: "Process source" }));
+
+    await waitFor(() => {
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organize: "folder",
+          organizeFolder: "Research",
+        }),
+      );
+    });
+  });
+
+  it("captures without enrichment when organization is declined", async () => {
+    const { capture, client } = createKnowledgeClient();
+    render(<App knowledgeClient={client} setupComplete />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Add knowledge" }), {
+      target: { value: "A loose thought." },
+    });
+    fireEvent.change(
+      await screen.findByRole("combobox", { name: "Organize this capture" }),
+      { target: { value: "none" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Process source" }));
+
+    await waitFor(() => {
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({ organize: "none", organizeFolder: "" }),
+      );
     });
   });
 
