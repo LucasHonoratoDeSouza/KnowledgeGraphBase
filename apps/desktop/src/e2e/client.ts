@@ -11,6 +11,7 @@ import type { KnowledgeClient, LibrarySnapshot } from "../knowledge";
 
 const settingsKey = "knowledge-os:e2e:settings";
 const noteKey = "knowledge-os:e2e:welcome-note";
+const notesKey = "knowledge-os:e2e:notes";
 const providerCallKey = "knowledge-os:e2e:provider-call-count";
 const libraryKey = "knowledge-os:e2e:library";
 
@@ -169,9 +170,14 @@ function inspectMarkdown(content: string): NoteDocument["diagnostics"] {
   return [];
 }
 
+function readNotes(): Record<string, string> {
+  const saved = localStorage.getItem(notesKey);
+  return saved ? (JSON.parse(saved) as Record<string, string>) : {};
+}
+
 export const browserE2EEditorClient: EditorClient = {
   openNote: (path) => {
-    const content = localStorage.getItem(noteKey);
+    const content = readNotes()[path] ?? localStorage.getItem(noteKey);
     if (content === null)
       return Promise.reject(new Error("Note does not exist"));
     return Promise.resolve({
@@ -181,7 +187,12 @@ export const browserE2EEditorClient: EditorClient = {
     });
   },
   saveNote: (path, content) => {
+    localStorage.setItem(
+      notesKey,
+      JSON.stringify({ ...readNotes(), [path]: content }),
+    );
     localStorage.setItem(noteKey, content);
+    addLibraryEntry(path, "markdown");
     return Promise.resolve({
       path,
       content,
@@ -267,7 +278,47 @@ function readLibrary(): LibrarySnapshot {
   };
 }
 
+/**
+ * Mirrors the native vault's directory scan: a saved note or created folder
+ * shows up in the Explorer tree at its own path, creating missing parents.
+ */
+function addLibraryEntry(path: string, kind: "folder" | "markdown") {
+  const library = readLibrary();
+  const segments = path.split("/").filter(Boolean);
+  let siblings = library.entries;
+  segments.forEach((segment, index) => {
+    const last = index === segments.length - 1;
+    const entryPath = segments.slice(0, index + 1).join("/");
+    const existing = siblings.find((entry) => entry.path === entryPath);
+    if (existing) {
+      siblings = existing.children;
+      return;
+    }
+    const entry = {
+      name: segment,
+      path: entryPath,
+      kind: last ? kind : ("folder" as const),
+      children: [],
+    };
+    siblings.push(entry);
+    siblings = entry.children;
+  });
+  if (kind === "markdown") library.noteCount += 1;
+  localStorage.setItem(libraryKey, JSON.stringify(library));
+  return library;
+}
+
 export const browserE2EKnowledgeClient: KnowledgeClient = {
+  createFolder: (path) => {
+    const existing = readLibrary();
+    const taken = (entries: LibrarySnapshot["entries"]): boolean =>
+      entries.some((entry) => entry.path === path || taken(entry.children));
+    if (taken(existing.entries))
+      return Promise.reject(
+        new Error("a folder with that name already exists"),
+      );
+    return Promise.resolve(addLibraryEntry(path, "folder"));
+  },
   capture: (request) => {
     const library = readLibrary();
     const id = `source-${String(library.sources.length + 1)}`;

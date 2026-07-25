@@ -332,6 +332,62 @@ test("persists an edited Markdown note across an offline restart", async ({
   ).toContainText("Offline note");
 });
 
+test("creates a named note and folder from the Explorer header", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  const explorer = page.getByRole("region", { name: "Explorer" });
+
+  await explorer.getByRole("button", { name: "New folder" }).click();
+  const folderName = explorer.getByRole("textbox", { name: "New folder name" });
+  await folderName.fill("Reading list");
+  await folderName.press("Enter");
+  await expect(
+    explorer.getByRole("button", { name: "Reading list" }),
+  ).toBeVisible();
+
+  await explorer.getByRole("button", { name: "New note" }).click();
+  const noteName = explorer.getByRole("textbox", { name: "New note name" });
+  await noteName.fill("Field notes");
+  await noteName.press("Enter");
+
+  await expect(page.getByRole("tab", { name: "Field notes.md" })).toBeVisible();
+  await expect(
+    explorer.getByRole("button", { name: "Field notes" }),
+  ).toBeVisible();
+});
+
+test("collapses an Explorer folder and keeps it collapsed after restart", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  const explorer = page.getByRole("region", { name: "Explorer" });
+  await expect(
+    explorer.getByRole("button", { name: "Knowledge OS" }),
+  ).toBeVisible();
+
+  await explorer.getByRole("button", { name: "Projects" }).click();
+  await expect(
+    explorer.getByRole("button", { name: "Knowledge OS" }),
+  ).toHaveCount(0);
+
+  await page.reload();
+
+  await expect(
+    explorer.getByRole("button", { name: "Projects" }),
+  ).toBeVisible();
+  await expect(
+    explorer.getByRole("button", { name: "Knowledge OS" }),
+  ).toHaveCount(0);
+
+  await explorer.getByRole("button", { name: "Projects" }).click();
+  await expect(
+    explorer.getByRole("button", { name: "Knowledge OS" }),
+  ).toBeVisible();
+});
+
 test("assistant surface stays read-only with no action or research tools", async ({
   page,
 }) => {
@@ -346,8 +402,10 @@ test("assistant surface stays read-only with no action or research tools", async
   await expect(
     assistant.getByRole("button", { name: "Send question" }),
   ).toBeDisabled();
+  // Scoped to the assistant: the Explorer legitimately renders vault folders
+  // as buttons, and a vault may contain a folder called "Research".
   await expect(
-    page.getByRole("button", {
+    assistant.getByRole("button", {
       name: /^(delete|write file|research)$/i,
     }),
   ).toHaveCount(0);

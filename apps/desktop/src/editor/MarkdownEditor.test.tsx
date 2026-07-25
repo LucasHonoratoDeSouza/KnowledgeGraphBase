@@ -85,6 +85,56 @@ describe("CodeMirror Markdown editor boundary", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Saved");
   });
 
+  it("reports unsaved changes to the surrounding tab strip", async () => {
+    const onDirtyChange = vi.fn();
+    const { getView } = renderEditor({ onDirtyChange });
+    expect(onDirtyChange).not.toHaveBeenCalledWith(true);
+
+    act(() => {
+      getView()?.dispatch({
+        changes: { from: note.content.length, insert: "Changed" },
+      });
+    });
+
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    screen.getByRole("button", { name: "Save note" }).click();
+
+    await waitFor(() => {
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
+  });
+
+  it("starts clean again when another note is opened", async () => {
+    const onDirtyChange = vi.fn();
+    const { getView, rerender } = renderEditor({ onDirtyChange });
+    act(() => {
+      getView()?.dispatch({
+        changes: { from: note.content.length, insert: "Changed" },
+      });
+    });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    rerender(
+      <MarkdownEditor
+        document={{ path: "notes/beta.md", content: "# Beta", diagnostics: [] }}
+        onDirtyChange={onDirtyChange}
+        onSave={() =>
+          Promise.resolve({
+            path: "notes/beta.md",
+            content: "# Beta",
+            diagnostics: [],
+          })
+        }
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
+    expect(screen.getByRole("button", { name: "Save note" })).toBeDisabled();
+  });
+
   it("shows typed metadata diagnostics without hiding the content", () => {
     const malformed: NoteDocument = {
       path: "broken.md",
