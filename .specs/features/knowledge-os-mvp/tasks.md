@@ -53,7 +53,7 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 | --- | --- | --- |
 | T01–T07 | Root `make check` after worker completion: contracts 21, shared TS fixtures 12, UI 4, Rust domain 11, Python 16, Tauri IPC 7 and shared Rust fixtures 12; all formatting, lint, typecheck and builds passed | ✅ 83 tests, 0 failures |
 
-The native Tauri gate uses the documented temporary sysroot at `/tmp/knowledge-os-tauri-sysroot-20260724/root` because this host has runtime GTK/WebKit libraries but not the corresponding system development packages. No repository artifact depends on that temporary path.
+The native Tauri gate originally used a temporary sysroot at `/tmp/knowledge-os-tauri-sysroot-20260724/root` because this host had runtime GTK/WebKit libraries but not the corresponding system development packages; that directory did not survive a reboot. The host now has `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `libappindicator3-dev` and `patchelf` installed directly (2026-07-25), so the native build no longer depends on any temporary sysroot.
 
 ### Batch 2 / Phase 2 — Complete, independently verified, uncommitted
 

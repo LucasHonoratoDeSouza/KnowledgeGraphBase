@@ -9,9 +9,14 @@ fn main() {
     // by re-executing this same binary with them set, which is a safe API.
     #[cfg(target_os = "linux")]
     {
-        const RENDER_FAILOVER_VARS: [(&str, &str); 2] = [
+        const RENDER_FAILOVER_VARS: [(&str, &str); 3] = [
             ("WEBKIT_DISABLE_DMABUF_RENDERER", "1"),
             ("WEBKIT_DISABLE_COMPOSITING_MODE", "1"),
+            // The GPU driver on some hosts fails hardware queries outright
+            // (e.g. amdgpu ACCEL_WORKING EACCES), which those two WebKit
+            // flags alone don't route around. Forcing Mesa's llvmpipe
+            // software rasterizer bypasses the kernel driver entirely.
+            ("LIBGL_ALWAYS_SOFTWARE", "1"),
         ];
         let missing = RENDER_FAILOVER_VARS
             .iter()
