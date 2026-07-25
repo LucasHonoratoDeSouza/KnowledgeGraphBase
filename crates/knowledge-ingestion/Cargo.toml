@@ -1,0 +1,17 @@
+[package]
+name = "knowledge-ingestion"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+blake3.workspace = true
+knowledge-domain = { path = "../knowledge-domain" }
+knowledge-storage = { path = "../knowledge-storage" }
+serde.workspace = true
+thiserror.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true
