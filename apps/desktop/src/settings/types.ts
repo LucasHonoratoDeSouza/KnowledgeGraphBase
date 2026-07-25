@@ -1,8 +1,4 @@
-export type ProviderId =
-  | "openai"
-  | "anthropic"
-  | "deepseek"
-  | "compatible";
+export type ProviderId = "openai" | "anthropic" | "deepseek" | "compatible";
 export type HealthStatus = "untested" | "healthy" | "unhealthy";
 
 export interface ProviderConnection {

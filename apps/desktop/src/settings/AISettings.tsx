@@ -398,7 +398,9 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
                 <select
                   aria-label="New model provider"
                   onChange={(event) => {
-                    setNewModelProvider(event.currentTarget.value as ProviderId);
+                    setNewModelProvider(
+                      event.currentTarget.value as ProviderId,
+                    );
                   }}
                   value={newModelProvider}
                 >
