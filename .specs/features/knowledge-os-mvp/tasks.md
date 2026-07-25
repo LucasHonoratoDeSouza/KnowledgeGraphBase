@@ -23,6 +23,10 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 | T19 | bounded graph/backlinks 10/10 integration tests plus repository edge tests passed | ✅ Complete |
 | T20 | organization audit/pinned corrections/undo 10/10 tests; full storage suite 55/55 | ✅ Complete |
 | T22 | durable job queue 12/12 lease/retry/cancel/concurrency tests and Clippy passed | ✅ Complete |
+| T24 | shared text/Markdown/meeting capture path covered by 5 adapter integration cases plus deterministic hashing fixtures | ✅ Complete |
+| T25 | bounded native web client, manual safe redirects, public-address guard and article sanitization covered by adapter and SSRF unit cases | ✅ Complete |
+| T26 | PDF text-layer extraction preserves page locators and returns a typed OCR-boundary state when no text is usable | ✅ Complete |
+| T27 | normalized YouTube capture extracts timestamped public captions and returns a typed transcription-boundary state when captions are unavailable | ✅ Complete |
 
 ### Batch 1 / Phase 1 — Complete, independently verified, uncommitted
 

@@ -434,6 +434,16 @@ impl KnowledgeStore {
         source_by_id(&connection, id)
     }
 
+    pub fn source_by_identity_parts(
+        &self,
+        normalized_uri: &str,
+        content_hash: &str,
+        pipeline_version: &str,
+    ) -> Result<Option<SourceRecord>, StorageError> {
+        let connection = self.lock()?;
+        source_by_identity(&connection, normalized_uri, content_hash, pipeline_version)
+    }
+
     pub fn transition_source(&self, id: &str, next: ProcessingState) -> Result<(), StorageError> {
         let mut connection = self.lock()?;
         let transaction = connection.transaction()?;

@@ -11,6 +11,15 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
+mod adapters;
+mod capture;
+
+pub use adapters::{
+    ExtractedContent, NativeContentAdapter, TranscriptSegment, extract_article_html,
+    extract_youtube_page,
+};
+pub use capture::{CaptureReceipt, CaptureRequest, CaptureService};
+
 pub const PIPELINE_VERSION: &str = "ingestion-v1";
 pub const MAX_URL_LENGTH: usize = 2_048;
 pub const MAX_TEXT_BYTES: usize = 20 * 1024 * 1024;
@@ -29,6 +38,20 @@ pub enum IngestionError {
     BlankText,
     #[error("generated Markdown frontmatter is unterminated")]
     UnterminatedFrontmatter,
+    #[error("source type is unsupported")]
+    UnsupportedSource,
+    #[error("source file exceeds its documented bound")]
+    FileTooLarge,
+    #[error("remote source is not safe to fetch")]
+    UnsafeRemoteAddress,
+    #[error("remote source failed: {0}")]
+    Remote(String),
+    #[error("PDF has no usable text layer; OCR fallback is required")]
+    MissingPdfText,
+    #[error("YouTube transcript is unavailable; paste a transcript or configure transcription")]
+    MissingTranscript,
+    #[error("local knowledge storage failed: {0}")]
+    Storage(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
