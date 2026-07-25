@@ -8,11 +8,13 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 
 **Design:** `.specs/features/knowledge-os-mvp/design.md`
 
-**Status:** Active — frontend approved; execute from T15
+**Status:** Active — T01–T32, T34–T36, T38–T42 complete and audited against the running app (2026-07-25); T33 (entity resolution) and T37 (optional embeddings) remain open; Phase 7 (Optional Server) and Phase 8 (Production Engineering) not started
 
 ## Execution Results
 
-### Phase 3 — In progress
+### Phase 3–6 — audited against the running app this session
+
+> The rows below were reconstructed by running the full test suite (`make test-full`) against the actual `dev` HEAD and reading the corresponding source, because `tasks.md` had fallen behind several already-implemented commits. Every ✅ has evidence re-run in this session; T33 and T37 are the two genuine, confirmed gaps.
 
 | Task | Evidence | Result |
 | --- | --- | --- |
@@ -22,7 +24,9 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 | T18 | deterministic normalization/chunk/render 19/19 tests and Clippy passed | ✅ Complete |
 | T19 | bounded graph/backlinks 10/10 integration tests plus repository edge tests passed | ✅ Complete |
 | T20 | organization audit/pinned corrections/undo 10/10 tests; full storage suite 55/55 | ✅ Complete |
+| T21 | `apps/desktop/src/app/AppShell.tsx` Explorer/graph/backlink navigation renders live `library`/`graph` from `knowledge_commands.rs`; backed by `graph_integration.rs` 10/10 (`backlinks_open_the_exact_origin_document_path`, `one_hop_contains_inbound_and_outbound_neighbors`) and the `tests/e2e/desktop-foundation` three-pane/restore cases | ✅ Complete |
 | T22 | durable job queue 12/12 lease/retry/cancel/concurrency tests and Clippy passed | ✅ Complete |
+| T23 | `IngestSurface` in `AppShell.tsx` is one composer for text/paste/drag-drop/file with progress status, wired to the native `source_capture` IPC command and `CaptureService`; `tests/e2e/knowledge-loop` proves a capture becomes searchable | ✅ Complete |
 | T24 | shared text/Markdown/meeting capture path covered by 5 adapter integration cases plus deterministic hashing fixtures | ✅ Complete |
 | T25 | bounded native web client, manual safe redirects, public-address guard and article sanitization covered by adapter and SSRF unit cases | ✅ Complete |
 | T26 | PDF text-layer extraction preserves page locators and returns a typed OCR-boundary state when no text is usable | ✅ Complete |
@@ -30,10 +34,18 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 | T28 | all four deterministic vertical fixtures complete through Markdown/chunks/concepts/edges; duplicate artifact reuse performs zero second processing; ingestion+storage suites 107/107 | ✅ Complete |
 | T29 | provider-neutral AI port, deterministic fake, strict structured schema and versioned normalized cache key covered by 8 focused cases | ✅ Complete |
 | T30 | fail-closed Main/assistant/deep/fallback routing and daily/monthly budget policy covered by 9 focused cases | ✅ Complete |
+| T31 | independent Stronghold-backed provider connections (OpenAI/Anthropic/DeepSeek/LiteLLM-compatible) with masked connect/test/rotate/remove in `settings.rs` + `AISettings.tsx`; `settings_security.rs` 30/30 and the provider-lifecycle e2e cases | ✅ Complete |
+| T32 | `MainModelEnricher`/`knowledge-ai` performs one structured call per capture through `capture_in_vault_with_services`; `policy_and_cache.rs` and `pipeline_integration.rs::main_model_enrichment_controls_summary_concepts_and_overlapping_facets` | ✅ Complete |
+| T33 | **Not implemented.** Concept identity today is exact/alias dedup only (`repository_integration.rs::canonical_concept_reuses_normalized_identity`, `alias_resolves_to_its_canonical_concept`); there is no fuzzy/vector candidate stage or ambiguous-AI-fallback escalation | ❌ Gap |
+| T34 | `persist_organization` in `crates/knowledge-ingestion/src/pipeline.rs` applies Main-model facet/membership decisions per capture with confidence bands; `organization_integration.rs` 10/10 covers pinned-correction precedence and atomic undo | ✅ Complete |
+| T35 | end-to-end AI ingestion wired through `source_capture`: Main assignment → enrichment → render → graph → FTS index → cache, proven by `knowledge_commands.rs` and `tests/e2e/knowledge-loop` | ✅ Complete |
 | T36 | transactional FTS5 index, ranked snippets, safe prefix queries, delete consistency and rebuild covered by 8 integration cases | ✅ Complete |
+| T37 | **Not implemented.** No `sqlite-vec`/embedding adapter exists in the crate graph or `Cargo.toml`; lexical/graph retrieval is the only ranking path today. Non-blocking for MVP — the spec marks semantic search an optional augmentation, never a prerequisite | ❌ Gap (optional per spec) |
 | T38 | deterministic query parsing and compound path/project/area/tag scopes execute without an AI router; lexical fallback is explicit | ✅ Complete |
 | T39 | stable numbered citations retain exact path/locator and context is bounded to eight chunks/12k estimated tokens | ✅ Complete |
 | T40 | evidence-empty questions make zero calls; supported questions make one structured call and invalid citations/answers fail closed | ✅ Complete |
+| T41 | `RetrieveSurface` renders resizable/collapsible Explorer, tabbed graph/Markdown canvas and persistent Assistant with restore-after-restart, proven by the desktop-foundation three-pane/restore e2e cases | ✅ Complete |
+| T42 | read-only assistant with configured-model selector, citations and fail-closed empty state; `retrieval_and_assistant.rs` 12/12 plus the new `tests/e2e/knowledge-loop` gating case | ✅ Complete |
 
 ### Batch 1 / Phase 1 — Complete, independently verified, uncommitted
 
