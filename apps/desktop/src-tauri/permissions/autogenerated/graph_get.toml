@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-graph-get"
+description = "Enables the graph_get command without any pre-configured scope."
+commands.allow = ["graph_get"]
+
+[[permission]]
+identifier = "deny-graph-get"
+description = "Denies the graph_get command without any pre-configured scope."
+commands.deny = ["graph_get"]

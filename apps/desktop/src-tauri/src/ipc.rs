@@ -3,6 +3,10 @@ use thiserror::Error;
 pub const DECLARED_COMMANDS: &[&str] = &[
     "workspace_get_state",
     "search_execute",
+    "source_capture",
+    "library_get",
+    "graph_get",
+    "assistant_ask",
     "workspace_open",
     "document_open",
     "document_save",

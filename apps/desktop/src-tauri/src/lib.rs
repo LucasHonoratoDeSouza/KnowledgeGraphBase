@@ -1,7 +1,10 @@
 mod commands;
 pub mod editor;
+mod enrichment;
 pub mod ipc;
+pub mod knowledge;
 pub mod settings;
+mod transcription;
 
 use tauri::Manager;
 
@@ -24,6 +27,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::workspace_get_state,
             commands::search_execute,
+            commands::source_capture,
+            commands::library_get,
+            commands::graph_get,
+            commands::assistant_ask,
             commands::workspace_open,
             commands::document_open,
             commands::document_save,

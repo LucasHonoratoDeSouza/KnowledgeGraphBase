@@ -3,19 +3,34 @@
     reason = "Tauri command handlers deserialize owned IPC arguments and inject State by value"
 )]
 
-use std::{path::Path, sync::Mutex};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
+use knowledge_ai::{AiError, AiProvider, NativeHttpAiPort, ProviderConnection, SecretResolver};
+use knowledge_retrieval::{AssistantAnswer, RetrievalResult};
+use knowledge_storage::GraphView;
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use zeroize::Zeroizing;
 
 use crate::{
     editor::{DocumentCommandState, NoteDocument},
-    settings::{
-        AiConfiguration, BudgetSettings, ModelProfile, OnboardingInput, Phase2ProviderProbe,
-        PrivacySettings, ProviderConnectionService, ProviderKind, PublicSettings, RoutingSettings,
-        SecretInput, SettingsError, SettingsRepository, StrongholdCredentialVault,
-        VaultSetupRequest, prepare_vault,
+    enrichment::MainModelEnricher,
+    knowledge::{
+        CaptureCommandRequest, CaptureCommandResponse, LibrarySnapshot, ask_in_vault,
+        capture_in_vault_with_services, graph_in_vault, library_in_vault, search_in_vault,
     },
+    settings::{
+        AiConfiguration, BudgetSettings, HealthStatus, ModelProfile, OnboardingInput,
+        Phase2ProviderProbe, PrivacySettings, ProviderConnectionService, ProviderKind,
+        PublicSettings, RoutingSettings, SecretInput, SettingsError, SettingsRepository,
+        StrongholdCredentialVault, VaultSetupRequest, prepare_vault,
+    },
+    transcription::OpenAiYouTubeTranscriber,
 };
 
 type NativeSettingsService =
@@ -23,6 +38,7 @@ type NativeSettingsService =
 
 pub struct SettingsCommandState {
     service: Mutex<NativeSettingsService>,
+    data_directory: PathBuf,
 }
 
 impl SettingsCommandState {
@@ -43,6 +59,7 @@ impl SettingsCommandState {
                 vault,
                 Phase2ProviderProbe,
             )),
+            data_directory: data_directory.to_path_buf(),
         })
     }
 }
@@ -111,16 +128,180 @@ pub const fn workspace_get_state() -> WorkspaceState {
 
 #[derive(Debug, Serialize)]
 pub struct SearchResponse {
-    query: String,
-    results: Vec<String>,
+    result: RetrievalResult,
 }
 
 #[tauri::command]
-pub fn search_execute(query: String) -> SearchResponse {
-    SearchResponse {
-        query,
-        results: Vec::new(),
+pub fn search_execute(
+    query: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<SearchResponse, String> {
+    let root = workspace_root(&state)?;
+    Ok(SearchResponse {
+        result: search_in_vault(&root, &query)?,
+    })
+}
+
+#[tauri::command]
+pub fn source_capture(
+    request: CaptureCommandRequest,
+    state: State<'_, SettingsCommandState>,
+) -> Result<CaptureCommandResponse, String> {
+    let root = workspace_root(&state)?;
+    let (openai, main) = {
+        let service = lock_settings(&state)?;
+        let snapshot = service.public_snapshot().map_err(command_error)?;
+        let openai = service.native_provider(ProviderKind::OpenAi).ok();
+        let main = if snapshot.ai_enabled && snapshot.ai.privacy.allow_source_content {
+            snapshot
+                .ai
+                .routing
+                .main_model_id
+                .as_deref()
+                .and_then(|main_id| {
+                    snapshot
+                        .ai
+                        .models
+                        .iter()
+                        .find(|model| model.id == main_id && model.enabled)
+                })
+                .and_then(|model| {
+                    snapshot
+                        .providers
+                        .iter()
+                        .find(|connection| {
+                            connection.provider == model.provider
+                                && connection.health == HealthStatus::Healthy
+                        })
+                        .map(|_| model)
+                })
+                .map(|model| {
+                    service
+                        .native_provider(model.provider)
+                        .map(|(endpoint, secret)| {
+                            (model.id.clone(), model.provider, endpoint, secret)
+                        })
+                })
+                .transpose()
+                .map_err(command_error)?
+        } else {
+            None
+        };
+        (openai, main)
+    };
+    let transcriber = openai
+        .map(|(endpoint, secret)| {
+            OpenAiYouTubeTranscriber::new(endpoint, secret, state.data_directory.join("tools"))
+        })
+        .transpose()
+        .map_err(command_error)?;
+    let enricher = main
+        .map(|(model_id, provider, endpoint, secret)| {
+            MainModelEnricher::new(model_id, ai_provider(provider), endpoint, secret)
+        })
+        .transpose()?;
+    capture_in_vault_with_services(
+        &root,
+        &request,
+        transcriber
+            .as_ref()
+            .map(|value| value as &dyn knowledge_ingestion::YouTubeTranscriptionFallback),
+        enricher
+            .as_ref()
+            .map(|value| value as &dyn crate::knowledge::KnowledgeEnrichmentPort),
+    )
+}
+
+#[tauri::command]
+pub fn library_get(state: State<'_, SettingsCommandState>) -> Result<LibrarySnapshot, String> {
+    library_in_vault(&workspace_root(&state)?)
+}
+
+#[tauri::command]
+pub fn graph_get(state: State<'_, SettingsCommandState>) -> Result<GraphView, String> {
+    graph_in_vault(&workspace_root(&state)?)
+}
+
+#[tauri::command]
+pub fn assistant_ask(
+    question: String,
+    model_id: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<AssistantAnswer, String> {
+    let (root, provider, endpoint, remote_model, secret) = {
+        let service = lock_settings(&state)?;
+        let root = service
+            .workspace_root()
+            .map_err(command_error)?
+            .ok_or_else(|| "complete local vault setup first".to_owned())?;
+        let snapshot = service.public_snapshot().map_err(command_error)?;
+        let model = snapshot
+            .ai
+            .models
+            .iter()
+            .find(|model| model.id == model_id && model.enabled)
+            .ok_or_else(|| "assistant model is not configured".to_owned())?;
+        let connection = snapshot
+            .providers
+            .iter()
+            .find(|connection| connection.provider == model.provider)
+            .ok_or_else(|| "assistant provider is not configured".to_owned())?;
+        if connection.health != HealthStatus::Healthy {
+            return Err("test this provider connection before using the assistant".to_owned());
+        }
+        let (endpoint, secret) = service
+            .native_provider(model.provider)
+            .map_err(command_error)?;
+        (
+            root,
+            ai_provider(model.provider),
+            endpoint,
+            model.id.clone(),
+            secret,
+        )
+    };
+    let resolver = OneSecretResolver { provider, secret };
+    let connections = HashMap::from([(
+        model_id.clone(),
+        ProviderConnection {
+            provider,
+            endpoint,
+            model: remote_model,
+        },
+    )]);
+    let ai = NativeHttpAiPort::new(resolver, connections).map_err(command_error)?;
+    ask_in_vault(&root, &question, &model_id, &ai)
+}
+
+struct OneSecretResolver {
+    provider: AiProvider,
+    secret: Zeroizing<String>,
+}
+
+impl SecretResolver for OneSecretResolver {
+    fn resolve(&self, provider: AiProvider) -> Result<Zeroizing<String>, AiError> {
+        if provider == self.provider {
+            Ok(Zeroizing::new((*self.secret).clone()))
+        } else {
+            Err(AiError::MissingCredential)
+        }
     }
+}
+
+const fn ai_provider(provider: ProviderKind) -> AiProvider {
+    match provider {
+        ProviderKind::OpenAi => AiProvider::OpenAi,
+        ProviderKind::Anthropic => AiProvider::Anthropic,
+        ProviderKind::DeepSeek => AiProvider::DeepSeek,
+        ProviderKind::Compatible => AiProvider::Compatible,
+    }
+}
+
+fn workspace_root(state: &State<'_, SettingsCommandState>) -> Result<std::path::PathBuf, String> {
+    lock_settings(state)?
+        .workspace_root()
+        .map_err(command_error)?
+        .ok_or_else(|| "complete local vault setup first".to_owned())
 }
 
 #[tauri::command]
@@ -308,9 +489,69 @@ pub fn provider_test(
     provider: ProviderKind,
     state: State<'_, SettingsCommandState>,
 ) -> Result<PublicSettings, String> {
+    let (endpoint, secret) = lock_settings(&state)?
+        .native_provider(provider)
+        .map_err(command_error)?;
+    let probe = probe_provider_connection(provider, &endpoint, &secret);
     let mut service = lock_settings(&state)?;
-    service.test(provider).map_err(command_error)?;
+    service
+        .mark_health(
+            provider,
+            if probe.is_ok() {
+                HealthStatus::Healthy
+            } else {
+                HealthStatus::Unhealthy
+            },
+        )
+        .map_err(command_error)?;
+    probe?;
     service.public_snapshot().map_err(command_error)
+}
+
+fn probe_provider_connection(
+    provider: ProviderKind,
+    endpoint: &str,
+    secret: &str,
+) -> Result<(), String> {
+    let client = Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(command_error)?;
+    let url = format!("{}/models", endpoint.trim_end_matches('/'));
+    let request = match provider {
+        ProviderKind::Anthropic => client
+            .get(url)
+            .header("x-api-key", secret)
+            .header("anthropic-version", "2023-06-01"),
+        ProviderKind::OpenAi | ProviderKind::DeepSeek | ProviderKind::Compatible => {
+            client.get(url).bearer_auth(secret)
+        }
+    };
+    let response = request.send().map_err(|error| {
+        format!(
+            "provider connection test failed: {}",
+            transport_summary(&error)
+        )
+    })?;
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "provider connection test failed with HTTP {}",
+            response.status()
+        ))
+    }
+}
+
+fn transport_summary(error: &reqwest::Error) -> &'static str {
+    if error.is_timeout() {
+        "request timed out"
+    } else if error.is_connect() {
+        "could not connect"
+    } else {
+        "network request failed"
+    }
 }
 
 #[tauri::command]
