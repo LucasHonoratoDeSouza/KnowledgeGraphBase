@@ -16,8 +16,25 @@ function ring(count: number) {
 }
 
 describe("force layout", () => {
-  it("settles with no two nodes overlapping", () => {
-    const nodes = layoutGraph(ring(24));
+  it("settles with no two nodes overlapping, even when densely connected", () => {
+    // A dense mesh is what makes collision resolution load-bearing: spring
+    // forces pull these together faster than repulsion pushes them apart.
+    const count = 60;
+    const nodes = layoutGraph({
+      nodes: Array.from({ length: count }, (_, index) => ({
+        id: `concept-${String(index)}`,
+        degree: 6,
+      })),
+      edges: Array.from({ length: count }, (_, index) => ({
+        source: `concept-${String(index)}`,
+        target: `concept-${String((index + 1) % count)}`,
+      })).concat(
+        Array.from({ length: count }, (_, index) => ({
+          source: `concept-${String(index)}`,
+          target: `concept-${String((index + 2) % count)}`,
+        })),
+      ),
+    });
 
     for (let i = 0; i < nodes.length; i += 1) {
       for (let j = i + 1; j < nodes.length; j += 1) {

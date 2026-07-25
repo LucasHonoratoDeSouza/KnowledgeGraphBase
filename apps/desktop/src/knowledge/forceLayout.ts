@@ -32,6 +32,9 @@ export const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
   iterations: 320,
 };
 
+/** Minimum gap between two node edges once the layout has settled. */
+const SEPARATION = 8;
+
 /** Bigger for better-connected concepts, but bounded so hubs stay readable. */
 export function radiusFor(degree: number) {
   return Math.min(20, 7 + degree * 1.6);
@@ -135,6 +138,44 @@ export function layoutGraph(
       node.x = Math.min(width - margin, Math.max(margin, node.x));
       node.y = Math.min(height - margin, Math.max(margin, node.y));
     }
+  }
+
+  // Springs keep pulling a dense graph together faster than repulsion pushes
+  // it apart, so the simulation alone does not guarantee separation. A final
+  // collision-only relaxation does: it runs until nothing overlaps, or gives
+  // up after a bounded number of passes so the layout always terminates.
+  for (let pass = 0; pass < 400; pass += 1) {
+    let overlapping = false;
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = nodes[i];
+        const b = nodes[j];
+        if (!a || !b) continue;
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let distance = Math.hypot(dx, dy);
+        if (distance < 0.01) {
+          dx = (i - j) % 2 === 0 ? 0.5 : -0.5;
+          dy = 0.5;
+          distance = Math.hypot(dx, dy);
+        }
+        const overlap = a.radius + b.radius + SEPARATION - distance;
+        if (overlap <= 0) continue;
+        overlapping = true;
+        const ux = (dx / distance) * overlap * 0.5;
+        const uy = (dy / distance) * overlap * 0.5;
+        a.x -= ux;
+        a.y -= uy;
+        b.x += ux;
+        b.y += uy;
+      }
+    }
+    for (const node of nodes) {
+      const margin = node.radius + 4;
+      node.x = Math.min(width - margin, Math.max(margin, node.x));
+      node.y = Math.min(height - margin, Math.max(margin, node.y));
+    }
+    if (!overlapping) break;
   }
 
   return nodes.map(({ id, x, y, radius, degree }) => ({
