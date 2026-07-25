@@ -15,8 +15,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+mod graph;
 mod vault;
 
+pub use graph::{GraphEdge, GraphView, SourceBacklink};
 pub use vault::{JournalFault, RecoveryReport, TrashRecord};
 
 const MIGRATION_V1: &str = r"
@@ -691,6 +693,18 @@ fn relation_type(value: RelationType) -> &'static str {
         RelationType::Uses => "USES",
         RelationType::Requires => "REQUIRES",
         RelationType::AppliedTo => "APPLIED_TO",
+    }
+}
+
+fn parse_relation_type(value: &str) -> Result<RelationType, StorageError> {
+    match value {
+        "RELATED_TO" => Ok(RelationType::RelatedTo),
+        "IS_A" => Ok(RelationType::IsA),
+        "PART_OF" => Ok(RelationType::PartOf),
+        "USES" => Ok(RelationType::Uses),
+        "REQUIRES" => Ok(RelationType::Requires),
+        "APPLIED_TO" => Ok(RelationType::AppliedTo),
+        _ => Err(StorageError::InvalidEnum(value.to_owned())),
     }
 }
 
