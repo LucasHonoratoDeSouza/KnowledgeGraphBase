@@ -188,7 +188,78 @@ export const browserE2EEditorClient: EditorClient = {
 function readLibrary(): LibrarySnapshot {
   const saved = localStorage.getItem(libraryKey);
   if (saved) return JSON.parse(saved) as LibrarySnapshot;
-  return { entries: [], documents: [], sources: [], noteCount: 0 };
+  return {
+    entries: [
+      { name: "Inbox", path: "Inbox", kind: "folder", children: [] },
+      {
+        name: "Projects",
+        path: "Projects",
+        kind: "folder",
+        children: [
+          {
+            name: "Knowledge OS.md",
+            path: "Projects/Knowledge OS.md",
+            kind: "markdown",
+            children: [],
+          },
+          {
+            name: "AI Research.md",
+            path: "Projects/AI Research.md",
+            kind: "markdown",
+            children: [],
+          },
+        ],
+      },
+      { name: "Areas", path: "Areas", kind: "folder", children: [] },
+      { name: "Research", path: "Research", kind: "folder", children: [] },
+      { name: "Books", path: "Books", kind: "folder", children: [] },
+      { name: "Papers", path: "Papers", kind: "folder", children: [] },
+      { name: "Sources", path: "Sources", kind: "folder", children: [] },
+    ],
+    documents: [
+      {
+        id: "document-knowledge-os",
+        sourceId: "source-knowledge-os",
+        path: "Projects/Knowledge OS.md",
+        title: "Knowledge OS",
+        summary: "Local-first retrieval, organization and grounded knowledge.",
+        revision: 1,
+        contentHash: "knowledge-os",
+      },
+      {
+        id: "document-ai-research",
+        sourceId: "source-ai-research",
+        path: "Projects/AI Research.md",
+        title: "AI Research",
+        summary: "Research notes about agents, RAG and language models.",
+        revision: 1,
+        contentHash: "ai-research",
+      },
+    ],
+    sources: [
+      {
+        id: "source-knowledge-os",
+        kind: "markdown",
+        originalUri: "Projects/Knowledge OS.md",
+        normalizedUri: "file:Projects/Knowledge OS.md",
+        contentHash: "knowledge-os",
+        pipelineVersion: "ingestion-v1-local-file",
+        state: "COMPLETED",
+        title: "Knowledge OS",
+      },
+      {
+        id: "source-ai-research",
+        kind: "markdown",
+        originalUri: "Projects/AI Research.md",
+        normalizedUri: "file:Projects/AI Research.md",
+        contentHash: "ai-research",
+        pipelineVersion: "ingestion-v1-local-file",
+        state: "COMPLETED",
+        title: "AI Research",
+      },
+    ],
+    noteCount: 2,
+  };
 }
 
 export const browserE2EKnowledgeClient: KnowledgeClient = {
@@ -224,13 +295,16 @@ export const browserE2EKnowledgeClient: KnowledgeClient = {
         name: "Inbox",
         path: "Inbox",
         kind: "folder",
-        children: library.documents.map((item) => ({
-          name: `${item.title}.md`,
-          path: item.path,
-          kind: "markdown",
-          children: [],
-        })),
+        children: library.documents
+          .filter((item) => item.path.startsWith("Inbox/"))
+          .map((item) => ({
+            name: `${item.title}.md`,
+            path: item.path,
+            kind: "markdown",
+            children: [],
+          })),
       },
+      ...library.entries.filter((entry) => entry.path !== "Inbox"),
     ];
     localStorage.setItem(libraryKey, JSON.stringify(library));
     localStorage.setItem(noteKey, `# ${title}\n\n${request.content}`);
