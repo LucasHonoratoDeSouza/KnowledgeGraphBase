@@ -115,7 +115,7 @@ YouTube / paper / book / meeting summary / note
 ### Declined / Undiscussed Gray Areas → Assumptions
 
 - No specialized calendar, meeting-bot or corporate identity integration in MVP; meeting summaries are captured as text/Markdown.
-- No automatic hierarchy-wide rewrite as the library grows; organization is incremental and affected-record scoped.
+- No automatic *whole-vault* hierarchy rewrite as the library grows, and no silent reorganization: routine per-capture filing stays incremental and affected-record scoped (issue #5). A separate, deliberately occasional "Librarian" pass may increase granularity for *one folder at a time* — manually invoked or heuristically suggested, never spanning the whole vault in one run, and always applied as one batched, undoable operation (issue #18) — this is a scoped exception to the no-silent-reorganization rule, not a reversal of it.
 - No mandatory cloud sync or collaborative multi-user vault in MVP.
 
 ## Specific References
