@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     CaptureReceipt, ExtractedContent, ExtractionArtifact, IngestionError, SourceLocator,
-    chunk_text, content_hash, render_markdown, validate_text, yaml_scalar,
+    chunk_text, content_hash, deterministic_context, render_markdown, validate_text, yaml_scalar,
 };
 
 const WORKER: &str = "native-ingestion";
@@ -36,6 +36,10 @@ pub struct ConceptDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeEnrichment {
     pub title: String,
+    /// One-line machine-oriented description for the note's `context:` field.
+    /// Empty when the model omitted it — the pipeline then falls back to
+    /// [`deterministic_context`].
+    pub context: String,
     pub summary: String,
     pub concepts: Vec<String>,
     pub concept_definitions: Vec<ConceptDefinition>,
@@ -170,11 +174,19 @@ impl<'a> DeterministicPipeline<'a> {
             chunk.locator = serde_json::to_string(reference)
                 .map_err(|error| IngestionError::Storage(error.to_string()))?;
         }
+        let mini_summary = enrichment
+            .map(|value| value.context.trim())
+            .filter(|value| !value.is_empty())
+            .map_or_else(
+                || deterministic_context(&content.title, &content.body),
+                ToOwned::to_owned,
+            );
         let artifact = ExtractionArtifact {
             title: content.title.clone(),
             source_kind: source_kind(receipt.source.kind).to_owned(),
             original_uri: receipt.source.original_uri.clone(),
             content_hash: receipt.source.content_hash.clone(),
+            context: mini_summary,
             summary: summary.clone(),
             concepts: concepts.clone(),
             notes: key_points(&content.body),
@@ -403,11 +415,7 @@ fn slugify(title: &str, max_words: usize) -> String {
         .join("-")
 }
 
-fn artifact_path(
-    title: &str,
-    source_id: &str,
-    enrichment: Option<&KnowledgeEnrichment>,
-) -> String {
+fn artifact_path(title: &str, source_id: &str, enrichment: Option<&KnowledgeEnrichment>) -> String {
     let slug = slugify(title, 8);
     let short_id = source_id.get(..8).unwrap_or(source_id);
     format!(
@@ -431,8 +439,9 @@ fn concept_note_path(display_name: &str, concept_id: &str) -> String {
 
 fn render_concept_note(name: &str, definition: &str) -> String {
     format!(
-        "---\ntitle: {}\nkind: concept\n---\n\n# {name}\n\n{definition}\n",
-        yaml_scalar(name)
+        "---\ntitle: {}\nkind: concept\ncontext: {}\n---\n\n# {name}\n\n{definition}\n",
+        yaml_scalar(name),
+        yaml_scalar(&deterministic_context(name, definition))
     )
 }
 
@@ -445,10 +454,18 @@ fn primary_folder(enrichment: Option<&KnowledgeEnrichment>) -> String {
     let Some(enrichment) = enrichment else {
         return "Inbox".to_owned();
     };
-    if let Some(project) = enrichment.projects.iter().find(|value| !value.trim().is_empty()) {
+    if let Some(project) = enrichment
+        .projects
+        .iter()
+        .find(|value| !value.trim().is_empty())
+    {
         return format!("Projects/{}", sanitize_folder_name(project));
     }
-    if let Some(area) = enrichment.areas.iter().find(|value| !value.trim().is_empty()) {
+    if let Some(area) = enrichment
+        .areas
+        .iter()
+        .find(|value| !value.trim().is_empty())
+    {
         return format!("Areas/{}", sanitize_folder_name(area));
     }
     "Inbox".to_owned()

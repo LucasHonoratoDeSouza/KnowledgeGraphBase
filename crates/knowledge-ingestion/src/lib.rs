@@ -25,6 +25,9 @@ pub use pipeline::{ConceptDefinition, DeterministicPipeline, KnowledgeEnrichment
 pub const PIPELINE_VERSION: &str = "ingestion-v1";
 pub const MAX_URL_LENGTH: usize = 2_048;
 pub const MAX_TEXT_BYTES: usize = 20 * 1024 * 1024;
+/// Upper bound for the `context:` mini-summary: long enough for one useful
+/// sentence, short enough that a whole folder's worth stays cheap to send.
+pub const MAX_CONTEXT_CHARACTERS: usize = 240;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum IngestionError {
@@ -109,6 +112,10 @@ pub struct ExtractionArtifact {
     pub source_kind: String,
     pub original_uri: String,
     pub content_hash: String,
+    /// One machine-oriented line describing what this note is about. Bulk
+    /// features (vault-aware filing, the Librarian pass) read this instead of
+    /// the body so their cost scales with note count, not note size.
+    pub context: String,
     pub summary: String,
     pub concepts: Vec<String>,
     pub notes: Vec<String>,
@@ -315,6 +322,12 @@ pub fn render_markdown(artifact: &ExtractionArtifact) -> String {
         .expect("writing a String cannot fail");
     writeln!(markdown, "source_kind: {}", artifact.source_kind)
         .expect("writing a String cannot fail");
+    writeln!(
+        markdown,
+        "context: {}",
+        yaml_scalar(&one_line(&artifact.context))
+    )
+    .expect("writing a String cannot fail");
     writeln!(markdown, "source: {}", yaml_scalar(&artifact.original_uri))
         .expect("writing a String cannot fail");
     writeln!(markdown, "content_hash: {}", artifact.content_hash)
@@ -350,6 +363,41 @@ pub fn render_markdown(artifact: &ExtractionArtifact) -> String {
 
 fn yaml_scalar(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// Collapses any whitespace run — including newlines — into single spaces so a
+/// frontmatter scalar stays on one line whatever the model returned.
+fn one_line(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Deterministic stand-in for the model's `context` line: the body's first
+/// sentence, capped at [`MAX_CONTEXT_CHARACTERS`]. Notes captured with no AI
+/// configured still carry a usable mini-summary (AD-009).
+#[must_use]
+pub fn deterministic_context(title: &str, body: &str) -> String {
+    let normalized = one_line(body);
+    let sentence = normalized
+        .split_inclusive(['.', '!', '?'])
+        .next()
+        .unwrap_or(&normalized)
+        .trim()
+        .to_owned();
+    let candidate = if sentence.is_empty() {
+        one_line(title)
+    } else {
+        sentence
+    };
+    if candidate.chars().count() <= MAX_CONTEXT_CHARACTERS {
+        return candidate;
+    }
+    let truncated: String = candidate
+        .chars()
+        .take(MAX_CONTEXT_CHARACTERS - 1)
+        .collect::<String>()
+        .trim_end()
+        .to_owned();
+    format!("{truncated}…")
 }
 
 pub fn parse_markdown(content: &str) -> Result<ParsedMarkdown<'_>, IngestionError> {

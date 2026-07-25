@@ -50,8 +50,8 @@ impl KnowledgeEnrichmentPort for MainModelEnricher {
             .complete(&AiRequest {
                 model_id: self.model_id.clone(),
                 system: r#"You organize a local personal knowledge base. Return only JSON matching exactly this shape, with no prose before or after it:
-{"title": string, "summary": string, "concepts": string[], "conceptDefinitions": [{"concept": string, "definition": string}], "relations": [{"source": string, "target": string, "relation": string}], "projects": string[], "areas": string[], "tags": string[]}
-"relations" entries must always be objects with exactly the "source", "target" and "relation" keys shown above — never a bare string. "conceptDefinitions" must contain exactly one entry per item in "concepts" (same "concept" text, matched exactly), each with a self-contained 1-2 sentence definition — these become each concept's own standalone note the first time it is ever seen, so write them so they make sense out of context, not as a fragment referring back to "the video" or "this source". Preserve nuance, decisions, evidence, caveats, examples, and actionable details in the summary; do not produce a tiny abstract. Use only the supplied source. The source material may be in any language, but you must always write every field — title, summary, concepts, conceptDefinitions, relations, projects, areas, and tags — in English, translating as needed, so the knowledge base stays in one consistent language regardless of source language."#.to_owned(),
+{"title": string, "context": string, "summary": string, "concepts": string[], "conceptDefinitions": [{"concept": string, "definition": string}], "relations": [{"source": string, "target": string, "relation": string}], "projects": string[], "areas": string[], "tags": string[]}
+"context" is one short machine-readable sentence (max 240 characters) stating what this note is about, written for another model scanning hundreds of notes at once — not marketing copy, no "This note covers" preamble. "relations" entries must always be objects with exactly the "source", "target" and "relation" keys shown above — never a bare string. "conceptDefinitions" must contain exactly one entry per item in "concepts" (same "concept" text, matched exactly), each with a self-contained 1-2 sentence definition — these become each concept's own standalone note the first time it is ever seen, so write them so they make sense out of context, not as a fragment referring back to "the video" or "this source". Preserve nuance, decisions, evidence, caveats, examples, and actionable details in the summary; do not produce a tiny abstract. Use only the supplied source. The source material may be in any language, but you must always write every field — title, summary, concepts, conceptDefinitions, relations, projects, areas, and tags — in English, translating as needed, so the knowledge base stays in one consistent language regardless of source language."#.to_owned(),
                 input: format!(
                     "Source kind: {:?}\nOriginal title: {}\n\nSelected source material:\n{}",
                     source.kind, source.title, selected
@@ -64,6 +64,7 @@ impl KnowledgeEnrichmentPort for MainModelEnricher {
         let structured = StructuredKnowledge::parse(&response.content).map_err(command_error)?;
         Ok(KnowledgeEnrichment {
             title: structured.title,
+            context: structured.context,
             summary: structured.summary,
             concepts: structured.concepts,
             concept_definitions: structured

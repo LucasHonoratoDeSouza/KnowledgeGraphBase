@@ -440,7 +440,10 @@ impl KnowledgeStore {
             |row| row.get(0),
         )?;
         if !exists {
-            connection.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}"), [])?;
+            connection.execute(
+                &format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}"),
+                [],
+            )?;
         }
         Ok(())
     }
