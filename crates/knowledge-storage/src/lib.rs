@@ -1,4 +1,8 @@
-//! SQLite persistence for the local Knowledge OS vault.
+#![allow(
+    clippy::missing_errors_doc,
+    reason = "repository methods consistently return the crate's typed StorageError"
+)]
+//! `SQLite` persistence for the local Knowledge OS vault.
 
 use std::{
     path::Path,
@@ -11,7 +15,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-const MIGRATION_V1: &str = r#"
+mod vault;
+
+pub use vault::{JournalFault, RecoveryReport, TrashRecord};
+
+const MIGRATION_V1: &str = r"
 CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
@@ -94,13 +102,19 @@ CREATE TABLE IF NOT EXISTS organization_audit (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   undone_at TEXT
 );
+CREATE TABLE IF NOT EXISTS write_journal (
+  operation_id TEXT PRIMARY KEY,
+  relative_path TEXT NOT NULL,
+  staging_path TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('PREPARED', 'PUBLISHED'))
+);
 CREATE INDEX IF NOT EXISTS idx_sources_state ON sources(processing_state);
 CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id, ordinal);
 CREATE INDEX IF NOT EXISTS idx_edges_source ON knowledge_edges(source_concept_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON knowledge_edges(target_concept_id);
 PRAGMA user_version = 1;
-"#;
+";
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum StorageError {
@@ -304,7 +318,7 @@ impl KnowledgeStore {
     ///
     /// # Errors
     ///
-    /// Returns a typed storage error when SQLite cannot open or migrate the database.
+    /// Returns a typed storage error when `SQLite` cannot open or migrate the database.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         let connection = Connection::open(path)?;
         let store = Self {
@@ -319,7 +333,7 @@ impl KnowledgeStore {
     ///
     /// # Errors
     ///
-    /// Returns a typed storage error when SQLite initialization fails.
+    /// Returns a typed storage error when `SQLite` initialization fails.
     pub fn open_in_memory() -> Result<Self, StorageError> {
         let connection = Connection::open_in_memory()?;
         let store = Self {
@@ -596,6 +610,7 @@ impl KnowledgeStore {
             "facets",
             "facet_memberships",
             "organization_audit",
+            "write_journal",
         ];
         if !ALLOWED.contains(&table) {
             return Err(StorageError::InvalidTable);
@@ -747,7 +762,7 @@ fn document_by_id(
                     path: row.get(2)?,
                     title: row.get(3)?,
                     summary: row.get(4)?,
-                    revision: row.get::<_, i64>(5)? as u64,
+                    revision: row.get::<_, i64>(5)?.cast_unsigned(),
                     content_hash: row.get(6)?,
                 })
             },
