@@ -74,6 +74,7 @@ import {
   type KnowledgeClient,
   type LibrarianOutcome,
   type LibraryEntry,
+  type OrganizeMode,
   type LibrarySnapshot,
   type RetrievalResult,
 } from "../knowledge";
@@ -114,11 +115,17 @@ const emptySettings: SettingsSnapshot = {
 
 interface IngestSurfaceProps {
   client: KnowledgeClient;
+  folders: string[];
   onCaptured: () => void;
   vaultName: string;
 }
 
-function IngestSurface({ client, onCaptured, vaultName }: IngestSurfaceProps) {
+function IngestSurface({
+  client,
+  folders,
+  onCaptured,
+  vaultName,
+}: IngestSurfaceProps) {
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<
@@ -127,6 +134,8 @@ function IngestSurface({ client, onCaptured, vaultName }: IngestSurfaceProps) {
     | { kind: "success"; message: string }
     | { kind: "error"; message: string }
   >({ kind: "idle" });
+  const [organize, setOrganize] = useState<OrganizeMode>("auto");
+  const [organizeFolder, setOrganizeFolder] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function submit() {
@@ -144,6 +153,8 @@ function IngestSurface({ client, onCaptured, vaultName }: IngestSurfaceProps) {
         content: sourceContent,
         fileName: file?.name ?? "",
         bytes,
+        organize,
+        organizeFolder: organize === "folder" ? organizeFolder : "",
       });
       setStatus({
         kind: "success",
@@ -239,11 +250,33 @@ function IngestSurface({ client, onCaptured, vaultName }: IngestSurfaceProps) {
                 ref={fileInput}
                 type="file"
               />
-              <button className="composer-select" type="button">
+              <label className="composer-select">
                 <Sparkles aria-hidden="true" size={15} />
-                <span>Auto organize</span>
+                <span className="visually-hidden">Organize this capture</span>
+                <select
+                  aria-label="Organize this capture"
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    if (value === "auto" || value === "none") {
+                      setOrganize(value);
+                      setOrganizeFolder("");
+                      return;
+                    }
+                    setOrganize("folder");
+                    setOrganizeFolder(value);
+                  }}
+                  value={organize === "folder" ? organizeFolder : organize}
+                >
+                  <option value="auto">Auto organize</option>
+                  {folders.map((folder) => (
+                    <option key={folder} value={folder}>
+                      File in {folder}
+                    </option>
+                  ))}
+                  <option value="none">Don&apos;t organize</option>
+                </select>
                 <ChevronDown aria-hidden="true" size={13} />
-              </button>
+              </label>
             </div>
             <button
               aria-label="Process source"
@@ -597,6 +630,13 @@ function documentHits(result: RetrievalResult) {
     if (!best.has(hit.path)) best.set(hit.path, hit);
   }
   return [...best.values()];
+}
+
+/** Every folder in the tree, deepest paths included, for placement pickers. */
+function folderPaths(entries: LibraryEntry[]): string[] {
+  return entries.flatMap((entry) =>
+    entry.kind === "folder" ? [entry.path, ...folderPaths(entry.children)] : [],
+  );
 }
 
 function collapsedStorageKey(vaultName: string) {
@@ -1664,6 +1704,7 @@ export function AppShell({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(initialSettings ?? emptySettings);
   const [knowledgeRevision, setKnowledgeRevision] = useState(0);
+  const [captureFolders, setCaptureFolders] = useState<string[]>([]);
   const [layout, setLayout] = useState(() =>
     restoreLayout(
       initialSettings?.layoutJson ?? serializeLayout(DEFAULT_LAYOUT),
@@ -1704,6 +1745,25 @@ export function AppShell({
       cancelled = true;
     };
   }, [initialSettings, settingsClient, setupComplete]);
+
+  // The composer offers the vault's real folders, so "file it here" is a
+  // choice between places that exist rather than free text.
+  useEffect(() => {
+    if (!setupDone) return undefined;
+    let cancelled = false;
+    void knowledgeClient
+      .getLibrary()
+      .then((library) => {
+        if (cancelled) return;
+        setCaptureFolders(folderPaths(library.entries));
+      })
+      .catch(() => {
+        // The composer still works with automatic placement only.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [knowledgeClient, knowledgeRevision, setupDone]);
 
   function persistWorkspace(
     nextMode: PrimaryMode,
@@ -1839,6 +1899,7 @@ export function AppShell({
             {mode === "Ingest" ? (
               <IngestSurface
                 client={knowledgeClient}
+                folders={captureFolders}
                 onCaptured={() => {
                   setKnowledgeRevision((current) => current + 1);
                 }}
