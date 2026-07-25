@@ -26,9 +26,10 @@ interface OnboardingProps {
 }
 
 const endpoints: Record<ProviderId, string> = {
-  anthropic: "https://api.anthropic.com",
+  anthropic: "https://api.anthropic.com/v1",
+  compatible: "http://127.0.0.1:4000/v1",
   deepseek: "https://api.deepseek.com",
-  openai: "https://api.openai.com",
+  openai: "https://api.openai.com/v1",
 };
 
 export function Onboarding({
@@ -44,6 +45,7 @@ export function Onboarding({
   const [vaultName, setVaultName] = useState("");
   const [existingVaultPath, setExistingVaultPath] = useState("");
   const [provider, setProvider] = useState<ProviderId>("openai");
+  const [providerEndpoint, setProviderEndpoint] = useState(endpoints.openai);
   const [credential, setCredential] = useState("");
   const [mainModelId, setMainModelId] = useState("");
   const [dailyBudgetCents, setDailyBudgetCents] = useState(0);
@@ -58,7 +60,7 @@ export function Onboarding({
         aiEnabled,
         credential: aiEnabled ? credential : null,
         dailyBudgetCents: aiEnabled ? dailyBudgetCents : 0,
-        endpoint: aiEnabled ? endpoints[provider] : null,
+        endpoint: aiEnabled ? providerEndpoint : null,
         layoutJson: serializeLayout(DEFAULT_LAYOUT),
         mainModelId: aiEnabled ? mainModelId : null,
         monthlyBudgetCents: aiEnabled ? monthlyBudgetCents : 0,
@@ -317,14 +319,28 @@ export function Onboarding({
               <select
                 aria-label="Provider"
                 onChange={(event) => {
-                  setProvider(event.currentTarget.value as ProviderId);
+                  const selected = event.currentTarget.value as ProviderId;
+                  setProvider(selected);
+                  setProviderEndpoint(endpoints[selected]);
                 }}
                 value={provider}
               >
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="deepseek">DeepSeek</option>
+                <option value="compatible">OpenAI-compatible / LiteLLM</option>
               </select>
+            </label>
+            <label className="field-label">
+              Provider endpoint
+              <input
+                aria-label="Provider endpoint"
+                onChange={(event) => {
+                  setProviderEndpoint(event.currentTarget.value);
+                }}
+                required
+                value={providerEndpoint}
+              />
             </label>
             <label className="field-label">
               Provider key

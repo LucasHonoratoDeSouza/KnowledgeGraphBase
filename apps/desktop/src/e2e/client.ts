@@ -7,10 +7,12 @@ import type {
   SettingsClient,
   SettingsSnapshot,
 } from "../settings";
+import type { KnowledgeClient, LibrarySnapshot } from "../knowledge";
 
 const settingsKey = "knowledge-os:e2e:settings";
 const noteKey = "knowledge-os:e2e:welcome-note";
 const providerCallKey = "knowledge-os:e2e:provider-call-count";
+const libraryKey = "knowledge-os:e2e:library";
 
 export const browserE2EFolderPicker: FolderPicker = {
   chooseParentLocation: () => Promise.resolve("/tmp/knowledge-os-e2e"),
@@ -181,4 +183,102 @@ export const browserE2EEditorClient: EditorClient = {
       diagnostics: inspectMarkdown(content),
     });
   },
+};
+
+function readLibrary(): LibrarySnapshot {
+  const saved = localStorage.getItem(libraryKey);
+  if (saved) return JSON.parse(saved) as LibrarySnapshot;
+  return { entries: [], documents: [], sources: [], noteCount: 0 };
+}
+
+export const browserE2EKnowledgeClient: KnowledgeClient = {
+  capture: (request) => {
+    const library = readLibrary();
+    const id = `source-${String(library.sources.length + 1)}`;
+    const title = request.title || "Quick capture";
+    const path = `Inbox/${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${id}.md`;
+    const source = {
+      id,
+      kind: request.kind === "pdf" ? ("pdf" as const) : ("text" as const),
+      originalUri: title,
+      normalizedUri: `e2e:${id}`,
+      contentHash: id,
+      pipelineVersion: "ingestion-v1",
+      state: "COMPLETED" as const,
+      title,
+    };
+    const document = {
+      id: `document-${id}`,
+      sourceId: id,
+      path,
+      title,
+      summary: request.content.slice(0, 200),
+      revision: 1,
+      contentHash: id,
+    };
+    library.sources.unshift(source);
+    library.documents.unshift(document);
+    library.noteCount += 1;
+    library.entries = [
+      {
+        name: "Inbox",
+        path: "Inbox",
+        kind: "folder",
+        children: library.documents.map((item) => ({
+          name: `${item.title}.md`,
+          path: item.path,
+          kind: "markdown",
+          children: [],
+        })),
+      },
+    ];
+    localStorage.setItem(libraryKey, JSON.stringify(library));
+    localStorage.setItem(noteKey, `# ${title}\n\n${request.content}`);
+    return Promise.resolve({ source, document, reused: false });
+  },
+  getLibrary: () => Promise.resolve(readLibrary()),
+  getGraph: () => {
+    const documents = readLibrary().documents;
+    return Promise.resolve({
+      concepts: documents.map((document) => ({
+        id: document.id,
+        normalizedName: document.title.toLowerCase(),
+        displayName: document.title,
+      })),
+      edges: [],
+      truncated: false,
+    });
+  },
+  search: (query) => {
+    const lowered = query.toLowerCase();
+    const hits = readLibrary()
+      .documents.filter(
+        (document) =>
+          document.title.toLowerCase().includes(lowered) ||
+          document.summary.toLowerCase().includes(lowered),
+      )
+      .map((document) => ({
+        sourceId: document.sourceId,
+        documentId: document.id,
+        chunkId: `${document.id}-chunk`,
+        title: document.title,
+        snippet: document.summary,
+        locator: "section:document",
+        path: document.path,
+        score: 1,
+      }));
+    return Promise.resolve({
+      plan: { lexicalQuery: query, filters: {}, expandGraph: false },
+      hits,
+      lexicalFallback: true,
+    });
+  },
+  ask: (question, modelId) =>
+    Promise.resolve({
+      answer: `Grounded response to: ${question}`,
+      citations: [],
+      modelId,
+      usage: { inputTokens: 10, outputTokens: 8 },
+      supported: false,
+    }),
 };

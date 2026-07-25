@@ -339,7 +339,7 @@ describe("dedicated AI settings", () => {
     await waitFor(() => {
       expect(settingsClient.connectProvider).toHaveBeenCalledWith({
         provider: "anthropic",
-        endpoint: "https://api.anthropic.com",
+        endpoint: "https://api.anthropic.com/v1",
         credential: "anthropic-secret",
       });
     });

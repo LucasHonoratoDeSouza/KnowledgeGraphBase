@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent,
   type KeyboardEvent,
 } from "react";
 
@@ -63,6 +64,15 @@ import {
   togglePane,
   type WorkspaceLayout,
 } from "../workspace/layout";
+import {
+  ipcKnowledgeClient,
+  type AssistantAnswer,
+  type GraphView,
+  type KnowledgeClient,
+  type LibraryEntry,
+  type LibrarySnapshot,
+  type RetrievalResult,
+} from "../knowledge";
 
 export type PrimaryMode = "Ingest" | "Retrieve";
 
@@ -71,6 +81,7 @@ interface AppShellProps {
   folderPicker?: FolderPicker;
   initialMode?: PrimaryMode;
   initialSettings?: SettingsSnapshot;
+  knowledgeClient?: KnowledgeClient;
   online?: boolean;
   settingsClient?: SettingsClient;
   setupComplete?: boolean;
@@ -97,7 +108,62 @@ const emptySettings: SettingsSnapshot = {
   },
 };
 
-function IngestSurface({ vaultName }: { vaultName: string }) {
+interface IngestSurfaceProps {
+  client: KnowledgeClient;
+  onCaptured: () => void;
+  vaultName: string;
+}
+
+function IngestSurface({ client, onCaptured, vaultName }: IngestSurfaceProps) {
+  const [content, setContent] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "working"; message: string }
+    | { kind: "success"; message: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  async function submit() {
+    if (!content.trim() && !file) return;
+    setStatus({ kind: "working", message: "Extracting and indexing locally…" });
+    try {
+      const isPdf = file?.name.toLowerCase().endsWith(".pdf") ?? false;
+      const isMarkdown = file?.name.toLowerCase().endsWith(".md") ?? false;
+      const bytes =
+        isPdf && file ? [...new Uint8Array(await file.arrayBuffer())] : [];
+      const sourceContent = isMarkdown && file ? await file.text() : content;
+      const result = await client.capture({
+        kind: isPdf ? "pdf" : isMarkdown ? "markdown" : "auto",
+        title: file?.name.replace(/\.(pdf|md)$/i, "") ?? "Quick capture",
+        content: sourceContent,
+        fileName: file?.name ?? "",
+        bytes,
+      });
+      setStatus({
+        kind: "success",
+        message: result.reused
+          ? `Already indexed · ${result.document.title}`
+          : `Saved · ${result.document.path}`,
+      });
+      setContent("");
+      setFile(null);
+      onCaptured();
+    } catch (error) {
+      setStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  function acceptDrop(event: DragEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const dropped = event.dataTransfer.files.item(0);
+    if (dropped) setFile(dropped);
+  }
+
   return (
     <section aria-labelledby="ingest-heading" className="ingest-surface">
       <div className="ingest-content">
@@ -108,25 +174,67 @@ function IngestSurface({ vaultName }: { vaultName: string }) {
         <p className="ingest-lead">
           Paste a link, write a note, or attach a file to your local library.
         </p>
-        <div className="ingest-composer-shell">
+        <form
+          className="ingest-composer-shell"
+          onDragOver={(event) => {
+            event.preventDefault();
+          }}
+          onDrop={acceptDrop}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
           <label className="ingest-composer">
             <span className="visually-hidden">Add knowledge</span>
             <textarea
               aria-label="Add knowledge"
+              onChange={(event) => {
+                setContent(event.currentTarget.value);
+              }}
               placeholder="Paste a YouTube link, article, meeting note, or write something…"
               rows={4}
+              value={content}
             />
           </label>
+          {file ? (
+            <div className="ingest-file-chip">
+              <FileText aria-hidden="true" size={14} />
+              <span>{file.name}</span>
+              <button
+                aria-label={`Remove ${file.name}`}
+                onClick={() => {
+                  setFile(null);
+                }}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
           <div className="composer-toolbar">
             <div className="composer-actions">
               <button
                 aria-label="Attach files"
                 className="icon-text-button"
+                onClick={() => {
+                  fileInput.current?.click();
+                }}
                 type="button"
               >
                 <Paperclip aria-hidden="true" size={16} />
                 <span>Attach files</span>
               </button>
+              <input
+                accept=".pdf,.md,text/markdown,application/pdf"
+                aria-label="Attach knowledge file"
+                className="visually-hidden"
+                onChange={(event) => {
+                  setFile(event.currentTarget.files?.item(0) ?? null);
+                }}
+                ref={fileInput}
+                type="file"
+              />
               <button className="composer-select" type="button">
                 <Sparkles aria-hidden="true" size={15} />
                 <span>Auto organize</span>
@@ -136,12 +244,21 @@ function IngestSurface({ vaultName }: { vaultName: string }) {
             <button
               aria-label="Process source"
               className="composer-submit"
-              type="button"
+              disabled={status.kind === "working" || (!content.trim() && !file)}
+              type="submit"
             >
               <ArrowUp aria-hidden="true" size={17} strokeWidth={2.2} />
             </button>
           </div>
-        </div>
+        </form>
+        {status.kind !== "idle" ? (
+          <p
+            className={`ingest-status ingest-status-${status.kind}`}
+            role="status"
+          >
+            {status.message}
+          </p>
+        ) : null}
         <div aria-label="Supported sources" className="source-types">
           <span>
             <Video aria-hidden="true" size={14} />
@@ -175,6 +292,7 @@ function IngestSurface({ vaultName }: { vaultName: string }) {
 
 interface RetrieveSurfaceProps {
   editorClient: EditorClient;
+  knowledgeClient: KnowledgeClient;
   layout: WorkspaceLayout;
   models: ModelProfile[];
   onLayoutChange: (layout: WorkspaceLayout) => void;
@@ -188,48 +306,49 @@ const welcomeNote: NoteDocument = {
   diagnostics: [],
 };
 
-const graphNodes = [
-  {
-    id: "knowledge",
-    x: 410,
-    y: 260,
-    r: 18,
-    label: "Knowledge OS",
-    tone: "accent",
-  },
-  { id: "agents", x: 295, y: 155, r: 11, label: "AI Agents", tone: "bright" },
-  { id: "rag", x: 515, y: 148, r: 10, label: "RAG", tone: "bright" },
-  { id: "research", x: 235, y: 305, r: 12, label: "Research", tone: "bright" },
-  { id: "systems", x: 565, y: 330, r: 11, label: "Systems", tone: "bright" },
-  { id: "books", x: 345, y: 390, r: 8, label: "Books", tone: "muted" },
-  { id: "meetings", x: 470, y: 410, r: 8, label: "Meetings", tone: "muted" },
-  {
-    id: "embeddings",
-    x: 625,
-    y: 205,
-    r: 7,
-    label: "Embeddings",
-    tone: "muted",
-  },
-  { id: "python", x: 170, y: 190, r: 7, label: "Python", tone: "muted" },
-] as const;
-
-const graphEdges = [
-  ["knowledge", "agents"],
-  ["knowledge", "rag"],
-  ["knowledge", "research"],
-  ["knowledge", "systems"],
-  ["knowledge", "books"],
-  ["knowledge", "meetings"],
-  ["agents", "python"],
-  ["rag", "embeddings"],
-  ["research", "books"],
-  ["systems", "meetings"],
-  ["agents", "research"],
-  ["rag", "systems"],
-] as const;
-
-function KnowledgeGraph() {
+function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
+  const concepts = graph?.concepts ?? [];
+  const graphEdges = graph?.edges ?? [];
+  const degree = new Map<string, number>();
+  for (const edge of graphEdges) {
+    degree.set(
+      edge.sourceConceptId,
+      (degree.get(edge.sourceConceptId) ?? 0) + 1,
+    );
+    degree.set(
+      edge.targetConceptId,
+      (degree.get(edge.targetConceptId) ?? 0) + 1,
+    );
+  }
+  const ordered = [...concepts].sort(
+    (left, right) =>
+      (degree.get(right.id) ?? 0) - (degree.get(left.id) ?? 0) ||
+      left.displayName.localeCompare(right.displayName),
+  );
+  const graphNodes = ordered.map((concept, index) => {
+    if (index === 0) {
+      return {
+        id: concept.id,
+        x: 400,
+        y: 260,
+        r: 18,
+        label: concept.displayName,
+        tone: "accent",
+      };
+    }
+    const angle =
+      ((index - 1) / Math.max(ordered.length - 1, 1)) * Math.PI * 2 -
+      Math.PI / 2;
+    const radius = 145 + ((index - 1) % 3) * 34;
+    return {
+      id: concept.id,
+      x: 400 + Math.cos(angle) * radius,
+      y: 260 + Math.sin(angle) * Math.min(radius, 190),
+      r: Math.min(13, 7 + (degree.get(concept.id) ?? 0)),
+      label: concept.displayName,
+      tone: (degree.get(concept.id) ?? 0) > 1 ? "bright" : "muted",
+    };
+  });
   const byId = new Map(graphNodes.map((node) => [node.id, node]));
   return (
     <div className="graph-view">
@@ -237,7 +356,10 @@ function KnowledgeGraph() {
         <div>
           <span className="eyebrow">LOCAL GRAPH</span>
           <h2>Your knowledge, connected</h2>
-          <p>9 concepts · 12 relationships · updated just now</p>
+          <p>
+            {concepts.length} concepts · {graphEdges.length} relationships ·
+            local index
+          </p>
         </div>
         <div className="graph-actions">
           <button
@@ -266,13 +388,13 @@ function KnowledgeGraph() {
       <div className="graph-stage">
         <svg aria-label="Knowledge graph" role="img" viewBox="0 0 800 520">
           <g className="graph-edge-layer">
-            {graphEdges.map(([from, to]) => {
-              const source = byId.get(from);
-              const target = byId.get(to);
+            {graphEdges.map((edge) => {
+              const source = byId.get(edge.sourceConceptId);
+              const target = byId.get(edge.targetConceptId);
               if (!source || !target) return null;
               return (
                 <line
-                  key={`${from}-${to}`}
+                  key={edge.id}
                   x1={source.x}
                   x2={target.x}
                   y1={source.y}
@@ -292,6 +414,11 @@ function KnowledgeGraph() {
             ))}
           </g>
         </svg>
+        {concepts.length === 0 ? (
+          <div className="graph-empty">
+            Capture a source to grow your local graph.
+          </div>
+        ) : null}
         <div className="graph-legend">
           <span>
             <i className="legend-dot legend-dot-focus" />
@@ -307,7 +434,78 @@ function KnowledgeGraph() {
   );
 }
 
-function ExplorerPane({ vaultName }: { vaultName: string }) {
+function LibraryRows({
+  entries,
+  onOpen,
+}: {
+  entries: LibraryEntry[];
+  onOpen: (path: string) => void;
+}) {
+  return (
+    <>
+      {entries.map((entry) => (
+        <li
+          aria-expanded={entry.kind === "folder" ? true : undefined}
+          key={entry.path}
+          role="treeitem"
+        >
+          {entry.kind === "markdown" ? (
+            <button
+              className="tree-row tree-file-button"
+              onClick={() => {
+                onOpen(entry.path);
+              }}
+              type="button"
+            >
+              <FileText aria-hidden="true" size={14} />
+              <span>{entry.name.replace(/\.md$/i, "")}</span>
+            </button>
+          ) : (
+            <span className="tree-row">
+              {entry.kind === "folder" ? (
+                <>
+                  <ChevronDown aria-hidden="true" size={13} />
+                  <FolderOpen aria-hidden="true" size={15} />
+                </>
+              ) : (
+                <File aria-hidden="true" size={14} />
+              )}
+              <span>{entry.name}</span>
+            </span>
+          )}
+          {entry.children.length > 0 ? (
+            <ul role="group">
+              <LibraryRows entries={entry.children} onOpen={onOpen} />
+            </ul>
+          ) : null}
+        </li>
+      ))}
+    </>
+  );
+}
+
+function ExplorerPane({
+  library,
+  onOpen,
+  onSearch,
+  searchResult,
+  vaultName,
+}: {
+  library: LibrarySnapshot | null;
+  onOpen: (path: string) => void;
+  onSearch: (query: string) => void;
+  searchResult: RetrievalResult | null;
+  vaultName: string;
+}) {
+  const [query, setQuery] = useState("");
+  const defaultEntries: LibraryEntry[] = ["Inbox", "Projects", "Research"].map(
+    (name) => ({
+      name,
+      path: name,
+      kind: "folder",
+      children: [],
+    }),
+  );
   return (
     <div className="explorer-pane">
       <header className="pane-header">
@@ -339,7 +537,19 @@ function ExplorerPane({ vaultName }: { vaultName: string }) {
       <label className="explorer-search">
         <Search aria-hidden="true" size={14} />
         <span className="visually-hidden">Filter knowledge</span>
-        <input aria-label="Filter knowledge" placeholder="Filter knowledge" />
+        <input
+          aria-label="Filter knowledge"
+          onChange={(event) => {
+            setQuery(event.currentTarget.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && query.trim()) {
+              onSearch(query);
+            }
+          }}
+          placeholder="Search knowledge"
+          value={query}
+        />
         <kbd>⌘F</kbd>
       </label>
       <nav aria-label="Knowledge library" className="knowledge-tree">
@@ -348,107 +558,69 @@ function ExplorerPane({ vaultName }: { vaultName: string }) {
           <span>{vaultName.toUpperCase()}</span>
         </div>
         <ul role="tree">
-          <li role="treeitem">
-            <span className="tree-row tree-row-active">
-              <ChevronRight aria-hidden="true" size={13} />
-              <FolderOpen aria-hidden="true" size={15} />
-              <span>Inbox</span>
-              <b>3</b>
-            </span>
-          </li>
-          <li role="treeitem">
-            <span className="tree-row">
-              <ChevronRight aria-hidden="true" size={13} />
-              <Folder aria-hidden="true" size={15} />
-              <span>Daily notes</span>
-            </span>
-          </li>
-          <li aria-expanded="true" role="treeitem">
-            <span className="tree-row">
-              <ChevronDown aria-hidden="true" size={13} />
-              <FolderOpen aria-hidden="true" size={15} />
-              <span>Projects</span>
-            </span>
-            <ul role="group">
-              <li role="treeitem">
-                <span className="tree-row tree-child">
-                  <FileText aria-hidden="true" size={14} />
-                  <span>Knowledge OS</span>
-                  <i className="tree-status" />
-                </span>
-              </li>
-              <li role="treeitem">
-                <span className="tree-row tree-child">
-                  <FileText aria-hidden="true" size={14} />
-                  <span>AI Research</span>
-                </span>
-              </li>
-            </ul>
-          </li>
-          <li aria-expanded="true" role="treeitem">
-            <span className="tree-row">
-              <ChevronDown aria-hidden="true" size={13} />
-              <FolderOpen aria-hidden="true" size={15} />
-              <span>Areas</span>
-            </span>
-            <ul role="group">
-              <li role="treeitem">
-                <span className="tree-row tree-child">
-                  <FileText aria-hidden="true" size={14} />
-                  <span>Work</span>
-                </span>
-              </li>
-              <li role="treeitem">
-                <span className="tree-row tree-child">
-                  <FileText aria-hidden="true" size={14} />
-                  <span>Study</span>
-                </span>
-              </li>
-            </ul>
-          </li>
-          <li role="treeitem">
-            <span className="tree-row">
-              <ChevronRight aria-hidden="true" size={13} />
-              <Folder aria-hidden="true" size={15} />
-              <span>Research</span>
-            </span>
-          </li>
-          <li role="treeitem">
-            <span className="tree-row">
-              <ChevronRight aria-hidden="true" size={13} />
-              <Folder aria-hidden="true" size={15} />
-              <span>Books</span>
-            </span>
-          </li>
-          <li role="treeitem">
-            <span className="tree-row">
-              <ChevronRight aria-hidden="true" size={13} />
-              <Folder aria-hidden="true" size={15} />
-              <span>Papers</span>
-            </span>
-          </li>
-          <li role="treeitem">
-            <span className="tree-row">
-              <ChevronRight aria-hidden="true" size={13} />
-              <Folder aria-hidden="true" size={15} />
-              <span>Sources</span>
-            </span>
-          </li>
+          <LibraryRows
+            entries={library?.entries ?? defaultEntries}
+            onOpen={onOpen}
+          />
         </ul>
+        {searchResult ? (
+          <div className="explorer-results" aria-label="Search results">
+            <span className="eyebrow">SEARCH RESULTS</span>
+            {searchResult.hits.map((hit) => (
+              <button
+                key={hit.chunkId}
+                onClick={() => {
+                  onOpen(hit.path);
+                }}
+                type="button"
+              >
+                <strong>{hit.title}</strong>
+                <span>{hit.snippet.replace(/<\/?mark>/g, "")}</span>
+              </button>
+            ))}
+            {searchResult.hits.length === 0 ? <p>No local matches.</p> : null}
+          </div>
+        ) : null}
       </nav>
       <footer className="explorer-footer">
         <span>
           <CircleDot aria-hidden="true" size={13} /> Local vault
         </span>
-        <span>42 notes</span>
+        <span>{library?.noteCount ?? 0} notes</span>
       </footer>
     </div>
   );
 }
 
-function AssistantPane({ models }: { models: ModelProfile[] }) {
+function AssistantPane({
+  client,
+  models,
+}: {
+  client: KnowledgeClient;
+  models: ModelProfile[];
+}) {
   const [question, setQuestion] = useState("");
   const [modelId, setModelId] = useState(models[0]?.id ?? "");
+  const [answer, setAnswer] = useState<AssistantAnswer | null>(null);
+  const [assistantError, setAssistantError] = useState("");
+  const [working, setWorking] = useState(false);
+  const selectedModelId = models.some((model) => model.id === modelId)
+    ? modelId
+    : (models[0]?.id ?? "");
+
+  async function ask() {
+    if (!question.trim() || !selectedModelId) return;
+    setWorking(true);
+    setAssistantError("");
+    try {
+      setAnswer(await client.ask(question, selectedModelId));
+      setQuestion("");
+    } catch (error) {
+      setAssistantError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setWorking(false);
+    }
+  }
   return (
     <div className="assistant-pane">
       <header className="assistant-header">
@@ -470,21 +642,53 @@ function AssistantPane({ models }: { models: ModelProfile[] }) {
         </span>
         <span className="read-only-badge">Read-only</span>
       </div>
-      <div className="assistant-empty-state">
-        <div className="assistant-orb">
-          <Sparkles aria-hidden="true" size={22} />
+      {answer ? (
+        <div className="assistant-answer" aria-live="polite">
+          <span className="eyebrow">GROUNDED ANSWER</span>
+          <p>{answer.answer}</p>
+          {answer.citations.map((citation) => (
+            <div className="assistant-citation" key={citation.number}>
+              <b>
+                [{citation.number}] {citation.title}
+              </b>
+              <span>{citation.path}</span>
+            </div>
+          ))}
         </div>
-        <h2>Ask across everything you know.</h2>
-        <p>
-          Answers will be grounded in your notes and linked back to the exact
-          source.
+      ) : (
+        <div className="assistant-empty-state">
+          <div className="assistant-orb">
+            <Sparkles aria-hidden="true" size={22} />
+          </div>
+          <h2>Ask across everything you know.</h2>
+          <p>
+            Answers will be grounded in your notes and linked back to the exact
+            source.
+          </p>
+          <div className="prompt-examples">
+            {[
+              "Connect my recent research",
+              "What did I learn about agents?",
+              "Summarize this project",
+            ].map((example) => (
+              <button
+                key={example}
+                onClick={() => {
+                  setQuestion(example);
+                }}
+                type="button"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {assistantError ? (
+        <p className="assistant-error" role="alert">
+          {assistantError}
         </p>
-        <div className="prompt-examples">
-          <span>Connect my recent research</span>
-          <span>What did I learn about agents?</span>
-          <span>Summarize this project</span>
-        </div>
-      </div>
+      ) : null}
       <div className="assistant-composer">
         <textarea
           aria-label="Ask your knowledge base"
@@ -501,7 +705,7 @@ function AssistantPane({ models }: { models: ModelProfile[] }) {
             onChange={(event) => {
               setModelId(event.currentTarget.value);
             }}
-            value={modelId}
+            value={selectedModelId}
           >
             {models.length === 0 ? (
               <option value="">No model configured</option>
@@ -514,7 +718,8 @@ function AssistantPane({ models }: { models: ModelProfile[] }) {
           </select>
           <button
             aria-label="Send question"
-            disabled={!modelId || !question.trim()}
+            disabled={working || !selectedModelId || !question.trim()}
+            onClick={() => void ask()}
             type="button"
           >
             <ArrowUp aria-hidden="true" size={15} />
@@ -530,6 +735,7 @@ function AssistantPane({ models }: { models: ModelProfile[] }) {
 
 function RetrieveSurface({
   editorClient,
+  knowledgeClient,
   layout,
   models,
   onLayoutChange,
@@ -541,6 +747,11 @@ function RetrieveSurface({
   const assistantColumn = `${String(assistant.collapsed ? 0 : assistant.width)}px`;
   const [document, setDocument] = useState(welcomeNote);
   const [canvasView, setCanvasView] = useState<"graph" | "note">("graph");
+  const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
+  const [graph, setGraph] = useState<GraphView | null>(null);
+  const [searchResult, setSearchResult] = useState<RetrievalResult | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -556,6 +767,33 @@ function RetrieveSurface({
       cancelled = true;
     };
   }, [editorClient]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void knowledgeClient
+      .getLibrary()
+      .then(async (nextLibrary) => {
+        const nextGraph = await knowledgeClient.getGraph();
+        if (cancelled) return;
+        setLibrary(nextLibrary);
+        setGraph(nextGraph);
+      })
+      .catch(() => {
+        // The native vault can still be opened manually when indexing is unavailable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [knowledgeClient]);
+
+  async function openDocument(path: string) {
+    try {
+      setDocument(await editorClient.openNote(path));
+      setCanvasView("note");
+    } catch {
+      // Attachments remain visible but only Markdown opens in the editor.
+    }
+  }
 
   return (
     <section aria-label="Retrieve workspace" className="retrieve-shell">
@@ -636,7 +874,20 @@ function RetrieveSurface({
           className="explorer-region"
           collapsed={explorer.collapsed}
         >
-          <ExplorerPane vaultName={vaultName} />
+          <ExplorerPane
+            library={library}
+            onOpen={(path) => void openDocument(path)}
+            onSearch={(query) => {
+              void knowledgeClient
+                .search(query)
+                .then(setSearchResult)
+                .catch(() => {
+                  setSearchResult(null);
+                });
+            }}
+            searchResult={searchResult}
+            vaultName={vaultName}
+          />
         </Pane>
         <Pane aria-label="Knowledge canvas" className="canvas-region">
           <div className="canvas-tabbar">
@@ -668,7 +919,7 @@ function RetrieveSurface({
                 type="button"
               >
                 <FileText aria-hidden="true" size={14} />
-                Welcome.md
+                {document.path.split("/").at(-1) ?? "Note.md"}
                 <span className="tab-close" aria-hidden="true">
                   ×
                 </span>
@@ -684,7 +935,7 @@ function RetrieveSurface({
           </div>
           {canvasView === "graph" ? (
             <div aria-label="Graph view" id="graph-panel" role="tabpanel">
-              <KnowledgeGraph />
+              <KnowledgeGraph graph={graph} />
             </div>
           ) : (
             <div
@@ -711,7 +962,7 @@ function RetrieveSurface({
           className="assistant-region"
           collapsed={assistant.collapsed}
         >
-          <AssistantPane models={models} />
+          <AssistantPane client={knowledgeClient} models={models} />
         </Pane>
       </div>
     </section>
@@ -723,6 +974,7 @@ export function AppShell({
   folderPicker,
   initialMode = "Ingest",
   initialSettings,
+  knowledgeClient = ipcKnowledgeClient,
   online = true,
   settingsClient = ipcSettingsClient,
   setupComplete,
@@ -735,6 +987,7 @@ export function AppShell({
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(initialSettings ?? emptySettings);
+  const [knowledgeRevision, setKnowledgeRevision] = useState(0);
   const [layout, setLayout] = useState(() =>
     restoreLayout(
       initialSettings?.layoutJson ?? serializeLayout(DEFAULT_LAYOUT),
@@ -909,13 +1162,27 @@ export function AppShell({
           >
             {mode === "Ingest" ? (
               <IngestSurface
+                client={knowledgeClient}
+                onCaptured={() => {
+                  setKnowledgeRevision((current) => current + 1);
+                }}
                 vaultName={settings.vaultName ?? "Local workspace"}
               />
             ) : (
               <RetrieveSurface
                 editorClient={editorClient}
+                key={knowledgeRevision}
+                knowledgeClient={knowledgeClient}
                 layout={layout}
-                models={settings.ai.models}
+                models={settings.ai.models.filter(
+                  (model) =>
+                    model.enabled &&
+                    settings.providers.some(
+                      (provider) =>
+                        provider.provider === model.provider &&
+                        provider.health === "healthy",
+                    ),
+                )}
                 onLayoutChange={updateLayout}
                 vaultName={vaultName}
               />
