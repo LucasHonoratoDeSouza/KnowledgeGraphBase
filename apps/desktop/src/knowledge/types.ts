@@ -57,6 +57,25 @@ export interface LibrarySnapshot {
   noteCount: number;
 }
 
+export interface FacetRecord {
+  id: string;
+  kind: "project" | "area" | "tag";
+  normalizedName: string;
+  displayName: string;
+}
+
+export interface FacetMembershipRecord {
+  facetId: string;
+  sourceId: string;
+  pinned: boolean;
+  confidenceBasisPoints: number;
+}
+
+export interface OrganizationSnapshot {
+  facets: FacetRecord[];
+  memberships: FacetMembershipRecord[];
+}
+
 export interface GraphConcept {
   id: string;
   normalizedName: string;
@@ -118,6 +137,7 @@ export interface AssistantAnswer {
 export interface KnowledgeClient {
   capture(request: CaptureRequest): Promise<CaptureResponse>;
   getLibrary(): Promise<LibrarySnapshot>;
+  getOrganization(): Promise<OrganizationSnapshot>;
   getGraph(): Promise<GraphView>;
   search(query: string): Promise<RetrievalResult>;
   ask(question: string, modelId: string): Promise<AssistantAnswer>;

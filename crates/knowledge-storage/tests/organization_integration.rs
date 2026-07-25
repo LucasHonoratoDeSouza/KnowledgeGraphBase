@@ -3,6 +3,20 @@ use knowledge_storage::{
     FacetDraft, KnowledgeStore, OrganizationDecision, SourceDraft, StorageError,
 };
 
+fn seeded_extra_source(store: &KnowledgeStore, title: &str) -> String {
+    store
+        .create_source(&SourceDraft {
+            kind: SourceKind::Note,
+            original_uri: title.to_owned(),
+            normalized_uri: title.to_owned(),
+            content_hash: "hash-2".to_owned(),
+            pipeline_version: "v1".to_owned(),
+            title: title.to_owned(),
+        })
+        .unwrap()
+        .id
+}
+
 fn seeded() -> (KnowledgeStore, String, String, String) {
     let store = KnowledgeStore::open_in_memory().unwrap();
     let source = store
@@ -193,6 +207,78 @@ fn same_audit_cannot_be_undone_twice() {
         store.undo_organization(&audit.id),
         Err(StorageError::Constraint(_))
     ));
+}
+
+#[test]
+fn list_facets_returns_every_created_facet() {
+    let (store, _, project, area) = seeded();
+    let facets = store.list_facets().unwrap();
+    let ids: Vec<_> = facets.iter().map(|facet| facet.id.clone()).collect();
+    assert!(ids.contains(&project));
+    assert!(ids.contains(&area));
+}
+
+#[test]
+fn list_facet_memberships_reflects_applied_organization_across_facets() {
+    let (store, source, project, area) = seeded();
+    store
+        .apply_organization(
+            &source,
+            &[
+                OrganizationDecision {
+                    facet_id: project.clone(),
+                    confidence_basis_points: 9_200,
+                    pinned: false,
+                },
+                OrganizationDecision {
+                    facet_id: area.clone(),
+                    confidence_basis_points: 8_100,
+                    pinned: false,
+                },
+            ],
+            "test",
+        )
+        .unwrap();
+    let memberships = store.list_facet_memberships().unwrap();
+    assert_eq!(memberships.len(), 2);
+    assert!(
+        memberships
+            .iter()
+            .any(|membership| membership.facet_id == project && membership.source_id == source)
+    );
+    assert!(
+        memberships
+            .iter()
+            .any(|membership| membership.facet_id == area && membership.source_id == source)
+    );
+}
+
+#[test]
+fn list_facet_memberships_supports_one_facet_shared_by_multiple_sources() {
+    let (store, first_source, project, _) = seeded();
+    let second_source = seeded_extra_source(&store, "Second Meeting");
+    for source in [&first_source, &second_source] {
+        store
+            .apply_organization(
+                source,
+                &[OrganizationDecision {
+                    facet_id: project.clone(),
+                    confidence_basis_points: 9_000,
+                    pinned: false,
+                }],
+                "shared project",
+            )
+            .unwrap();
+    }
+    let memberships = store.list_facet_memberships().unwrap();
+    let sources_under_project: Vec<_> = memberships
+        .iter()
+        .filter(|membership| membership.facet_id == project)
+        .map(|membership| membership.source_id.clone())
+        .collect();
+    assert!(sources_under_project.contains(&first_source));
+    assert!(sources_under_project.contains(&second_source));
+    assert_eq!(sources_under_project.len(), 2);
 }
 
 #[test]

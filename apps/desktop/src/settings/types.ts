@@ -74,6 +74,7 @@ export interface SettingsClient {
   saveAiConfiguration(
     configuration: AiConfiguration,
   ): Promise<SettingsSnapshot>;
+  setAiEnabled(enabled: boolean): Promise<SettingsSnapshot>;
   saveWorkspaceState(
     activeMode: SettingsSnapshot["activeMode"],
     layoutJson: string,

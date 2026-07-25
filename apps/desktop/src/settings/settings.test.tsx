@@ -70,6 +70,9 @@ function client() {
     saveAiConfiguration: vi
       .fn<SettingsClient["saveAiConfiguration"]>()
       .mockResolvedValue(snapshot),
+    setAiEnabled: vi
+      .fn<SettingsClient["setAiEnabled"]>()
+      .mockResolvedValue(snapshot),
     saveWorkspaceState: vi
       .fn<SettingsClient["saveWorkspaceState"]>()
       .mockResolvedValue(snapshot),

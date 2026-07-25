@@ -20,6 +20,8 @@ export const ipcSettingsClient: SettingsClient = {
     invoke<SettingsSnapshot>("provider_rotate", { provider, credential }),
   saveAiConfiguration: (configuration: AiConfiguration) =>
     invoke<SettingsSnapshot>("settings_update_ai", { configuration }),
+  setAiEnabled: (enabled: boolean) =>
+    invoke<SettingsSnapshot>("settings_set_ai_enabled", { enabled }),
   saveWorkspaceState: (activeMode, layoutJson) =>
     invoke<SettingsSnapshot>("settings_update_workspace", {
       activeMode,

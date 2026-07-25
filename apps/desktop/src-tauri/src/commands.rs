@@ -21,8 +21,9 @@ use crate::{
     editor::{DocumentCommandState, NoteDocument},
     enrichment::MainModelEnricher,
     knowledge::{
-        CaptureCommandRequest, CaptureCommandResponse, LibrarySnapshot, ask_in_vault,
-        capture_in_vault_with_services, graph_in_vault, library_in_vault, search_in_vault,
+        CaptureCommandRequest, CaptureCommandResponse, LibrarySnapshot, OrganizationSnapshot,
+        ask_in_vault, capture_in_vault_with_services, graph_in_vault, library_in_vault,
+        organization_in_vault, search_in_vault,
     },
     settings::{
         AiConfiguration, BudgetSettings, HealthStatus, ModelProfile, OnboardingInput,
@@ -148,10 +149,22 @@ pub fn source_capture(
     state: State<'_, SettingsCommandState>,
 ) -> Result<CaptureCommandResponse, String> {
     let root = workspace_root(&state)?;
-    let (openai, main) = {
+    let (transcription_provider, main) = {
         let service = lock_settings(&state)?;
         let snapshot = service.public_snapshot().map_err(command_error)?;
-        let openai = service.native_provider(ProviderKind::OpenAi).ok();
+        // OpenAI and Groq both expose an OpenAI-wire-compatible
+        // `/audio/transcriptions` endpoint; try whichever one the user has
+        // actually connected instead of requiring OpenAI specifically.
+        let transcription_provider = service
+            .native_provider(ProviderKind::OpenAi)
+            .ok()
+            .map(|(endpoint, secret)| (endpoint, secret, "gpt-4o-mini-transcribe"))
+            .or_else(|| {
+                service
+                    .native_provider(ProviderKind::Groq)
+                    .ok()
+                    .map(|(endpoint, secret)| (endpoint, secret, "whisper-large-v3-turbo"))
+            });
         let main = if snapshot.ai_enabled && snapshot.ai.privacy.allow_source_content {
             snapshot
                 .ai
@@ -187,11 +200,16 @@ pub fn source_capture(
         } else {
             None
         };
-        (openai, main)
+        (transcription_provider, main)
     };
-    let transcriber = openai
-        .map(|(endpoint, secret)| {
-            OpenAiYouTubeTranscriber::new(endpoint, secret, state.data_directory.join("tools"))
+    let transcriber = transcription_provider
+        .map(|(endpoint, secret, model)| {
+            OpenAiYouTubeTranscriber::new(
+                endpoint,
+                secret,
+                state.data_directory.join("tools"),
+                model,
+            )
         })
         .transpose()
         .map_err(command_error)?;
@@ -215,6 +233,13 @@ pub fn source_capture(
 #[tauri::command]
 pub fn library_get(state: State<'_, SettingsCommandState>) -> Result<LibrarySnapshot, String> {
     library_in_vault(&workspace_root(&state)?)
+}
+
+#[tauri::command]
+pub fn organization_get(
+    state: State<'_, SettingsCommandState>,
+) -> Result<OrganizationSnapshot, String> {
+    organization_in_vault(&workspace_root(&state)?)
 }
 
 #[tauri::command]
@@ -442,6 +467,16 @@ pub fn settings_update_ai(
     service
         .save_ai_configuration(&configuration)
         .map_err(command_error)?;
+    service.public_snapshot().map_err(command_error)
+}
+
+#[tauri::command]
+pub fn settings_set_ai_enabled(
+    enabled: bool,
+    state: State<'_, SettingsCommandState>,
+) -> Result<PublicSettings, String> {
+    let mut service = lock_settings(&state)?;
+    service.set_ai_enabled(enabled).map_err(command_error)?;
     service.public_snapshot().map_err(command_error)
 }
 

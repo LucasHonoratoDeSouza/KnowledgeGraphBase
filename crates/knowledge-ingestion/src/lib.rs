@@ -20,7 +20,7 @@ pub use adapters::{
     extract_article_html, extract_youtube_page,
 };
 pub use capture::{CaptureReceipt, CaptureRequest, CaptureService};
-pub use pipeline::{DeterministicPipeline, KnowledgeEnrichment, PipelineResult};
+pub use pipeline::{ConceptDefinition, DeterministicPipeline, KnowledgeEnrichment, PipelineResult};
 
 pub const PIPELINE_VERSION: &str = "ingestion-v1";
 pub const MAX_URL_LENGTH: usize = 2_048;

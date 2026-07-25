@@ -685,6 +685,21 @@ impl SettingsRepository {
         Ok(())
     }
 
+    /// Toggles whether AI processing (extraction, organization, assistant) is
+    /// active, independent of onboarding — a workspace onboarded local-only
+    /// can still connect providers and enable AI later from Settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns a database error if the update fails.
+    pub fn set_ai_enabled(&mut self, enabled: bool) -> Result<(), SettingsError> {
+        self.connection.execute(
+            "UPDATE workspace_settings SET ai_enabled = ?1 WHERE id = 1",
+            [enabled],
+        )?;
+        Ok(())
+    }
+
     /// Persists the active primary mode and serializable workspace layout.
     ///
     /// # Errors
@@ -997,6 +1012,15 @@ impl<V: CredentialVault, P: ProviderProbe> ProviderConnectionService<V, P> {
         configuration: &AiConfiguration,
     ) -> Result<(), SettingsError> {
         self.repository.save_ai_configuration(configuration)
+    }
+
+    /// Toggles AI processing on or off for the current workspace.
+    ///
+    /// # Errors
+    ///
+    /// Propagates database failures.
+    pub fn set_ai_enabled(&mut self, enabled: bool) -> Result<(), SettingsError> {
+        self.repository.set_ai_enabled(enabled)
     }
 
     /// Persists mode and layout for restart restoration.

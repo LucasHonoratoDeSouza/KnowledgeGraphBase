@@ -6,13 +6,13 @@ use std::{
 use knowledge_domain::{ProcessingState, RelationType, SourceKind};
 use knowledge_storage::{
     ConceptDraft, DocumentDraft, DocumentRecord, EdgeDraft, FacetDraft, JobState, JournalFault,
-    KnowledgeStore, OrganizationDecision,
+    KnowledgeStore, OrganizationDecision, StorageError,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     CaptureReceipt, ExtractedContent, ExtractionArtifact, IngestionError, SourceLocator,
-    chunk_text, content_hash, render_markdown, validate_text,
+    chunk_text, content_hash, render_markdown, validate_text, yaml_scalar,
 };
 
 const WORKER: &str = "native-ingestion";
@@ -27,10 +27,18 @@ pub struct PipelineResult {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ConceptDefinition {
+    pub name: String,
+    pub definition: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct KnowledgeEnrichment {
     pub title: String,
     pub summary: String,
     pub concepts: Vec<String>,
+    pub concept_definitions: Vec<ConceptDefinition>,
     pub projects: Vec<String>,
     pub areas: Vec<String>,
     pub tags: Vec<String>,
@@ -174,7 +182,7 @@ impl<'a> DeterministicPipeline<'a> {
             full_content: content.body,
         };
         let markdown = render_markdown(&artifact);
-        let path = artifact_path(&content.title, &receipt.source.id);
+        let path = artifact_path(&content.title, &receipt.source.id, enrichment);
         self.store
             .publish_markdown(
                 &self.vault_root,
@@ -198,8 +206,13 @@ impl<'a> DeterministicPipeline<'a> {
                 &chunks,
             )
             .map_err(storage_error)?;
-        self.persist_graph(&concepts, &document)?;
+        // Only content the Main model actually processed feeds the knowledge
+        // graph: unenriched captures (no Main model configured, or privacy
+        // settings withheld source content) render a usable note in Inbox but
+        // stay out of the concept graph, which otherwise a naive keyword
+        // fallback would pollute with non-canonical noise.
         if let Some(enrichment) = enrichment {
+            self.persist_graph(&concepts, &document, &enrichment.concept_definitions)?;
             self.persist_organization(&receipt.source.id, enrichment)?;
         }
         self.transition(&receipt.source.id, ProcessingState::Completed)?;
@@ -216,11 +229,32 @@ impl<'a> DeterministicPipeline<'a> {
         &self,
         concepts: &[String],
         document: &DocumentRecord,
+        definitions: &[ConceptDefinition],
     ) -> Result<(), IngestionError> {
         let records = concepts
             .iter()
-            .map(|name| self.store.upsert_concept(&ConceptDraft::new(name)))
-            .collect::<Result<Vec<_>, _>>()
+            .map(|name| {
+                let record = self.store.upsert_concept(&ConceptDraft::new(name))?;
+                if record.note_path.is_none() {
+                    let definition = definitions
+                        .iter()
+                        .find(|entry| entry.name.eq_ignore_ascii_case(name))
+                        .map_or("No definition captured yet.", |entry| {
+                            entry.definition.as_str()
+                        });
+                    let path = concept_note_path(&record.display_name, &record.id);
+                    let markdown = render_concept_note(&record.display_name, definition);
+                    self.store.publish_markdown(
+                        &self.vault_root,
+                        &path,
+                        markdown.as_bytes(),
+                        JournalFault::None,
+                    )?;
+                    self.store.set_concept_note_path(&record.id, &path)?;
+                }
+                Ok(record)
+            })
+            .collect::<Result<Vec<_>, StorageError>>()
             .map_err(storage_error)?;
         if let Some(root) = records.first() {
             for related in records.iter().skip(1) {
@@ -351,8 +385,8 @@ fn title_case(value: &str) -> String {
     })
 }
 
-fn artifact_path(title: &str, source_id: &str) -> String {
-    let slug = title
+fn slugify(title: &str, max_words: usize) -> String {
+    title
         .chars()
         .map(|character| {
             if character.is_alphanumeric() {
@@ -364,14 +398,81 @@ fn artifact_path(title: &str, source_id: &str) -> String {
         .collect::<String>()
         .split('-')
         .filter(|part| !part.is_empty())
-        .take(8)
+        .take(max_words)
         .collect::<Vec<_>>()
-        .join("-");
+        .join("-")
+}
+
+fn artifact_path(
+    title: &str,
+    source_id: &str,
+    enrichment: Option<&KnowledgeEnrichment>,
+) -> String {
+    let slug = slugify(title, 8);
     let short_id = source_id.get(..8).unwrap_or(source_id);
     format!(
-        "Inbox/{}-{short_id}.md",
+        "{}/{}-{short_id}.md",
+        primary_folder(enrichment),
         if slug.is_empty() { "knowledge" } else { &slug }
     )
+}
+
+/// Every concept gets one shared, flat location — `Concepts/` — regardless
+/// of which project/area its source documents belong to, since a concept
+/// itself (unlike a captured source) is not scoped to one project.
+fn concept_note_path(display_name: &str, concept_id: &str) -> String {
+    let slug = slugify(display_name, 6);
+    let short_id = concept_id.get(..8).unwrap_or(concept_id);
+    format!(
+        "Concepts/{}-{short_id}.md",
+        if slug.is_empty() { "concept" } else { &slug }
+    )
+}
+
+fn render_concept_note(name: &str, definition: &str) -> String {
+    format!(
+        "---\ntitle: {}\nkind: concept\n---\n\n# {name}\n\n{definition}\n",
+        yaml_scalar(name)
+    )
+}
+
+/// Chooses the one physical folder a captured note lives in: its first
+/// identified project, else its first area, else the review Inbox. Every
+/// other project/area/tag the Main model found still gets a facet
+/// membership (see `persist_organization`) recorded in the database, even
+/// though only one location holds the physical file.
+fn primary_folder(enrichment: Option<&KnowledgeEnrichment>) -> String {
+    let Some(enrichment) = enrichment else {
+        return "Inbox".to_owned();
+    };
+    if let Some(project) = enrichment.projects.iter().find(|value| !value.trim().is_empty()) {
+        return format!("Projects/{}", sanitize_folder_name(project));
+    }
+    if let Some(area) = enrichment.areas.iter().find(|value| !value.trim().is_empty()) {
+        return format!("Areas/{}", sanitize_folder_name(area));
+    }
+    "Inbox".to_owned()
+}
+
+fn sanitize_folder_name(value: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .map(|character| {
+            if character == '/' || character == '\\' || character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect();
+    let collapsed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    let truncated = collapsed.chars().take(60).collect::<String>();
+    let trimmed = truncated.trim_matches('.').trim();
+    if trimmed.is_empty() {
+        "Untitled".to_owned()
+    } else {
+        trimmed.to_owned()
+    }
 }
 
 const fn source_kind(kind: SourceKind) -> &'static str {

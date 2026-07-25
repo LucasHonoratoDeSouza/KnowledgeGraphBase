@@ -45,7 +45,7 @@ impl KnowledgeStore {
         }
         let connection = self.lock()?;
         let mut concept_statement = connection.prepare(
-            "SELECT id, normalized_name, display_name FROM concepts ORDER BY normalized_name LIMIT ?",
+            "SELECT id, normalized_name, display_name, note_path FROM concepts ORDER BY normalized_name LIMIT ?",
         )?;
         let concepts = concept_statement
             .query_map([i64::try_from(max_concepts).unwrap_or(i64::MAX)], |row| {
@@ -53,6 +53,7 @@ impl KnowledgeStore {
                     id: row.get(0)?,
                     normalized_name: row.get(1)?,
                     display_name: row.get(2)?,
+                    note_path: row.get(3)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -163,13 +164,14 @@ impl KnowledgeStore {
         let mut concepts = Vec::with_capacity(visited.len());
         for id in &visited {
             concepts.push(connection.query_row(
-                "SELECT id, normalized_name, display_name FROM concepts WHERE id = ?",
+                "SELECT id, normalized_name, display_name, note_path FROM concepts WHERE id = ?",
                 [id],
                 |row| {
                     Ok(ConceptRecord {
                         id: row.get(0)?,
                         normalized_name: row.get(1)?,
                         display_name: row.get(2)?,
+                        note_path: row.get(3)?,
                     })
                 },
             )?);

@@ -3,6 +3,7 @@ use knowledge_storage::{
     ConceptDraft, DocumentDraft, EdgeDraft, KnowledgeStore, SourceDraft, StorageError,
 };
 
+
 fn seeded() -> (KnowledgeStore, Vec<String>, String) {
     let store = KnowledgeStore::open_in_memory().unwrap();
     let source = store
@@ -141,4 +142,22 @@ fn graph_output_order_is_stable_across_repeated_queries() {
         store.graph_view(&ids[0], 3, 20).unwrap(),
         store.graph_view(&ids[0], 3, 20).unwrap()
     );
+}
+
+#[test]
+fn a_new_concept_has_no_note_until_one_is_recorded() {
+    let store = KnowledgeStore::open_in_memory().unwrap();
+    let concept = store.upsert_concept(&ConceptDraft::new("Docker")).unwrap();
+    assert_eq!(concept.note_path, None);
+
+    store
+        .set_concept_note_path(&concept.id, "Concepts/docker.md")
+        .unwrap();
+
+    let resolved = store.resolve_concept("Docker").unwrap().unwrap();
+    assert_eq!(resolved.note_path, Some("Concepts/docker.md".to_owned()));
+    // Re-upserting the same concept (as a later capture mentioning it would)
+    // must not clear or reset the note path already recorded.
+    let reupserted = store.upsert_concept(&ConceptDraft::new("Docker")).unwrap();
+    assert_eq!(reupserted.note_path, Some("Concepts/docker.md".to_owned()));
 }

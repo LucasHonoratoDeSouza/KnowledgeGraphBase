@@ -22,6 +22,7 @@ pub struct OpenAiYouTubeTranscriber {
     secret: Zeroizing<String>,
     tools_directory: PathBuf,
     client: Client,
+    model: &'static str,
 }
 
 impl OpenAiYouTubeTranscriber {
@@ -29,6 +30,7 @@ impl OpenAiYouTubeTranscriber {
         endpoint: String,
         secret: Zeroizing<String>,
         tools_directory: PathBuf,
+        model: &'static str,
     ) -> Result<Self, IngestionError> {
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(20))
@@ -40,6 +42,7 @@ impl OpenAiYouTubeTranscriber {
             secret,
             tools_directory,
             client,
+            model,
         })
     }
 
@@ -169,7 +172,7 @@ impl OpenAiYouTubeTranscriber {
         title: &str,
     ) -> Result<ExtractedContent, IngestionError> {
         let form = multipart::Form::new()
-            .text("model", "gpt-4o-mini-transcribe")
+            .text("model", self.model)
             .text("response_format", "verbose_json")
             .file("file", audio)
             .map_err(io_error)?;
