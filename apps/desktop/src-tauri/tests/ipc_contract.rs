@@ -116,6 +116,7 @@ fn capability_grants_only_manifest_permissions_to_main() {
             "allow-provider-test",
             "allow-provider-remove",
             "dialog:allow-open",
+            "core:path:default",
         ]),
     );
     assert_eq!(capability.get("remote"), None);
