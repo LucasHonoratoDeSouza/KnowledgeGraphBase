@@ -954,15 +954,44 @@ input[readonly] {
   stroke-width: 1.2;
 }
 
-.graph-node-bright circle {
+.graph-node-linked circle {
   fill: #bbb6ac;
   stroke: #e1ddd4;
 }
 
-.graph-node-accent circle:not(.graph-node-glow) {
+.graph-node-hub circle {
   fill: #c0ad85;
   stroke: #e0d3b5;
   stroke-width: 1.5;
+}
+
+/* Dragging a node (#13): the whole group is the grab target. */
+.graph-node {
+  cursor: grab;
+}
+
+.graph-node-dragging {
+  cursor: grabbing;
+}
+
+.graph-node-dragging circle {
+  stroke: var(--accent-bright);
+  stroke-width: 2;
+}
+
+.graph-node circle,
+.graph-edge-layer line {
+  transition:
+    fill var(--motion-base) var(--ease-standard),
+    stroke var(--motion-base) var(--ease-standard);
+}
+
+.legend-dot-hub {
+  background: var(--accent-bright);
+}
+
+.legend-dot-linked {
+  background: #bbb6ac;
 }
 
 .graph-node text {
@@ -971,8 +1000,8 @@ input[readonly] {
   font-family: inherit;
 }
 
-.graph-node-accent text,
-.graph-node-bright text {
+.graph-node-hub text,
+.graph-node-linked text {
   fill: #d8d3c9;
 }
 
@@ -3084,4 +3113,27 @@ textarea:hover {
   min-width: 0;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+/* Draggable pane dividers (#12) */
+
+.pane-divider {
+  position: relative;
+  height: 100%;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background-color var(--motion-fast) var(--ease-standard);
+  touch-action: none;
+}
+
+.pane-divider::after {
+  position: absolute;
+  inset: 0 -3px;
+  content: "";
+}
+
+.pane-divider:hover,
+.pane-divider:focus-visible {
+  background: var(--accent);
+  outline: none;
 }

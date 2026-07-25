@@ -6,6 +6,7 @@ import {
   type DragEvent,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 
@@ -68,7 +69,10 @@ import {
   type WorkspaceLayout,
 } from "../workspace/layout";
 import {
+  DEFAULT_LAYOUT_OPTIONS,
   ipcKnowledgeClient,
+  layoutGraph,
+  type LayoutNode,
   type AssistantAnswer,
   type GraphView,
   type KnowledgeClient,
@@ -336,6 +340,59 @@ interface RetrieveSurfaceProps {
   vaultName: string;
 }
 
+/**
+ * A draggable splitter between two panes (#12). Pointer moves resize live and
+ * every change flows through the same persisted layout path as the existing
+ * step buttons, so a dragged width survives a restart too.
+ */
+function PaneDivider({
+  collapsed,
+  label,
+  onResize,
+}: {
+  collapsed: boolean;
+  label: string;
+  onResize: (delta: number) => void;
+}) {
+  const last = useRef<number | null>(null);
+  if (collapsed) return null;
+  return (
+    <div
+      aria-label={label}
+      aria-orientation="vertical"
+      className="pane-divider"
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          onResize(-16);
+        }
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          onResize(16);
+        }
+      }}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        last.current = event.clientX;
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        if (last.current === null) return;
+        const delta = event.clientX - last.current;
+        if (delta === 0) return;
+        last.current = event.clientX;
+        onResize(delta);
+      }}
+      onPointerUp={(event) => {
+        last.current = null;
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      role="separator"
+      tabIndex={0}
+    />
+  );
+}
+
 const welcomeNote: NoteDocument = {
   path: "notes/Welcome.md",
   content:
@@ -346,6 +403,15 @@ const welcomeNote: NoteDocument = {
 function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
   const concepts = graph?.concepts ?? [];
   const graphEdges = graph?.edges ?? [];
+  // Dragged positions live beside the simulation, keyed by the graph they
+  // belong to, so a new capture re-lays out cleanly without a reset effect.
+  const [dragged, setDragged] = useState<{
+    signature: string;
+    nodes: Map<string, LayoutNode>;
+  }>({ signature: "", nodes: new Map() });
+  const [dragging, setDragging] = useState<string | null>(null);
+  const stage = useRef<SVGSVGElement | null>(null);
+
   const degree = new Map<string, number>();
   for (const edge of graphEdges) {
     degree.set(
@@ -357,36 +423,64 @@ function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
       (degree.get(edge.targetConceptId) ?? 0) + 1,
     );
   }
-  const ordered = [...concepts].sort(
-    (left, right) =>
-      (degree.get(right.id) ?? 0) - (degree.get(left.id) ?? 0) ||
-      left.displayName.localeCompare(right.displayName),
-  );
-  const graphNodes = ordered.map((concept, index) => {
-    if (index === 0) {
-      return {
-        id: concept.id,
-        x: 400,
-        y: 260,
-        r: 18,
-        label: concept.displayName,
-        tone: "accent",
-      };
+  const maxDegree = Math.max(1, ...degree.values());
+  const signature = concepts
+    .map((concept) => concept.id)
+    .concat(graphEdges.map((edge) => edge.id))
+    .join("|");
+
+  const settled = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const edge of graphEdges) {
+      counts.set(
+        edge.sourceConceptId,
+        (counts.get(edge.sourceConceptId) ?? 0) + 1,
+      );
+      counts.set(
+        edge.targetConceptId,
+        (counts.get(edge.targetConceptId) ?? 0) + 1,
+      );
     }
-    const angle =
-      ((index - 1) / Math.max(ordered.length - 1, 1)) * Math.PI * 2 -
-      Math.PI / 2;
-    const radius = 145 + ((index - 1) % 3) * 34;
-    return {
-      id: concept.id,
-      x: 400 + Math.cos(angle) * radius,
-      y: 260 + Math.sin(angle) * Math.min(radius, 190),
-      r: Math.min(13, 7 + (degree.get(concept.id) ?? 0)),
-      label: concept.displayName,
-      tone: (degree.get(concept.id) ?? 0) > 1 ? "bright" : "muted",
-    };
-  });
-  const byId = new Map(graphNodes.map((node) => [node.id, node]));
+    return new Map(
+      layoutGraph({
+        nodes: concepts.map((concept) => ({
+          id: concept.id,
+          degree: counts.get(concept.id) ?? 0,
+        })),
+        edges: graphEdges.map((edge) => ({
+          source: edge.sourceConceptId,
+          target: edge.targetConceptId,
+        })),
+      }).map((node) => [node.id, node] as const),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the graph's identity; concepts/edges are rebuilt render
+  }, [signature]);
+
+  const positions =
+    dragged.signature === signature && dragged.nodes.size > 0
+      ? new Map([...settled, ...dragged.nodes])
+      : settled;
+
+  function moveNode(id: string, event: ReactPointerEvent<SVGGElement>) {
+    const svg = stage.current;
+    if (!svg) return;
+    const bounds = svg.getBoundingClientRect();
+    const viewBoxWidth = DEFAULT_LAYOUT_OPTIONS.width;
+    const viewBoxHeight = DEFAULT_LAYOUT_OPTIONS.height;
+    const x = ((event.clientX - bounds.left) / bounds.width) * viewBoxWidth;
+    const y = ((event.clientY - bounds.top) / bounds.height) * viewBoxHeight;
+    const node = positions.get(id);
+    if (!node) return;
+    setDragged((current) => {
+      const nodes: Map<string, LayoutNode> =
+        current.signature === signature
+          ? new Map(current.nodes)
+          : new Map<string, LayoutNode>();
+      nodes.set(id, { ...node, x, y });
+      return { signature, nodes };
+    });
+  }
+
   return (
     <div className="graph-view">
       <div className="graph-heading">
@@ -423,11 +517,18 @@ function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
         </div>
       </div>
       <div className="graph-stage">
-        <svg aria-label="Knowledge graph" role="img" viewBox="0 0 800 520">
+        <svg
+          aria-label="Knowledge graph"
+          ref={stage}
+          role="img"
+          viewBox={`0 0 ${String(DEFAULT_LAYOUT_OPTIONS.width)} ${String(
+            DEFAULT_LAYOUT_OPTIONS.height,
+          )}`}
+        >
           <g className="graph-edge-layer">
             {graphEdges.map((edge) => {
-              const source = byId.get(edge.sourceConceptId);
-              const target = byId.get(edge.targetConceptId);
+              const source = positions.get(edge.sourceConceptId);
+              const target = positions.get(edge.targetConceptId);
               if (!source || !target) return null;
               return (
                 <line
@@ -441,14 +542,48 @@ function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
             })}
           </g>
           <g className="graph-node-layer">
-            {graphNodes.map((node) => (
-              <g className={`graph-node graph-node-${node.tone}`} key={node.id}>
-                <circle cx={node.x} cy={node.y} r={node.r} />
-                <text textAnchor="middle" x={node.x} y={node.y + node.r + 21}>
-                  {node.label}
-                </text>
-              </g>
-            ))}
+            {concepts.map((concept) => {
+              const node = positions.get(concept.id);
+              if (!node) return null;
+              const connections = degree.get(concept.id) ?? 0;
+              const tone =
+                connections >= Math.max(2, maxDegree * 0.6)
+                  ? "hub"
+                  : connections > 0
+                    ? "linked"
+                    : "isolated";
+              return (
+                <g
+                  className={`graph-node graph-node-${tone}${
+                    dragging === concept.id ? " graph-node-dragging" : ""
+                  }`}
+                  key={concept.id}
+                  onPointerDown={(event) => {
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setDragging(concept.id);
+                  }}
+                  onPointerMove={(event) => {
+                    if (dragging === concept.id) moveNode(concept.id, event);
+                  }}
+                  onPointerUp={(event) => {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                    setDragging(null);
+                  }}
+                >
+                  <title>{`${concept.displayName} — ${String(connections)} ${
+                    connections === 1 ? "link" : "links"
+                  }`}</title>
+                  <circle cx={node.x} cy={node.y} r={node.radius} />
+                  <text
+                    textAnchor="middle"
+                    x={node.x}
+                    y={node.y + node.radius + 17}
+                  >
+                    {concept.displayName}
+                  </text>
+                </g>
+              );
+            })}
           </g>
         </svg>
         {concepts.length === 0 ? (
@@ -458,12 +593,16 @@ function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
         ) : null}
         <div className="graph-legend">
           <span>
-            <i className="legend-dot legend-dot-focus" />
-            Current focus
+            <i className="legend-dot legend-dot-hub" />
+            Hub
+          </span>
+          <span>
+            <i className="legend-dot legend-dot-linked" />
+            Connected
           </span>
           <span>
             <i className="legend-dot" />
-            Concept
+            Standalone
           </span>
         </div>
       </div>
@@ -1540,7 +1679,9 @@ function RetrieveSurface({
       <div
         className="retrieve-workspace"
         style={{
-          gridTemplateColumns: `${explorerColumn} minmax(320px, 1fr) ${assistantColumn}`,
+          gridTemplateColumns: `${explorerColumn} ${
+            explorer.collapsed ? "0px" : "3px"
+          } minmax(320px, 1fr) ${assistant.collapsed ? "0px" : "3px"} ${assistantColumn}`,
         }}
       >
         <Pane
@@ -1583,6 +1724,15 @@ function RetrieveSurface({
             vaultName={vaultName}
           />
         </Pane>
+        <PaneDivider
+          collapsed={explorer.collapsed}
+          label="Resize Explorer"
+          onResize={(delta) => {
+            onLayoutChange(
+              resizePane(layout, "explorer", explorer.width + delta),
+            );
+          }}
+        />
         <Pane aria-label="Knowledge canvas" className="canvas-region">
           {librarian ? (
             <div className="librarian-report" role="status">
@@ -1696,6 +1846,15 @@ function RetrieveSurface({
             </div>
           )}
         </Pane>
+        <PaneDivider
+          collapsed={assistant.collapsed}
+          label="Resize Assistant"
+          onResize={(delta) => {
+            onLayoutChange(
+              resizePane(layout, "assistant", assistant.width - delta),
+            );
+          }}
+        />
         <Pane
           aria-label="Assistant"
           className="assistant-region"
