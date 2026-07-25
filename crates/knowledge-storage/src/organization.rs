@@ -92,6 +92,21 @@ impl KnowledgeStore {
         })
     }
 
+    /// Lists the display names of the most recently pinned facets — the user's
+    /// own corrections. Feeding these back into the Main model's prompt is what
+    /// lets later captures follow how the user actually files things (KOS-051).
+    pub fn recent_pinned_facets(&self, limit: u32) -> Result<Vec<String>, StorageError> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT f.display_name FROM facet_memberships m
+             JOIN facets f ON f.id = m.facet_id
+             WHERE m.pinned = 1
+             ORDER BY m.rowid DESC LIMIT ?",
+        )?;
+        let rows = statement.query_map([limit], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
     /// Restores the exact membership snapshot from before an organization audit entry.
     pub fn undo_organization(&self, audit_id: &str) -> Result<(), StorageError> {
         let mut connection = self.lock()?;
