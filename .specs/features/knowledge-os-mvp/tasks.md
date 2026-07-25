@@ -20,6 +20,7 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 | T16 | `knowledge-storage` 21/21 integration tests; `make test-full` passed including 19/19 desktop E2E | ✅ Complete |
 | T17 | vault journal/trash 14/14 fault tests and Clippy passed | ✅ Complete |
 | T18 | deterministic normalization/chunk/render 19/19 tests and Clippy passed | ✅ Complete |
+| T19 | bounded graph/backlinks 10/10 integration tests plus repository edge tests passed | ✅ Complete |
 
 ### Batch 1 / Phase 1 — Complete, independently verified, uncommitted
 
