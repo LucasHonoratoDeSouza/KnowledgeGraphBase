@@ -1,0 +1,10 @@
+[project]
+name = "knowledge-os-worker"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = []
+
+[build-system]
+requires = ["uv_build==0.11.31"]
+build-backend = "uv_build"
+

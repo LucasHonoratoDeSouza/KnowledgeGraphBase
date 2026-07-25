@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-document-open"
+description = "Enables the document_open command without any pre-configured scope."
+commands.allow = ["document_open"]
+
+[[permission]]
+identifier = "deny-document-open"
+description = "Denies the document_open command without any pre-configured scope."
+commands.deny = ["document_open"]

@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://knowledge-os.dev/schemas/knowledge.schema.json",
+  "title": "KnowledgeBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "document", "concepts", "edges", "chunks"],
+  "properties": {
+    "source": { "$ref": "source.schema.json#/$defs/SourceRecord" },
+    "document": { "$ref": "#/$defs/Document" },
+    "concepts": { "type": "array", "items": { "$ref": "#/$defs/Concept" } },
+    "edges": { "type": "array", "items": { "$ref": "#/$defs/KnowledgeEdge" } },
+    "chunks": { "type": "array", "items": { "$ref": "#/$defs/Chunk" } }
+  },
+  "$defs": {
+    "Document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source_id",
+        "revision",
+        "markdown_path",
+        "title",
+        "summary",
+        "language",
+        "pipeline_version",
+        "prompt_version",
+        "model_version"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "source_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "markdown_path": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "title": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "summary": { "type": "string" },
+        "language": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "pipeline_version": {
+          "$ref": "common.schema.json#/$defs/VersionString"
+        },
+        "prompt_version": { "$ref": "common.schema.json#/$defs/VersionString" },
+        "model_version": { "$ref": "common.schema.json#/$defs/VersionString" }
+      }
+    },
+    "Concept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "normalized_name", "slug"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "name": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "normalized_name": {
+          "$ref": "common.schema.json#/$defs/NonEmptyString"
+        },
+        "slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "description": { "type": "string" }
+      }
+    },
+    "KnowledgeEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source_concept_id",
+        "target_concept_id",
+        "relation",
+        "confidence",
+        "origin_document_id"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "source_concept_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "target_concept_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "relation": {
+          "enum": [
+            "RELATED_TO",
+            "IS_A",
+            "PART_OF",
+            "USES",
+            "REQUIRES",
+            "APPLIED_TO"
+          ]
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "origin_document_id": { "$ref": "common.schema.json#/$defs/EntityId" }
+      }
+    },
+    "Chunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "document_id",
+        "position",
+        "text",
+        "token_count",
+        "content_hash",
+        "source_locator"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "document_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "position": { "type": "integer", "minimum": 0 },
+        "heading": { "type": "string" },
+        "text": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "token_count": { "type": "integer", "minimum": 1 },
+        "content_hash": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "source_locator": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "page", "chunk"],
+              "properties": {
+                "kind": { "const": "pdf" },
+                "page": { "type": "integer", "minimum": 1 },
+                "chunk": { "type": "integer", "minimum": 0 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "timestamp_seconds", "segment"],
+              "properties": {
+                "kind": { "const": "youtube" },
+                "timestamp_seconds": { "type": "number", "minimum": 0 },
+                "segment": { "type": "integer", "minimum": 0 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "url", "section", "retrieved_at"],
+              "properties": {
+                "kind": { "const": "web" },
+                "url": { "type": "string", "format": "uri" },
+                "section": {
+                  "$ref": "common.schema.json#/$defs/NonEmptyString"
+                },
+                "retrieved_at": {
+                  "$ref": "common.schema.json#/$defs/IsoDateTime"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "section"],
+              "properties": {
+                "kind": { "enum": ["text", "markdown", "note"] },
+                "section": {
+                  "$ref": "common.schema.json#/$defs/NonEmptyString"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

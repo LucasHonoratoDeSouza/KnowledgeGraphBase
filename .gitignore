@@ -1,0 +1,32 @@
+# JavaScript
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+artifacts/
+
+# Rust
+target/
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.py[cod]
+
+# Desktop and local runtime state
+.knowledge-os/
+**/src-tauri/gen/
+
+# Environment and editor-local files
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

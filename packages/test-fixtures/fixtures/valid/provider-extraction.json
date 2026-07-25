@@ -1,0 +1,22 @@
+{
+  "fixture_version": 1,
+  "kind": "provider",
+  "case": "provider-extraction",
+  "payload": {
+    "operation": "extract.standard",
+    "model": "fixture-model-v1",
+    "usage": { "input_tokens": 320, "output_tokens": 96, "cache_hit": false },
+    "response": {
+      "summary": "Knowledge graphs improve grounded retrieval.",
+      "concepts": ["Knowledge graphs", "Retrieval"],
+      "relationships": [
+        {
+          "source": "Knowledge graphs",
+          "relation": "USES",
+          "target": "Retrieval"
+        }
+      ],
+      "notes": ["Prefer deterministic retrieval before generation."]
+    }
+  }
+}

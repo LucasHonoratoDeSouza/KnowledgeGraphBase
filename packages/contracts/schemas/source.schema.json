@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://knowledge-os.dev/schemas/source.schema.json",
+  "title": "CaptureInput",
+  "oneOf": [
+    { "$ref": "#/$defs/YouTubeInput" },
+    { "$ref": "#/$defs/PdfInput" },
+    { "$ref": "#/$defs/WebInput" },
+    { "$ref": "#/$defs/TextInput" },
+    { "$ref": "#/$defs/MarkdownInput" },
+    { "$ref": "#/$defs/NoteInput" }
+  ],
+  "$defs": {
+    "ProcessingMode": {
+      "enum": ["quick", "standard", "deep"]
+    },
+    "YouTubeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "url"],
+      "properties": {
+        "kind": { "const": "youtube" },
+        "url": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "mode": { "$ref": "#/$defs/ProcessingMode" }
+      }
+    },
+    "PdfInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": { "const": "pdf" },
+        "path": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "mode": { "$ref": "#/$defs/ProcessingMode" }
+      }
+    },
+    "WebInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "url"],
+      "properties": {
+        "kind": { "const": "web" },
+        "url": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "mode": { "$ref": "#/$defs/ProcessingMode" }
+      }
+    },
+    "TextInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "content"],
+      "properties": {
+        "kind": { "const": "text" },
+        "content": { "type": "string", "minLength": 1, "maxLength": 20971520 },
+        "title": { "type": "string", "minLength": 1 },
+        "mode": { "$ref": "#/$defs/ProcessingMode" }
+      }
+    },
+    "MarkdownInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": { "const": "markdown" },
+        "path": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "mode": { "$ref": "#/$defs/ProcessingMode" }
+      }
+    },
+    "NoteInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "content", "title"],
+      "properties": {
+        "kind": { "const": "note" },
+        "content": { "type": "string", "minLength": 1, "maxLength": 20971520 },
+        "title": { "type": "string", "minLength": 1 },
+        "mode": { "$ref": "#/$defs/ProcessingMode" }
+      }
+    },
+    "SourceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "original_location",
+        "status",
+        "current_revision",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "kind": {
+          "enum": ["youtube", "pdf", "web", "text", "markdown", "note"]
+        },
+        "original_location": {
+          "$ref": "common.schema.json#/$defs/NonEmptyString"
+        },
+        "status": {
+          "enum": [
+            "PENDING",
+            "FETCHING",
+            "EXTRACTING",
+            "PROCESSING",
+            "INDEXING",
+            "COMPLETED",
+            "FAILED",
+            "CANCELLED"
+          ]
+        },
+        "current_revision": { "type": "integer", "minimum": 1 },
+        "created_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" },
+        "updated_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" }
+      }
+    }
+  }
+}

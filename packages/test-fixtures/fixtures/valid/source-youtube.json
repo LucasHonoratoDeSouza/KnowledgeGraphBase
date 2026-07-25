@@ -1,0 +1,12 @@
+{
+  "fixture_version": 1,
+  "kind": "source",
+  "case": "source-youtube",
+  "payload": {
+    "source_kind": "youtube",
+    "title": "Graph retrieval lecture",
+    "normalized_text": "A transcript-first fixture with timestamp provenance.",
+    "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "locator": { "timestamp_seconds": 42, "segment": 2 }
+  }
+}

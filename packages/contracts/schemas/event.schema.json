@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://knowledge-os.dev/schemas/event.schema.json",
+  "title": "KnowledgeEvent",
+  "oneOf": [
+    { "$ref": "#/$defs/JobProgress" },
+    { "$ref": "#/$defs/JobCompleted" },
+    { "$ref": "#/$defs/JobFailed" },
+    { "$ref": "#/$defs/DocumentChanged" },
+    { "$ref": "#/$defs/IndexUpdated" },
+    { "$ref": "#/$defs/AssistantRetrieval" },
+    { "$ref": "#/$defs/AssistantCompleted" },
+    { "$ref": "#/$defs/AssistantFailed" }
+  ],
+  "$defs": {
+    "JobState": {
+      "enum": [
+        "PENDING",
+        "FETCHING",
+        "EXTRACTING",
+        "PROCESSING",
+        "INDEXING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED"
+      ]
+    },
+    "JobProgress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "operation_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event": { "const": "job.progress" },
+        "operation_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "occurred_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id", "state", "progress"],
+          "properties": {
+            "source_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+            "state": { "$ref": "#/$defs/JobState" },
+            "progress": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    },
+    "JobCompleted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "operation_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event": { "const": "job.completed" },
+        "operation_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "occurred_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id", "document_id"],
+          "properties": {
+            "source_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+            "document_id": { "$ref": "common.schema.json#/$defs/EntityId" }
+          }
+        }
+      }
+    },
+    "JobFailed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "operation_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event": { "const": "job.failed" },
+        "operation_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "occurred_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id", "error"],
+          "properties": {
+            "source_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+            "error": { "$ref": "error.schema.json" }
+          }
+        }
+      }
+    },
+    "DocumentChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "operation_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event": { "const": "document.changed" },
+        "operation_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "occurred_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["document_id", "revision"],
+          "properties": {
+            "document_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+            "revision": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "IndexUpdated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "operation_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event": { "const": "index.updated" },
+        "operation_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "occurred_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["document_id", "index_version"],
+          "properties": {
+            "document_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+            "index_version": {
+              "$ref": "common.schema.json#/$defs/VersionString"
+            }
+          }
+        }
+      }
+    },
+    "AssistantRetrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "operation_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event": { "const": "assistant.retrieval" },
+        "operation_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "occurred_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["query_id", "result_count"],
+          "properties": {
+            "query_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+            "result_count": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "AssistantCompleted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "operation_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event": { "const": "assistant.completed" },
+        "operation_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "occurred_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["query_id", "answer_id", "citation_count"],
+          "properties": {
+            "query_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+            "answer_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+            "citation_count": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "AssistantFailed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "operation_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event": { "const": "assistant.failed" },
+        "operation_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "occurred_at": { "$ref": "common.schema.json#/$defs/IsoDateTime" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["query_id", "error"],
+          "properties": {
+            "query_id": { "$ref": "common.schema.json#/$defs/EntityId" },
+            "error": { "$ref": "error.schema.json" }
+          }
+        }
+      }
+    }
+  }
+}

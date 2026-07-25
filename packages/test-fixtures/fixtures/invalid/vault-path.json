@@ -1,0 +1,11 @@
+{
+  "fixture_version": 1,
+  "kind": "vault",
+  "case": "invalid-vault-path",
+  "payload": {
+    "workspace_id": "018f47a7-7f4a-7d2c-a1b2-123456789abc",
+    "markdown_path": "../outside.md",
+    "frontmatter": { "title": "Escaped note" },
+    "wiki_links": []
+  }
+}

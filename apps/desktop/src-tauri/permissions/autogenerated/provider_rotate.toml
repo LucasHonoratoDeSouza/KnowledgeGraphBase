@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-provider-rotate"
+description = "Enables the provider_rotate command without any pre-configured scope."
+commands.allow = ["provider_rotate"]
+
+[[permission]]
+identifier = "deny-provider-rotate"
+description = "Denies the provider_rotate command without any pre-configured scope."
+commands.deny = ["provider_rotate"]

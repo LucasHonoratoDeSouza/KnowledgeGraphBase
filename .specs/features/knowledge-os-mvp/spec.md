@@ -2,7 +2,7 @@
 
 **Source of truth:** `knowledge-os-system-design.md`
 
-**Status:** Draft — awaiting owner confirmation
+**Status:** Approved from owner usage narrative on 2026-07-24
 
 **Scope:** Complex, multi-component product
 
@@ -25,6 +25,7 @@ Knowledge workers accumulate videos, PDFs, web pages and notes in disconnected p
 | Quizzes, spaced repetition and automatic learning paths | Explicitly excluded from the capture→structure→connect→retrieve loop |
 | Contradiction detection and personal knowledge scoring | Deferred product layer |
 | Autonomous or multi-agent product workflows | Explicitly excluded from the MVP |
+| Assistant tools that edit/delete files or autonomously research/act | Deferred agentic layer; the MVP assistant is read-only over retrieved knowledge |
 | Mandatory cloud account or cloud dependency | Conflicts with local-first operation |
 | Live production cluster, paid cloud resources and DNS | Require owner credentials, budget and environment choices; repository will contain validated IaC/templates only |
 | Production code-signing/notarization | Requires owner-held platform certificates; CI will expose explicit credential gates |
@@ -38,19 +39,21 @@ Every ambiguity is resolved to a documented default. Approving this specificatio
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --- | --- | --- | --- |
-| Meaning of “implement the document completely” | Implement Milestones 1–7; future-only cloud/Kubernetes/GitOps items become buildable, validated repository artifacts rather than a live deployment | Matches the document's MVP/future boundary and is locally verifiable | No |
-| User model | Single-user, one local vault per workspace; no login is required for local use | No identity UX is specified and local-first is primary | No |
-| Remote backend | Functional optional FastAPI modular monolith and worker boundaries; desktop core never depends on them | Preserves the specified repository/production architecture without violating offline use | No |
-| AI provider | Provider-neutral contract, one OpenAI-compatible HTTP adapter, and a deterministic fake provider for tests | Avoids vendor lock-in and makes the system testable without secrets | No |
-| AI processing modes | Quick and Standard are complete MVP behaviors; Deep is an explicit, user-triggered extension point and never runs silently | The document defines Deep as potential behavior rather than a closed feature set | No |
-| Semantic search | Optional, locally feature-flagged augmentation; lexical/concept/graph retrieval always works without it | Embeddings are explicitly an augmentation, not a prerequisite | No |
-| Source limits | URL ≤ 2,048 characters; pasted text/Markdown ≤ 20 MiB; PDF ≤ 250 MiB; larger input is rejected before processing with a typed error | Provides deterministic validation and protects desktop resources | No |
-| Network retry policy | Connect/read timeout of 30 seconds, at most 3 attempts with bounded exponential backoff; retries reuse the same idempotency key | Gives precise failure behavior without duplicate cost | No |
-| Processing concurrency | At most 2 ingestion jobs per workspace and one AI extraction per source/version tuple | Bounds local resource use and duplicate inference | No |
-| Deletion/lifecycle | No automatic expiry; explicit source deletion removes derived indexes/edges in one transaction and moves owned files to a recoverable trash location | User owns the data and accidental loss must be recoverable | No |
-| Supported validation host | Linux is the local development host; Windows and macOS are validated through CI build jobs | Cross-platform signing/runtime access is not available in this workspace | No |
-| Git governance | `main` is production-only; `dev` is integration; implementation uses task commits on `dev` (or short-lived `agent/*` branches when PRs are needed); only the owner merges/promotes to `main` | Enforces the requested ownership boundary | No |
-| Visual implementation | Dense dark-first desktop UI, restrained neutral palette, resizable panes, keyboard-first controls and no generic dashboard cards | Directly reflects the visual direction in the design | No |
+| Meaning of “implement the document completely” | Implement Milestones 1–7; future-only cloud/Kubernetes/GitOps items become buildable, validated repository artifacts rather than a live deployment | Matches the document's MVP/future boundary and is locally verifiable | Yes |
+| User model | Single-user, one local vault per workspace; no login is required for local use | No identity UX is specified and local-first is primary | Yes |
+| Remote backend | Functional optional FastAPI modular monolith and worker boundaries; desktop core never depends on them | Preserves the specified repository/production architecture without violating offline use | Yes |
+| AI provider | Provider-neutral contract, an interchangeable model gateway selected in Design, and a deterministic fake provider for tests | Avoids vendor lock-in and makes the system testable without secrets | Yes |
+| AI processing modes | Quick and Standard are complete MVP behaviors; Deep is an explicit, user-triggered extension point and never runs silently | The document defines Deep as potential behavior rather than a closed feature set | Yes |
+| Semantic search | Optional, locally feature-flagged augmentation; lexical/concept/graph retrieval always works without it | Embeddings are explicitly an augmentation, not a prerequisite | Yes |
+| Source limits | URL ≤ 2,048 characters; pasted text/Markdown ≤ 20 MiB; PDF ≤ 250 MiB; larger input is rejected before processing with a typed error | Provides deterministic validation and protects desktop resources | Yes |
+| Network retry policy | Connect/read timeout of 30 seconds, at most 3 attempts with bounded exponential backoff; retries reuse the same idempotency key | Gives precise failure behavior without duplicate cost | Yes |
+| Processing concurrency | At most 2 ingestion jobs per workspace and one AI extraction per source/version tuple | Bounds local resource use and duplicate inference | Yes |
+| Deletion/lifecycle | No automatic expiry; explicit source deletion removes derived indexes/edges in one transaction and moves owned files to a recoverable trash location | User owns the data and accidental loss must be recoverable | Yes |
+| Supported validation host | Linux is the local development host; Windows and macOS are validated through CI build jobs | Cross-platform signing/runtime access is not available in this workspace | Yes |
+| Git governance | `main` is production-only; `dev` is integration; implementation remains uncommitted for owner review, then uses owner-approved task commits; only the owner promotes to `main` | Enforces the requested ownership and pre-commit review boundary | Yes |
+| Visual implementation | Dense dark-first desktop UI, restrained neutral palette, resizable panes, keyboard-first controls and no generic dashboard cards | Directly reflects the visual direction in the design | Yes |
+| Primary product modes | Top-level `Ingest` and `Retrieve` modes | Uses standard AI/RAG vocabulary and separates frictionless capture from knowledge work | Yes |
+| First-run setup | Configure vault, optional AI endpoint/credentials, allowed models and budgets; cloud account remains optional for local use | Makes provider/cost choices explicit without violating local-first | Yes |
 
 **Open questions:** none — all current ambiguities are logged as defaults above; owner approval confirms or replaces them.
 
@@ -69,8 +72,18 @@ Every ambiguity is resolved to a documented default. Approving this specificatio
 3. **KOS-003** — WHEN the user invokes `Ctrl/Cmd+K` THEN the command palette SHALL expose the commands named in the source design and execute them by keyboard.
 4. **KOS-004** — WHEN panes or tabs are resized, split, pinned or restored THEN workspace state SHALL persist locally and restore on the next launch.
 5. **KOS-005** — WHEN the remote API or AI provider is unavailable THEN notes, editing, lexical search, backlinks and graph navigation SHALL remain usable.
+6. **KOS-054** — WHEN setup is complete THEN the top-level product switch SHALL expose exactly the primary modes `Ingest` and `Retrieve`, preserve the active mode and remain keyboard accessible.
+7. **KOS-055** — WHEN `Ingest` is active THEN the primary surface SHALL present one focused composer accepting URL, pasted text and drag/drop files, with processing progress/results that do not turn the screen into a dashboard.
+8. **KOS-056** — WHEN `Retrieve` is active THEN the workspace SHALL show a resizable/collapsible Explorer on the left, a tabbed Markdown/graph/PDF/transcript canvas in the center and a persistent assistant on the right; pane sizes and open content SHALL restore after restart.
+9. **KOS-057** — WHEN the MVP assistant is used THEN it SHALL allow questions and selection among policy-allowed models but SHALL expose no file-write/delete or autonomous research/action tools.
+10. **KOS-058** — WHEN the application launches without completed setup THEN it SHALL collect a vault path, local-only or AI endpoint choice, protected credentials when applicable, default model policy and cost budgets; declining cloud/account setup SHALL still open local mode.
+11. **KOS-059** — WHEN the user opens Settings THEN a dedicated AI configuration area SHALL separate provider connections, configured models, task assignments, budgets/usage and privacy controls in a navigable and accessible layout.
+12. **KOS-060** — WHEN the user adds OpenAI, Anthropic, DeepSeek or another supported provider THEN each provider SHALL keep its own Stronghold-backed credential reference and SHALL support masked status, connection testing, key rotation and removal without ever returning stored plaintext to the renderer or logs.
+13. **KOS-061** — WHEN AI organization is enabled THEN exactly one eligible configured model SHALL be assigned the visible `Main` role for extraction, categorization and organization; it SHALL remain the default for those tasks unless an explicit fallback is configured, and every invocation SHALL still fail closed at capability or budget limits.
+14. **KOS-062** — WHEN the user selects a model in the assistant THEN only configured, healthy and policy-allowed models SHALL be offered, the choice SHALL persist for that conversation and each answer SHALL identify the model actually used.
+15. **KOS-063** — WHEN a new user chooses `Continue without account` and `Create local knowledge base` THEN the application SHALL create a named vault directory at an explicitly selected parent location, initialize its local metadata/structure and open it without a network request, cloud account or provider credential; opening an existing local vault SHALL remain available and invalid/colliding targets SHALL fail without partial creation.
 
-**Independent Test:** Launch against a temporary vault with networking disabled; create/edit a note, split a pane, search it, follow a backlink, restart and verify workspace restoration.
+**Independent Test:** While all network access is disabled, continue without an account, create a named local vault under an approved temporary parent, verify its initialized folder/metadata structure and collision cleanup, then switch between Ingest/Retrieve, use the composer, inspect the three-pane workspace/read-only assistant, add separate fake OpenAI/Anthropic/DeepSeek credentials in Settings, rotate/remove one without plaintext disclosure, assign one configured model as `Main`, choose another allowed assistant model, create/edit a note, restart offline and verify settings, model roles, conversation choice, mode and layout restoration.
 
 ### P1: Source Capture and Deterministic Ingestion ⭐ MVP
 
@@ -117,6 +130,21 @@ Every ambiguity is resolved to a documented default. Approving this specificatio
 5. **KOS-024** — WHEN the retrieval index contains 10,000 representative documents THEN the repository benchmark SHALL demonstrate local lexical search within the documented performance budget agreed in Design.
 
 **Independent Test:** Seed the benchmark/fixture vault, execute exact, quoted, natural-language and graph queries with AI disabled, and verify ranking, references, fallback and call counts.
+
+### P1: Adaptive Personal Organization ⭐ MVP
+
+**User Story:** As a researcher and AI engineer, I want videos, meeting summaries, books, papers and project material to organize themselves without a rigid filing hierarchy so that the library becomes more useful as it grows.
+
+**Acceptance Criteria:**
+
+1. **KOS-048** — WHEN content is ingested THEN it SHALL support simultaneous membership in projects, areas, source types, concepts and user-defined tags instead of requiring one exclusive folder.
+2. **KOS-049** — WHEN extracted concepts overlap existing knowledge THEN local entity resolution and bounded similarity SHALL propose/reuse canonical concepts and create traceable links without sending the whole vault to a model.
+3. **KOS-050** — WHEN organization confidence is above the approved threshold THEN filing SHALL apply automatically with an undoable audit record; below it, the item SHALL remain usable in Inbox with review suggestions.
+4. **KOS-051** — WHEN the user corrects a category, alias, project or relationship THEN the correction SHALL persist, reindex only affected records and take precedence in later deterministic resolution.
+5. **KOS-052** — WHEN the user searches or asks a question THEN they SHALL be able to scope retrieval by any combination of project, area, source type, concept and time range, or search the whole vault.
+6. **KOS-053** — WHEN an AI task is dispatched THEN a configurable policy SHALL select an allowed model by capability, current price ceiling and task budget; changing providers/models SHALL not change domain or retrieval code.
+
+**Independent Test:** Ingest linked fixtures from YouTube, a meeting summary and a paper into overlapping projects; verify multi-facet placement, canonical reuse, correction precedence, scoped RAG and model-policy selection.
 
 ### P1: Token-Efficient, Traceable AI ⭐ MVP
 
@@ -210,20 +238,24 @@ Additional edge cases:
 
 | Requirement range | Story / subsystem | Design | Tasks | Status |
 | --- | --- | --- | --- | --- |
-| KOS-001…005 | Desktop workspace and offline core | Pending | Unmapped | Pending |
-| KOS-006…013 | Capture and ingestion | Pending | Unmapped | Pending |
-| KOS-014…019 | Knowledge model and graph | Pending | Unmapped | Pending |
-| KOS-020…024 | Retrieval and graph exploration | Pending | Unmapped | Pending |
-| KOS-025…030 | AI extraction, cache and cost | Pending | Unmapped | Pending |
-| KOS-031…035 | Grounded assistant | Pending | Unmapped | Pending |
-| KOS-036…039 | Optional backend/workflows | Pending | Unmapped | Pending |
-| KOS-040…047 | Production engineering | Pending | Unmapped | Pending |
+| KOS-001…005 | Desktop workspace and offline core | Approved | T04, T06, T09–T14, T31 | In Tasks |
+| KOS-006…013 | Capture and ingestion | Approved | T02, T22–T28 | In Tasks |
+| KOS-014…019 | Knowledge model and graph | Approved | T03, T15–T21, T35 | In Tasks |
+| KOS-020…024 | Retrieval and graph exploration | Approved | T06, T19, T21, T36–T41 | In Tasks |
+| KOS-048…053 | Adaptive organization and model routing | Approved | T20–T21, T30, T33–T35, T38, T41–T42 | In Tasks |
+| KOS-025…030 | AI extraction, cache and cost | Approved | T29–T35, T52 | In Tasks |
+| KOS-031…035 | Grounded assistant | Approved | T38–T42 | In Tasks |
+| KOS-036…039 | Optional backend/workflows | Approved | T05, T43–T49 | In Tasks |
+| KOS-040…047 | Production engineering | Approved | T01, T07, T12, T17, T50–T58 | In Tasks |
+| KOS-054…058 | Ingest/Retrieve UX, read-only agent and onboarding | Approved | T09–T12, T14, T23, T41–T42 | In Tasks |
+| KOS-059…062 | AI settings, provider secrets and model roles | Approved | T12, T14, T30–T31, T34–T35, T42 | In Tasks |
+| KOS-063 | Accountless local-vault creation/opening | Approved | T12, T14 | In Tasks |
 
-**Coverage:** 47 requirements total, 0 mapped to tasks, 47 pending Design.
+**Coverage:** 63 requirements total, 63 mapped to tasks, 0 unmapped.
 
 ## Success Criteria
 
-- [ ] All 47 requirements have passing automated evidence or an explicitly documented owner-only external gate.
+- [ ] All 63 requirements have passing automated evidence or an explicitly documented owner-only external gate.
 - [ ] A new user can capture each supported source, obtain traceable Markdown, navigate the resulting graph and recover it through local search.
 - [ ] A grounded assistant answer uses no router call, at most one answer call and resolvable citations; unsupported questions produce no fabricated evidence.
 - [ ] Offline loss of every optional service leaves the local core usable.

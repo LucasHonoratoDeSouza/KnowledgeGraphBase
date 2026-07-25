@@ -1,0 +1,12 @@
+{
+  "fixture_version": 1,
+  "kind": "source",
+  "case": "source-markdown",
+  "payload": {
+    "source_kind": "markdown",
+    "title": "Existing note",
+    "normalized_text": "A Markdown fixture preserving [[Knowledge graphs]].",
+    "content_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "locator": { "section": "Connections" }
+  }
+}

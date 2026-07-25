@@ -1,0 +1,15 @@
+{
+  "fixture_version": 1,
+  "kind": "source",
+  "case": "source-web",
+  "payload": {
+    "source_kind": "web",
+    "title": "Local-first article",
+    "normalized_text": "A sanitized webpage fixture without executable content.",
+    "content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "locator": {
+      "url": "https://example.com/local-first",
+      "section": "Storage"
+    }
+  }
+}
