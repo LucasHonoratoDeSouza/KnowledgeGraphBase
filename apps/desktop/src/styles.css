@@ -33,6 +33,14 @@
   --radius: 5px;
   --radius-lg: 8px;
   --shadow-lg: 0 12px 36px rgb(0 0 0 / 36%);
+
+  /* Motion — short, native-feeling timings; see the Motion section below. */
+  --motion-instant: 70ms;
+  --motion-fast: 110ms;
+  --motion-base: 170ms;
+  --motion-slow: 240ms;
+  --ease-standard: cubic-bezier(0.32, 0.08, 0.24, 1);
+  --ease-out: cubic-bezier(0.16, 0.84, 0.44, 1);
 }
 
 * {
@@ -748,6 +756,7 @@ input[readonly] {
 }
 
 .canvas-tabs button {
+  position: relative;
   display: flex;
   min-width: 0;
   align-items: center;
@@ -761,12 +770,11 @@ input[readonly] {
 }
 
 .canvas-tabs button[aria-selected="true"] {
-  position: relative;
   color: var(--text);
   background: #181a20;
 }
 
-.canvas-tabs button[aria-selected="true"]::after {
+.canvas-tabs button::after {
   position: absolute;
   right: 0;
   bottom: -1px;
@@ -774,6 +782,12 @@ input[readonly] {
   height: 2px;
   content: "";
   background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.canvas-tabs button[aria-selected="true"]::after {
+  transform: scaleX(1);
 }
 
 .canvas-tabbar .new-tab-button {
@@ -2323,6 +2337,275 @@ input[readonly] {
   text-align: left;
 }
 
+/*
+ * Motion — restrained micro-interactions for a native desktop feel (AD-010).
+ * Rules: state changes ease instead of snapping, entrances are short and
+ * subtle, nothing loops decoratively, and everything collapses to an instant
+ * state change under `prefers-reduced-motion` (see the block at the end).
+ */
+
+@keyframes ko-surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ko-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ko-palette-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes ko-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ko-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Controls */
+
+.primary-button,
+.secondary-button,
+.text-button,
+.icon-text-button,
+.composer-select,
+.icon-button,
+.bare-icon-button,
+.danger-icon-button,
+.settings-button,
+.composer-submit,
+.mode-switch button,
+.canvas-tabs button,
+.canvas-tabbar .new-tab-button,
+.tab-close,
+.markdown-editor footer button,
+.path-picker button,
+.assistant-composer-footer button,
+.explorer-results button,
+.prompt-examples button,
+.command-palette [role="option"],
+.settings-navigation > a,
+.tree-row,
+.tree-file-button {
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-instant) var(--ease-standard);
+}
+
+.primary-button:active:not(:disabled),
+.secondary-button:active:not(:disabled),
+.icon-button:active:not(:disabled),
+.bare-icon-button:active:not(:disabled),
+.danger-icon-button:active:not(:disabled),
+.settings-button:active:not(:disabled),
+.icon-text-button:active:not(:disabled),
+.composer-select:active:not(:disabled),
+.markdown-editor footer button:active:not(:disabled),
+.path-picker button:active:not(:disabled),
+.save-settings-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.composer-submit:active:not(:disabled),
+.assistant-composer-footer button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.composer-submit,
+.assistant-composer-footer button {
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-instant) var(--ease-standard);
+}
+
+.composer-submit:hover:not(:disabled) {
+  background: #ded0ae;
+}
+
+.icon-text-button:hover,
+.composer-select:hover {
+  border-color: var(--border);
+}
+
+.tab-close:hover {
+  color: var(--text);
+}
+
+/* Fields */
+
+input,
+select,
+textarea {
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard);
+}
+
+input:hover:not([readonly]),
+select:hover,
+textarea:hover {
+  border-color: var(--border-bright);
+}
+
+.ingest-composer-shell,
+.assistant-composer,
+.explorer-search {
+  transition:
+    border-color var(--motion-base) var(--ease-standard),
+    background-color var(--motion-base) var(--ease-standard);
+}
+
+.ingest-composer-shell:focus-within,
+.assistant-composer:focus-within,
+.explorer-search:focus-within {
+  border-color: var(--accent);
+}
+
+/* Chrome, tabs and panes */
+
+.mode-switch button[aria-selected="true"] {
+  transition:
+    color var(--motion-base) var(--ease-out),
+    background-color var(--motion-base) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out);
+}
+
+.canvas-tabs button::after {
+  transition: transform var(--motion-base) var(--ease-out);
+}
+
+.workspace-status [data-status="offline"] > i {
+  animation: ko-pulse 2.4s var(--ease-standard) infinite;
+}
+
+/* Pane collapse/resize glides instead of jumping to the new track sizes. */
+.retrieve-workspace {
+  transition: grid-template-columns var(--motion-base) var(--ease-out);
+}
+
+/* Surface and panel entrances */
+
+.ingest-surface,
+.retrieve-shell,
+.settings-layout,
+.onboarding-form,
+.onboarding-story-copy {
+  animation: ko-surface-in var(--motion-slow) var(--ease-out) both;
+}
+
+.canvas-region > [role="tabpanel"],
+.assistant-answer,
+.explorer-results,
+.ingest-file-chip {
+  animation: ko-fade-in var(--motion-base) var(--ease-out) both;
+}
+
+.ingest-status {
+  animation: ko-status-in var(--motion-base) var(--ease-out) both;
+}
+
+.ingest-status-working {
+  animation:
+    ko-status-in var(--motion-base) var(--ease-out) both,
+    ko-pulse 1.6s var(--ease-standard) var(--motion-base) infinite;
+}
+
+.command-palette {
+  animation: ko-palette-in var(--motion-base) var(--ease-out) both;
+}
+
+.graph-node,
+.graph-edge-layer line {
+  animation: ko-fade-in var(--motion-slow) var(--ease-out) both;
+}
+
+.graph-node circle,
+.graph-node text {
+  transition:
+    fill var(--motion-base) var(--ease-standard),
+    stroke var(--motion-base) var(--ease-standard);
+}
+
+/* Cards and selectable rows */
+
+.choice-card,
+.processing-option,
+.provider-card,
+.configured-model-row,
+.toggle-row,
+.assistant-citation,
+.connection-pill,
+.prompt-examples span {
+  transition:
+    color var(--motion-base) var(--ease-standard),
+    border-color var(--motion-base) var(--ease-standard),
+    background-color var(--motion-base) var(--ease-standard);
+}
+
+.configured-model-row:hover,
+.assistant-citation:hover {
+  border-color: var(--border-bright);
+}
+
+.choice-card .choice-card-icon,
+.processing-option .processing-icon,
+.choice-indicator {
+  transition:
+    color var(--motion-base) var(--ease-standard),
+    border var(--motion-fast) var(--ease-out),
+    background-color var(--motion-base) var(--ease-standard);
+}
+
+.onboarding-progress i {
+  transition: width var(--motion-slow) var(--ease-out);
+}
+
 @media (max-width: 1050px) {
   .provider-grid,
   .routing-grid {
@@ -2370,9 +2653,27 @@ input[readonly] {
   *,
   *::before,
   *::after {
+    animation-delay: 0ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
+    transition-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .primary-button:active:not(:disabled),
+  .secondary-button:active:not(:disabled),
+  .icon-button:active:not(:disabled),
+  .bare-icon-button:active:not(:disabled),
+  .danger-icon-button:active:not(:disabled),
+  .settings-button:active:not(:disabled),
+  .icon-text-button:active:not(:disabled),
+  .composer-select:active:not(:disabled),
+  .markdown-editor footer button:active:not(:disabled),
+  .path-picker button:active:not(:disabled),
+  .save-settings-button:active:not(:disabled),
+  .composer-submit:active:not(:disabled),
+  .assistant-composer-footer button:active:not(:disabled) {
+    transform: none;
   }
 }
