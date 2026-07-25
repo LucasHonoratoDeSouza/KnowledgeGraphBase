@@ -1,20 +1,31 @@
 fn main() {
-    // WebKitGTK's DMA-BUF renderer crashes with "Could not create surfaceless
-    // EGL display: EGL_BAD_ALLOC" on several NVIDIA + Wayland setups. Software
-    // compositing still works there, so fail over to it unless the user (or
+    // WebKitGTK's hardware-accelerated DMA-BUF renderer aborts with "Could not
+    // create surfaceless EGL display: EGL_BAD_ALLOC" on several NVIDIA +
+    // Wayland setups, and even once that abort is avoided the WebProcess can
+    // still fail to composite anything, leaving a blank window. Both
+    // env vars fail over to the software path unless the user (or
     // packaging) already made an explicit choice. `std::env::set_var` is
-    // unsafe and this workspace forbids unsafe code, so the var is applied by
-    // re-executing this same binary with it set, which is a safe API.
+    // unsafe and this workspace forbids unsafe code, so the vars are applied
+    // by re-executing this same binary with them set, which is a safe API.
     #[cfg(target_os = "linux")]
-    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        use std::os::unix::process::CommandExt;
-        let current_exe =
-            std::env::current_exe().expect("the running binary has a resolvable path");
-        let error = std::process::Command::new(current_exe)
-            .args(std::env::args_os().skip(1))
-            .env("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
-            .exec();
-        panic!("failed to relaunch with a software WebKit renderer: {error}");
+    {
+        const RENDER_FAILOVER_VARS: [(&str, &str); 2] = [
+            ("WEBKIT_DISABLE_DMABUF_RENDERER", "1"),
+            ("WEBKIT_DISABLE_COMPOSITING_MODE", "1"),
+        ];
+        let missing = RENDER_FAILOVER_VARS
+            .iter()
+            .any(|(key, _)| std::env::var_os(key).is_none());
+        if missing {
+            use std::os::unix::process::CommandExt;
+            let current_exe =
+                std::env::current_exe().expect("the running binary has a resolvable path");
+            let error = std::process::Command::new(current_exe)
+                .args(std::env::args_os().skip(1))
+                .envs(RENDER_FAILOVER_VARS)
+                .exec();
+            panic!("failed to relaunch with a software WebKit renderer: {error}");
+        }
     }
     knowledge_os_desktop_lib::run();
 }
