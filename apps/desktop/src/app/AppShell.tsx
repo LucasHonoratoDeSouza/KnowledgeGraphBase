@@ -4,7 +4,9 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 import {
@@ -70,6 +72,7 @@ import {
   type AssistantAnswer,
   type GraphView,
   type KnowledgeClient,
+  type LibrarianOutcome,
   type LibraryEntry,
   type LibrarySnapshot,
   type RetrievalResult,
@@ -438,10 +441,36 @@ function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
 interface TreeState {
   activeFolder: string;
   collapsed: ReadonlySet<string>;
+  dropTarget: string | null;
+  onContextMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    entry: LibraryEntry,
+  ) => void;
+  onDropInto: (destination: string) => void;
+  onDragEnterFolder: (path: string | null) => void;
+  onDragStartEntry: (path: string) => void;
   onOpen: (path: string) => void;
   onSelectFolder: (path: string) => void;
   onToggleFolder: (path: string) => void;
   openNotePath: string;
+}
+
+/** Shared drag/menu wiring for one row, so every row kind behaves the same. */
+function rowHandlers(entry: LibraryEntry, tree: TreeState) {
+  return {
+    draggable: true,
+    onContextMenu: (event: ReactMouseEvent<HTMLElement>) => {
+      tree.onContextMenu(event, entry);
+    },
+    onDragStart: (event: ReactDragEvent<HTMLElement>) => {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", entry.path);
+      tree.onDragStartEntry(entry.path);
+    },
+    onDragEnd: () => {
+      tree.onDragEnterFolder(null);
+    },
+  };
 }
 
 function LibraryRows({
@@ -469,6 +498,7 @@ function LibraryRows({
                   tree.onOpen(entry.path);
                 }}
                 type="button"
+                {...rowHandlers(entry, tree)}
               >
                 <FileText
                   aria-hidden="true"
@@ -483,7 +513,7 @@ function LibraryRows({
         if (entry.kind === "attachment") {
           return (
             <li key={entry.path} role="treeitem">
-              <span className="tree-row">
+              <span className="tree-row" {...rowHandlers(entry, tree)}>
                 <File
                   aria-hidden="true"
                   className="tree-icon tree-icon-attachment"
@@ -499,12 +529,23 @@ function LibraryRows({
             <button
               className={`tree-row tree-folder-button${
                 entry.path === tree.activeFolder ? " tree-row-target" : ""
-              }`}
+              }${entry.path === tree.dropTarget ? " tree-row-drop" : ""}`}
               onClick={() => {
                 tree.onToggleFolder(entry.path);
                 tree.onSelectFolder(entry.path);
               }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                tree.onDragEnterFolder(entry.path);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                tree.onDropInto(entry.path);
+              }}
               type="button"
+              {...rowHandlers(entry, tree)}
             >
               {expanded ? (
                 <ChevronDown
@@ -571,22 +612,158 @@ function restoreCollapsed(vaultName: string): Set<string> {
   }
 }
 
+/**
+ * Right-click menu for one tree row. Keyboard reachable through the row's own
+ * context-menu key, dismissed with Escape or any outside click.
+ */
+function ExplorerContextMenu({
+  entry,
+  onClose,
+  onDelete,
+  onNewFolder,
+  onNewNote,
+  onOpen,
+  onRename,
+  onReorganize,
+  x,
+  y,
+}: {
+  entry: LibraryEntry;
+  onClose: () => void;
+  onDelete: (entry: LibraryEntry) => void;
+  onNewFolder: (entry: LibraryEntry) => void;
+  onNewNote: (entry: LibraryEntry) => void;
+  onOpen: (path: string) => void;
+  onRename: (entry: LibraryEntry) => void;
+  onReorganize: (entry: LibraryEntry) => void;
+  x: number;
+  y: number;
+}) {
+  useEffect(() => {
+    function dismiss(event: globalThis.KeyboardEvent | globalThis.MouseEvent) {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      onClose();
+    }
+    document.addEventListener("keydown", dismiss);
+    document.addEventListener("mousedown", dismiss);
+    return () => {
+      document.removeEventListener("keydown", dismiss);
+      document.removeEventListener("mousedown", dismiss);
+    };
+  }, [onClose]);
+
+  const actions: { id: string; label: string; run: () => void }[] = [];
+  if (entry.kind === "markdown") {
+    actions.push({
+      id: "open",
+      label: "Open",
+      run: () => {
+        onOpen(entry.path);
+      },
+    });
+  }
+  if (entry.kind === "folder") {
+    actions.push(
+      {
+        id: "new-note",
+        label: "New note here",
+        run: () => {
+          onNewNote(entry);
+        },
+      },
+      {
+        id: "new-folder",
+        label: "New folder here",
+        run: () => {
+          onNewFolder(entry);
+        },
+      },
+      {
+        id: "reorganize",
+        label: "Reorganize this folder",
+        run: () => {
+          onReorganize(entry);
+        },
+      },
+    );
+  }
+  if (entry.kind !== "attachment") {
+    actions.push({
+      id: "rename",
+      label: "Rename",
+      run: () => {
+        onRename(entry);
+      },
+    });
+  }
+  actions.push({
+    id: "delete",
+    label: "Delete",
+    run: () => {
+      onDelete(entry);
+    },
+  });
+
+  return (
+    <div
+      aria-label={`Actions for ${entry.name}`}
+      className="explorer-menu"
+      onMouseDown={(event) => {
+        event.stopPropagation();
+      }}
+      role="menu"
+      style={{ left: x, top: y }}
+    >
+      {actions.map((action) => (
+        <button
+          className={action.id === "delete" ? "is-danger" : undefined}
+          key={action.id}
+          onClick={() => {
+            action.run();
+            onClose();
+          }}
+          role="menuitem"
+          type="button"
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface ExplorerPaneProps {
+  crowdedFolders: string[];
   library: LibrarySnapshot | null;
   onCreateFolder: (path: string) => Promise<void>;
   onCreateNote: (path: string) => Promise<void>;
+  onDelete: (path: string) => Promise<void>;
+  onMove: (path: string, destination: string) => Promise<void>;
   onOpen: (path: string) => void;
+  onRename: (path: string, name: string) => Promise<void>;
+  onReorganize: (folder: string) => Promise<void>;
   onSearch: (query: string) => void;
   openNotePath: string;
   searchResult: RetrievalResult | null;
   vaultName: string;
 }
 
+interface ContextMenuState {
+  entry: LibraryEntry;
+  x: number;
+  y: number;
+}
+
 function ExplorerPane({
+  crowdedFolders,
   library,
   onCreateFolder,
   onCreateNote,
+  onDelete,
+  onMove,
   onOpen,
+  onRename,
+  onReorganize,
   onSearch,
   openNotePath,
   searchResult,
@@ -596,9 +773,14 @@ function ExplorerPane({
   const [collapsed, setCollapsed] = useState(() => restoreCollapsed(vaultName));
   const [activeFolder, setActiveFolder] = useState("");
   const [draft, setDraft] = useState<{
-    kind: "note" | "folder";
+    kind: "note" | "folder" | "rename";
     name: string;
+    target?: string;
   } | null>(null);
+  const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [confirming, setConfirming] = useState<LibraryEntry | null>(null);
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [error, setError] = useState("");
   const defaultEntries: LibraryEntry[] = ["Inbox", "Projects", "Research"].map(
     (name) => ({
@@ -653,15 +835,36 @@ function ExplorerPane({
       setDraft(null);
       return;
     }
-    const path = activeFolder ? `${activeFolder}/${name}` : name;
     try {
       setError("");
-      if (draft.kind === "note") await onCreateNote(path);
-      else await onCreateFolder(path);
+      if (draft.kind === "rename" && draft.target) {
+        await onRename(draft.target, name);
+      } else {
+        const path = activeFolder ? `${activeFolder}/${name}` : name;
+        if (draft.kind === "note") await onCreateNote(path);
+        else await onCreateFolder(path);
+      }
       setDraft(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
     }
+  }
+
+  async function runAction(action: Promise<void>) {
+    try {
+      setError("");
+      await action;
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    }
+  }
+
+  function dropInto(destination: string) {
+    const moving = dragged;
+    setDropTarget(null);
+    setDragged(null);
+    if (!moving || moving === destination) return;
+    void runAction(onMove(moving, destination));
   }
 
   const hits = searchResult ? documentHits(searchResult) : [];
@@ -759,9 +962,19 @@ function ExplorerPane({
         ) : (
           <>
             <button
-              className={`tree-root${activeFolder === "" ? " tree-row-target" : ""}`}
+              className={`tree-root${activeFolder === "" ? " tree-row-target" : ""}${
+                dropTarget === "" ? " tree-row-drop" : ""
+              }`}
               onClick={() => {
                 setActiveFolder("");
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDropTarget("");
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                dropInto("");
               }}
               type="button"
             >
@@ -770,7 +983,7 @@ function ExplorerPane({
             </button>
             {draft ? (
               <div className="tree-draft">
-                {draft.kind === "note" ? (
+                {draft.kind !== "folder" ? (
                   <FileText
                     aria-hidden="true"
                     className="tree-icon tree-icon-note"
@@ -785,7 +998,11 @@ function ExplorerPane({
                 )}
                 <input
                   aria-label={
-                    draft.kind === "note" ? "New note name" : "New folder name"
+                    draft.kind === "rename"
+                      ? "New name"
+                      : draft.kind === "note"
+                        ? "New note name"
+                        : "New folder name"
                   }
                   autoFocus
                   onChange={(event) => {
@@ -799,9 +1016,11 @@ function ExplorerPane({
                     }
                   }}
                   placeholder={
-                    draft.kind === "note"
-                      ? `Note name in ${activeFolder || vaultName}`
-                      : `Folder name in ${activeFolder || vaultName}`
+                    draft.kind === "rename"
+                      ? "New name"
+                      : draft.kind === "note"
+                        ? `Note name in ${activeFolder || vaultName}`
+                        : `Folder name in ${activeFolder || vaultName}`
                   }
                   value={draft.name}
                 />
@@ -818,6 +1037,15 @@ function ExplorerPane({
                 tree={{
                   activeFolder,
                   collapsed,
+                  dropTarget,
+                  onContextMenu: (event, entry) => {
+                    event.preventDefault();
+                    setError("");
+                    setMenu({ entry, x: event.clientX, y: event.clientY });
+                  },
+                  onDragEnterFolder: setDropTarget,
+                  onDragStartEntry: setDragged,
+                  onDropInto: dropInto,
                   onOpen,
                   onSelectFolder: setActiveFolder,
                   onToggleFolder: toggleFolder,
@@ -828,12 +1056,94 @@ function ExplorerPane({
           </>
         )}
       </nav>
+      {confirming ? (
+        <div
+          className="explorer-confirm"
+          role="alertdialog"
+          aria-label="Confirm delete"
+        >
+          <p>
+            Delete <strong>{confirming.name}</strong>
+            {confirming.kind === "folder" ? " and everything inside it" : ""}?
+          </p>
+          <div>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setConfirming(null);
+              }}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="danger-button"
+              onClick={() => {
+                const target = confirming;
+                setConfirming(null);
+                void runAction(onDelete(target.path));
+              }}
+              type="button"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {crowdedFolders.length > 0 && !searching ? (
+        <p className="explorer-suggestion" role="status">
+          <Sparkles aria-hidden="true" size={12} />
+          <span>{crowdedFolders[0]} is getting crowded.</span>
+          <button
+            className="text-button"
+            onClick={() => {
+              const folder = crowdedFolders[0];
+              if (folder) void runAction(onReorganize(folder));
+            }}
+            type="button"
+          >
+            Reorganize
+          </button>
+        </p>
+      ) : null}
       <footer className="explorer-footer">
         <span>
           <CircleDot aria-hidden="true" size={13} /> Local vault
         </span>
         <span>{library?.noteCount ?? 0} notes</span>
       </footer>
+      {menu ? (
+        <ExplorerContextMenu
+          entry={menu.entry}
+          onClose={() => {
+            setMenu(null);
+          }}
+          onDelete={(entry) => {
+            setConfirming(entry);
+          }}
+          onNewFolder={(entry) => {
+            setActiveFolder(entry.path);
+            setDraft({ kind: "folder", name: "" });
+          }}
+          onNewNote={(entry) => {
+            setActiveFolder(entry.path);
+            setDraft({ kind: "note", name: "" });
+          }}
+          onOpen={onOpen}
+          onRename={(entry) => {
+            setDraft({
+              kind: "rename",
+              name: entry.name.replace(/\.md$/i, ""),
+              target: entry.path,
+            });
+          }}
+          onReorganize={(entry) => {
+            void runAction(onReorganize(entry.path));
+          }}
+          x={menu.x}
+          y={menu.y}
+        />
+      ) : null}
     </div>
   );
 }
@@ -999,6 +1309,8 @@ function RetrieveSurface({
   const [searchResult, setSearchResult] = useState<RetrievalResult | null>(
     null,
   );
+  const [crowded, setCrowded] = useState<string[]>([]);
+  const [librarian, setLibrarian] = useState<LibrarianOutcome | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1021,9 +1333,13 @@ function RetrieveSurface({
       .getLibrary()
       .then(async (nextLibrary) => {
         const nextGraph = await knowledgeClient.getGraph();
+        const nextCrowded = await knowledgeClient
+          .crowdedFolders()
+          .catch(() => []);
         if (cancelled) return;
         setLibrary(nextLibrary);
         setGraph(nextGraph);
+        setCrowded(nextCrowded);
       })
       .catch(() => {
         // The native vault can still be opened manually when indexing is unavailable.
@@ -1059,6 +1375,39 @@ function RetrieveSurface({
 
   async function createFolder(path: string) {
     setLibrary(await knowledgeClient.createFolder(path));
+  }
+
+  async function renameEntry(path: string, name: string) {
+    setLibrary(await knowledgeClient.renameEntry(path, name));
+    if (document.path === path) {
+      const parent = path.includes("/")
+        ? path.slice(0, path.lastIndexOf("/"))
+        : "";
+      const file = /\.md$/i.test(name) ? name : `${name}.md`;
+      await openDocument(parent ? `${parent}/${file}` : file);
+    }
+  }
+
+  async function deleteEntry(path: string) {
+    setLibrary(await knowledgeClient.deleteEntry(path));
+  }
+
+  async function moveEntry(path: string, destination: string) {
+    setLibrary(await knowledgeClient.moveEntry(path, destination));
+  }
+
+  async function reorganizeFolder(folder: string) {
+    const outcome = await knowledgeClient.reorganizeFolder(folder);
+    setLibrary(outcome.library);
+    setLibrarian(outcome);
+    setCrowded(await knowledgeClient.crowdedFolders());
+  }
+
+  async function undoReorganization() {
+    const outcome = await knowledgeClient.undoReorganization();
+    setLibrary(outcome.library);
+    setLibrarian(null);
+    setCrowded(await knowledgeClient.crowdedFolders());
   }
 
   return (
@@ -1141,9 +1490,14 @@ function RetrieveSurface({
           collapsed={explorer.collapsed}
         >
           <ExplorerPane
+            crowdedFolders={crowded}
             library={library}
             onCreateFolder={createFolder}
             onCreateNote={createNote}
+            onDelete={deleteEntry}
+            onMove={moveEntry}
+            onRename={renameEntry}
+            onReorganize={reorganizeFolder}
             onOpen={(path) => void openDocument(path)}
             onSearch={(query) => {
               if (!query) {
@@ -1171,6 +1525,35 @@ function RetrieveSurface({
           />
         </Pane>
         <Pane aria-label="Knowledge canvas" className="canvas-region">
+          {librarian ? (
+            <div className="librarian-report" role="status">
+              <span>
+                Reorganized {librarian.folder} — {librarian.moves.length}{" "}
+                {librarian.moves.length === 1 ? "note" : "notes"} moved
+                {librarian.skipped.length > 0
+                  ? `, ${String(librarian.skipped.length)} skipped`
+                  : ""}
+                .
+              </span>
+              <button
+                className="secondary-button"
+                onClick={() => void undoReorganization()}
+                type="button"
+              >
+                Undo
+              </button>
+              <button
+                aria-label="Dismiss reorganization report"
+                className="bare-icon-button"
+                onClick={() => {
+                  setLibrarian(null);
+                }}
+                type="button"
+              >
+                <X aria-hidden="true" size={13} />
+              </button>
+            </div>
+          ) : null}
           <div className="canvas-tabbar">
             <div
               aria-label="Canvas tabs"

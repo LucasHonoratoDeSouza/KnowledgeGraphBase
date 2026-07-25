@@ -2783,3 +2783,129 @@ textarea:hover {
     transform: none;
   }
 }
+
+/* Explorer context menu, drop targets and the Librarian report */
+
+.explorer-menu {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  min-width: 168px;
+  gap: 1px;
+  padding: 4px;
+  border: 1px solid var(--border-bright);
+  border-radius: 5px;
+  background: var(--panel-raised);
+  box-shadow: var(--shadow-lg);
+}
+
+.explorer-menu button {
+  min-height: 27px;
+  padding: 0 9px;
+  color: var(--text-secondary);
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard);
+}
+
+.explorer-menu button:hover {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+
+.explorer-menu button.is-danger {
+  color: var(--danger);
+}
+
+.tree-row-drop {
+  color: var(--text);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.explorer-confirm {
+  display: grid;
+  gap: 8px;
+  margin: 6px 8px;
+  padding: 9px 10px;
+  color: var(--text-secondary);
+  border: 1px solid rgb(238 133 133 / 25%);
+  border-radius: 5px;
+  background: rgb(238 133 133 / 7%);
+  font-size: 10px;
+}
+
+.explorer-confirm p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.explorer-confirm div {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.danger-button {
+  min-height: 28px;
+  padding: 0 11px;
+  color: #2a1c1c;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--danger);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+.explorer-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 9px;
+  color: var(--accent-bright);
+  border-top: 1px solid var(--border-soft);
+  background: var(--accent-soft);
+  font-size: 9px;
+}
+
+.explorer-suggestion > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-suggestion .text-button {
+  min-height: 22px;
+  margin-left: auto;
+  color: var(--accent-bright);
+  font-size: 9px;
+}
+
+.librarian-report {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-raised);
+  font-size: 10px;
+  animation: ko-status-in var(--motion-base) var(--ease-out) both;
+}
+
+.librarian-report > span {
+  min-width: 0;
+}
+
+.librarian-report .secondary-button {
+  min-height: 26px;
+  margin-left: auto;
+  font-size: 10px;
+}

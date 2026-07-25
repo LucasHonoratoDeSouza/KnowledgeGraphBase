@@ -6,7 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import axe from "axe-core";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../App";
 import type {
@@ -132,9 +132,72 @@ function createKnowledgeClient() {
       ],
     })),
   );
+  const deleteEntry = vi.fn((path: string) =>
+    getLibrary().then((library) => ({
+      ...library,
+      entries: library.entries.filter((entry) => entry.path !== path),
+    })),
+  );
+  const moveEntry = vi.fn((path: string, destination: string) =>
+    getLibrary().then((library) => ({
+      ...library,
+      entries: [
+        ...library.entries,
+        {
+          name: path.split("/").at(-1) ?? path,
+          path: `${destination}/${path.split("/").at(-1) ?? path}`,
+          kind: "markdown" as const,
+          children: [],
+        },
+      ],
+    })),
+  );
+  const renameEntry = vi.fn((path: string, name: string) =>
+    getLibrary().then((library) => ({
+      ...library,
+      entries: [
+        ...library.entries,
+        {
+          name,
+          path: `${path.split("/").slice(0, -1).join("/")}/${name}`,
+          kind: "folder" as const,
+          children: [],
+        },
+      ],
+    })),
+  );
+  const reorganizeFolder = vi.fn((folder: string) =>
+    getLibrary().then((library) => ({
+      folder,
+      moves: [
+        {
+          from: `${folder}/one.md`,
+          to: `${folder}/Optimization/one.md`,
+          reason: "training dynamics",
+        },
+      ],
+      skipped: [],
+      library,
+    })),
+  );
+  const undoReorganization = vi.fn(() =>
+    getLibrary().then((library) => ({
+      folder: "",
+      moves: [],
+      skipped: [],
+      library,
+    })),
+  );
+  const crowdedFolders = vi.fn(() => Promise.resolve<string[]>([]));
   const client: KnowledgeClient = {
     capture,
     createFolder,
+    deleteEntry,
+    moveEntry,
+    renameEntry,
+    reorganizeFolder,
+    undoReorganization,
+    crowdedFolders,
     getLibrary,
     getOrganization,
     getGraph,
@@ -146,6 +209,12 @@ function createKnowledgeClient() {
     capture,
     client,
     createFolder,
+    crowdedFolders,
+    deleteEntry,
+    moveEntry,
+    renameEntry,
+    reorganizeFolder,
+    undoReorganization,
     getGraph,
     getLibrary,
     getOrganization,
@@ -187,6 +256,12 @@ const configuredSettings: SettingsSnapshot = {
 };
 
 describe("application shell", () => {
+  // Explorer collapse state persists per vault (#6), so one test's collapsed
+  // folder would otherwise hide rows the next test needs.
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it("gates the primary modes until onboarding is complete", () => {
     render(<App setupComplete={false} />);
 
@@ -549,6 +624,131 @@ describe("application shell", () => {
       expect(
         screen.queryByRole("textbox", { name: "New folder name" }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  it("renames a note from the right-click menu", async () => {
+    const { client, renameEntry } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    const note = await screen.findByRole("button", { name: "Transformers" });
+
+    fireEvent.contextMenu(note);
+    fireEvent.click(
+      within(
+        screen.getByRole("menu", { name: "Actions for Transformers.md" }),
+      ).getByRole("menuitem", { name: "Rename" }),
+    );
+    const name = screen.getByRole("textbox", { name: "New name" });
+    expect(name).toHaveValue("Transformers");
+    fireEvent.change(name, { target: { value: "Attention" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(renameEntry).toHaveBeenCalledWith(
+        "Research/Transformers.md",
+        "Attention",
+      );
+    });
+  });
+
+  it("deletes a folder only after the confirmation is accepted", async () => {
+    const { client, deleteEntry } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    const folder = await screen.findByRole("button", { name: "Research" });
+
+    fireEvent.contextMenu(folder);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    const confirm = screen.getByRole("alertdialog", { name: "Confirm delete" });
+    expect(confirm).toHaveTextContent("and everything inside it");
+    expect(deleteEntry).not.toHaveBeenCalled();
+
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(deleteEntry).not.toHaveBeenCalled();
+
+    fireEvent.contextMenu(folder);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("alertdialog", { name: "Confirm delete" }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    await waitFor(() => {
+      expect(deleteEntry).toHaveBeenCalledWith("Research");
+    });
+  });
+
+  it("closes the context menu on Escape without acting", async () => {
+    const { client, deleteEntry } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    fireEvent.contextMenu(
+      await screen.findByRole("button", { name: "Research" }),
+    );
+    expect(screen.getByRole("menu")).toBeVisible();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(deleteEntry).not.toHaveBeenCalled();
+  });
+
+  it("moves a note into the folder it is dropped on", async () => {
+    const { client, moveEntry } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    const note = await screen.findByRole("button", { name: "Transformers" });
+    const folder = screen.getByRole("button", { name: "Research" });
+    const dataTransfer = {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: vi.fn(),
+      getData: () => "Research/Transformers.md",
+    };
+
+    fireEvent.dragStart(note, { dataTransfer });
+    fireEvent.dragOver(folder, { dataTransfer });
+    fireEvent.drop(folder, { dataTransfer });
+
+    await waitFor(() => {
+      expect(moveEntry).toHaveBeenCalledWith(
+        "Research/Transformers.md",
+        "Research",
+      );
+    });
+  });
+
+  it("reorganizes a folder from the menu and offers a single undo", async () => {
+    const { client, reorganizeFolder, undoReorganization } =
+      createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    fireEvent.contextMenu(
+      await screen.findByRole("button", { name: "Research" }),
+    );
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Reorganize this folder" }),
+    );
+
+    await waitFor(() => {
+      expect(reorganizeFolder).toHaveBeenCalledWith("Research");
+    });
+    expect(
+      await screen.findByText(/Reorganized Research — 1 note moved/),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => {
+      expect(undoReorganization).toHaveBeenCalledOnce();
     });
   });
 
