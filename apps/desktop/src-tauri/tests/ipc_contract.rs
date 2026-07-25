@@ -14,6 +14,7 @@ fn manifest_declares_only_scoped_desktop_foundation_commands() {
             "search_execute",
             "source_capture",
             "library_get",
+            "folder_create",
             "organization_get",
             "graph_get",
             "assistant_ask",

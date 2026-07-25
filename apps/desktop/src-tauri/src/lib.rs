@@ -35,6 +35,7 @@ pub fn run() {
             commands::search_execute,
             commands::source_capture,
             commands::library_get,
+            commands::folder_create,
             commands::organization_get,
             commands::graph_get,
             commands::assistant_ask,

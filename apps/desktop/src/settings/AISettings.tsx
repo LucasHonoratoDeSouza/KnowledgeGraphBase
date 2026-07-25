@@ -655,8 +655,8 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
                 <strong>Enable AI processing</strong>
                 <small>
                   Turn on extraction, organization and the assistant for this
-                  workspace. A workspace set up local-only during onboarding
-                  can turn this on later once a provider and Main model are
+                  workspace. A workspace set up local-only during onboarding can
+                  turn this on later once a provider and Main model are
                   configured.
                 </small>
               </span>

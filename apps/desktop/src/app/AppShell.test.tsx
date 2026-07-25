@@ -123,8 +123,18 @@ function createKnowledgeClient() {
         supported: true,
       }),
   );
+  const createFolder = vi.fn((path: string): Promise<LibrarySnapshot> =>
+    getLibrary().then((library) => ({
+      ...library,
+      entries: [
+        ...library.entries,
+        { name: path, path, kind: "folder" as const, children: [] },
+      ],
+    })),
+  );
   const client: KnowledgeClient = {
     capture,
+    createFolder,
     getLibrary,
     getOrganization,
     getGraph,
@@ -135,6 +145,7 @@ function createKnowledgeClient() {
     ask,
     capture,
     client,
+    createFolder,
     getGraph,
     getLibrary,
     getOrganization,
@@ -429,6 +440,116 @@ describe("application shell", () => {
       "How does retrieval connect to transformers?",
       "gpt-4.1-mini",
     );
+  });
+
+  it("searches as the query settles and restores the tree when it is cleared", async () => {
+    const { client, search: searchClient } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    const explorer = screen.getByRole("region", { name: "Explorer" });
+    expect(await within(explorer).findByText("Research")).toBeVisible();
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Filter knowledge" }),
+      {
+        target: { value: "evidence" },
+      },
+    );
+
+    expect(await screen.findByText("Transformer research")).toBeVisible();
+    expect(searchClient).toHaveBeenCalledWith("evidence");
+    expect(screen.getByLabelText("Search results")).toBeVisible();
+    expect(within(explorer).queryByText("Research")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(await within(explorer).findByText("Research")).toBeVisible();
+    expect(screen.queryByLabelText("Search results")).not.toBeInTheDocument();
+  });
+
+  it("collapses and re-expands a folder in the Explorer tree", async () => {
+    const { client } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    const folder = await screen.findByRole("button", { name: "Research" });
+    expect(screen.getByRole("button", { name: "Transformers" })).toBeVisible();
+
+    fireEvent.click(folder);
+
+    expect(
+      screen.queryByRole("button", { name: "Transformers" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(folder);
+
+    expect(screen.getByRole("button", { name: "Transformers" })).toBeVisible();
+  });
+
+  it("creates a named note in the vault and opens it", async () => {
+    const { client } = createKnowledgeClient();
+    const saveNote = vi.fn((path: string, content: string) =>
+      Promise.resolve({ path, content, diagnostics: [] }),
+    );
+    render(
+      <App
+        editorClient={{
+          openNote: (path) =>
+            Promise.resolve({ path, content: "# Welcome", diagnostics: [] }),
+          saveNote,
+        }}
+        initialMode="Retrieve"
+        knowledgeClient={client}
+        setupComplete
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "New note" }));
+    const name = screen.getByRole("textbox", { name: "New note name" });
+    fireEvent.change(name, { target: { value: "Reading notes" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(saveNote).toHaveBeenCalledWith(
+        "Reading notes.md",
+        "# Reading notes\n\n",
+      );
+    });
+    expect(
+      await screen.findByRole("tab", { name: /Reading notes\.md/ }),
+    ).toBeVisible();
+  });
+
+  it("creates a folder inside the selected folder and reports failures", async () => {
+    const { client, createFolder } = createKnowledgeClient();
+    createFolder.mockRejectedValueOnce(
+      new Error("a folder with that name already exists"),
+    );
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Research" }));
+    fireEvent.click(screen.getByRole("button", { name: "New folder" }));
+    const name = screen.getByRole("textbox", { name: "New folder name" });
+    fireEvent.change(name, { target: { value: "Papers" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+
+    expect(
+      await screen.findByText("a folder with that name already exists"),
+    ).toBeVisible();
+    expect(createFolder).toHaveBeenCalledWith("Research/Papers");
+
+    fireEvent.keyDown(name, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(createFolder).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("textbox", { name: "New folder name" }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("has no detectable accessibility violations in either mode", async () => {

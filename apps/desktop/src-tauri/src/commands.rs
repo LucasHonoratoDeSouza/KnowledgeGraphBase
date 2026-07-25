@@ -22,8 +22,8 @@ use crate::{
     enrichment::MainModelEnricher,
     knowledge::{
         CaptureCommandRequest, CaptureCommandResponse, LibrarySnapshot, OrganizationSnapshot,
-        ask_in_vault, capture_in_vault_with_services, graph_in_vault, library_in_vault,
-        organization_in_vault, search_in_vault,
+        ask_in_vault, capture_in_vault_with_services, create_folder_in_vault, graph_in_vault,
+        library_in_vault, organization_in_vault, search_in_vault,
     },
     settings::{
         AiConfiguration, BudgetSettings, HealthStatus, ModelProfile, OnboardingInput,
@@ -233,6 +233,14 @@ pub fn source_capture(
 #[tauri::command]
 pub fn library_get(state: State<'_, SettingsCommandState>) -> Result<LibrarySnapshot, String> {
     library_in_vault(&workspace_root(&state)?)
+}
+
+#[tauri::command]
+pub fn folder_create(
+    path: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<LibrarySnapshot, String> {
+    create_folder_in_vault(&workspace_root(&state)?, &path)
 }
 
 #[tauri::command]

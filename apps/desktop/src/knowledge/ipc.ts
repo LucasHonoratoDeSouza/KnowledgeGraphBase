@@ -14,6 +14,8 @@ import type {
 export const ipcKnowledgeClient: KnowledgeClient = {
   capture: (request: CaptureRequest) =>
     invoke<CaptureResponse>("source_capture", { request }),
+  createFolder: (path: string) =>
+    invoke<LibrarySnapshot>("folder_create", { path }),
   getLibrary: () => invoke<LibrarySnapshot>("library_get"),
   getOrganization: () => invoke<OrganizationSnapshot>("organization_get"),
   getGraph: () => invoke<GraphView>("graph_get"),
