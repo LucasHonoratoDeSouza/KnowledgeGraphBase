@@ -524,6 +524,64 @@ impl KnowledgeStore {
         Ok(record)
     }
 
+    /// Re-indexes an existing vault document in one transaction while keeping its stable id.
+    /// Graph evidence owned by the previous revision is removed so callers can rebuild it from
+    /// the new content without leaving stale relationships behind.
+    pub fn replace_document(
+        &self,
+        document_id: &str,
+        draft: &DocumentDraft,
+        chunks: &[ChunkDraft],
+    ) -> Result<DocumentRecord, StorageError> {
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        let affected = transaction.execute(
+            "UPDATE documents
+             SET source_id = ?, path = ?, title = ?, summary = ?, content_hash = ?,
+                 revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?",
+            params![
+                draft.source_id,
+                draft.path,
+                draft.title,
+                draft.summary,
+                draft.content_hash,
+                document_id
+            ],
+        )?;
+        if affected == 0 {
+            return Err(StorageError::NotFound("document"));
+        }
+        transaction.execute("DELETE FROM chunk_fts WHERE document_id = ?", [document_id])?;
+        transaction.execute("DELETE FROM chunks WHERE document_id = ?", [document_id])?;
+        transaction.execute(
+            "DELETE FROM edge_evidence WHERE origin_document_id = ?",
+            [document_id],
+        )?;
+        transaction.execute(
+            "DELETE FROM knowledge_edges
+             WHERE NOT EXISTS (
+               SELECT 1 FROM edge_evidence evidence WHERE evidence.edge_id = knowledge_edges.id
+             )",
+            [],
+        )?;
+        for chunk in chunks {
+            let chunk_id = new_id();
+            transaction.execute(
+                "INSERT INTO chunks(id, document_id, ordinal, text, token_count, locator, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                params![chunk_id, document_id, chunk.ordinal, chunk.text, chunk.token_count, chunk.locator, chunk.content_hash],
+            )?;
+            transaction.execute(
+                "INSERT INTO chunk_fts(chunk_id, document_id, source_id, title, text, locator, path) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                params![chunk_id, document_id, draft.source_id, draft.title, chunk.text, chunk.locator, draft.path],
+            )?;
+        }
+        let record =
+            document_by_id(&transaction, document_id)?.ok_or(StorageError::NotFound("document"))?;
+        transaction.commit()?;
+        Ok(record)
+    }
+
     pub fn document(&self, id: &str) -> Result<Option<DocumentRecord>, StorageError> {
         let connection = self.lock()?;
         document_by_id(&connection, id)
@@ -540,6 +598,17 @@ impl KnowledgeStore {
                 [source_id],
                 |row| row.get::<_, String>(0),
             )
+            .optional()?
+            .map(|id| document_by_id(&connection, &id)?.ok_or(StorageError::NotFound("document")))
+            .transpose()
+    }
+
+    pub fn document_by_path(&self, path: &str) -> Result<Option<DocumentRecord>, StorageError> {
+        let connection = self.lock()?;
+        connection
+            .query_row("SELECT id FROM documents WHERE path = ?", [path], |row| {
+                row.get::<_, String>(0)
+            })
             .optional()?
             .map(|id| document_by_id(&connection, &id)?.ok_or(StorageError::NotFound("document")))
             .transpose()
