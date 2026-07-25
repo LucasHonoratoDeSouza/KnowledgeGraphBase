@@ -22,4 +22,4 @@ rusqlite = { version = "=0.39.0", features = ["bundled"] }
 getrandom = "=0.4.3"
 thiserror = "=2.0.19"
 zeroize = "=1.8.2"
-uuid = { version = "=1.24.0", features = ["serde"] }
+uuid = { version = "=1.24.0", features = ["serde", "v7"] }
