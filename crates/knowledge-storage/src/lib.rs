@@ -126,12 +126,22 @@ CREATE TABLE IF NOT EXISTS ingestion_jobs (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
+  chunk_id UNINDEXED,
+  document_id UNINDEXED,
+  source_id UNINDEXED,
+  title,
+  text,
+  locator UNINDEXED,
+  path UNINDEXED,
+  tokenize = 'unicode61 remove_diacritics 2'
+);
 CREATE INDEX IF NOT EXISTS idx_sources_state ON sources(processing_state);
 CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id, ordinal);
 CREATE INDEX IF NOT EXISTS idx_edges_source ON knowledge_edges(source_concept_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON knowledge_edges(target_concept_id);
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 ";
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -327,6 +337,19 @@ pub struct FacetMembership {
     pub pinned: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchHit {
+    pub source_id: String,
+    pub document_id: String,
+    pub chunk_id: String,
+    pub title: String,
+    pub snippet: String,
+    pub locator: String,
+    pub path: String,
+    pub score: f64,
+}
+
 pub struct KnowledgeStore {
     connection: Mutex<Connection>,
 }
@@ -485,9 +508,14 @@ impl KnowledgeStore {
             params![id, draft.source_id, draft.path, draft.title, draft.summary, draft.content_hash],
         )?;
         for chunk in chunks {
+            let chunk_id = new_id();
             transaction.execute(
                 "INSERT INTO chunks(id, document_id, ordinal, text, token_count, locator, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                params![new_id(), id, chunk.ordinal, chunk.text, chunk.token_count, chunk.locator, chunk.content_hash],
+                params![chunk_id, id, chunk.ordinal, chunk.text, chunk.token_count, chunk.locator, chunk.content_hash],
+            )?;
+            transaction.execute(
+                "INSERT INTO chunk_fts(chunk_id, document_id, source_id, title, text, locator, path) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                params![chunk_id, id, draft.source_id, draft.title, chunk.text, chunk.locator, draft.path],
             )?;
         }
         let record =
@@ -527,6 +555,45 @@ impl KnowledgeStore {
         ids.into_iter()
             .map(|id| document_by_id(&connection, &id)?.ok_or(StorageError::NotFound("document")))
             .collect()
+    }
+
+    pub fn search_chunks(&self, query: &str, limit: u32) -> Result<Vec<SearchHit>, StorageError> {
+        let expression = fts_expression(query)?;
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT source_id, document_id, chunk_id, title,
+                    snippet(chunk_fts, 4, '<mark>', '</mark>', '…', 24),
+                    locator, path, bm25(chunk_fts, 0.0, 0.0, 0.0, 2.0, 1.0)
+             FROM chunk_fts WHERE chunk_fts MATCH ? ORDER BY 8 ASC, document_id, chunk_id LIMIT ?",
+        )?;
+        let rows = statement.query_map(params![expression, limit.clamp(1, 100)], |row| {
+            let rank: f64 = row.get(7)?;
+            Ok(SearchHit {
+                source_id: row.get(0)?,
+                document_id: row.get(1)?,
+                chunk_id: row.get(2)?,
+                title: row.get(3)?,
+                snippet: row.get(4)?,
+                locator: row.get(5)?,
+                path: row.get(6)?,
+                score: -rank,
+            })
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    pub fn rebuild_search_index(&self) -> Result<u64, StorageError> {
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        transaction.execute("DELETE FROM chunk_fts", [])?;
+        let inserted = transaction.execute(
+            "INSERT INTO chunk_fts(chunk_id, document_id, source_id, title, text, locator, path)
+             SELECT c.id, d.id, d.source_id, d.title, c.text, c.locator, d.path
+             FROM chunks c JOIN documents d ON d.id = c.document_id",
+            [],
+        )?;
+        transaction.commit()?;
+        u64::try_from(inserted).map_err(|error| StorageError::Database(error.to_string()))
     }
 
     pub fn chunks_for_document(&self, document_id: &str) -> Result<Vec<ChunkDraft>, StorageError> {
@@ -656,12 +723,14 @@ impl KnowledgeStore {
     }
 
     pub fn delete_source(&self, id: &str) -> Result<(), StorageError> {
-        let affected = self
-            .lock()?
-            .execute("DELETE FROM sources WHERE id = ?", [id])?;
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        transaction.execute("DELETE FROM chunk_fts WHERE source_id = ?", [id])?;
+        let affected = transaction.execute("DELETE FROM sources WHERE id = ?", [id])?;
         if affected == 0 {
             Err(StorageError::NotFound("source"))
         } else {
+            transaction.commit()?;
             Ok(())
         }
     }
@@ -688,6 +757,23 @@ impl KnowledgeStore {
         let count: i64 = self.lock()?.query_row(&sql, [], |row| row.get(0))?;
         u64::try_from(count).map_err(|error| StorageError::Database(error.to_string()))
     }
+}
+
+fn fts_expression(query: &str) -> Result<String, StorageError> {
+    let tokens = query
+        .split(|character: char| {
+            !character.is_alphanumeric() && character != '-' && character != '_'
+        })
+        .filter(|token| !token.is_empty())
+        .take(16)
+        .map(|token| format!("\"{}\"*", token.replace('"', "\"\"")))
+        .collect::<Vec<_>>();
+    if tokens.is_empty() {
+        return Err(StorageError::Constraint(
+            "search query must contain at least one term".to_owned(),
+        ));
+    }
+    Ok(tokens.join(" OR "))
 }
 
 fn new_id() -> String {

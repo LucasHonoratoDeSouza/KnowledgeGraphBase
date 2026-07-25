@@ -30,6 +30,10 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 | T28 | all four deterministic vertical fixtures complete through Markdown/chunks/concepts/edges; duplicate artifact reuse performs zero second processing; ingestion+storage suites 107/107 | ✅ Complete |
 | T29 | provider-neutral AI port, deterministic fake, strict structured schema and versioned normalized cache key covered by 8 focused cases | ✅ Complete |
 | T30 | fail-closed Main/assistant/deep/fallback routing and daily/monthly budget policy covered by 9 focused cases | ✅ Complete |
+| T36 | transactional FTS5 index, ranked snippets, safe prefix queries, delete consistency and rebuild covered by 8 integration cases | ✅ Complete |
+| T38 | deterministic query parsing and compound path/project/area/tag scopes execute without an AI router; lexical fallback is explicit | ✅ Complete |
+| T39 | stable numbered citations retain exact path/locator and context is bounded to eight chunks/12k estimated tokens | ✅ Complete |
+| T40 | evidence-empty questions make zero calls; supported questions make one structured call and invalid citations/answers fail closed | ✅ Complete |
 
 ### Batch 1 / Phase 1 — Complete, independently verified, uncommitted
 

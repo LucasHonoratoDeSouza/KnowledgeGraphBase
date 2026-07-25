@@ -29,7 +29,7 @@ fn document(source_id: &str, path: &str) -> DocumentDraft {
 fn migration_is_idempotent_and_reaches_latest_version() {
     let store = KnowledgeStore::open_in_memory().unwrap();
     store.migrate().unwrap();
-    assert_eq!(store.schema_version().unwrap(), 1);
+    assert_eq!(store.schema_version().unwrap(), 2);
 }
 
 #[test]
