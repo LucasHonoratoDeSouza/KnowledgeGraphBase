@@ -19,6 +19,33 @@ fn text_content(title: &str) -> ExtractedContent {
     }
 }
 
+fn content_with(title: &str, body: &str) -> ExtractedContent {
+    ExtractedContent {
+        title: title.to_owned(),
+        body: body.to_owned(),
+        locators: vec![SourceLocator::Note {
+            heading: title.to_owned(),
+        }],
+        used_fallback: false,
+    }
+}
+
+fn seeded_store() -> (KnowledgeStore, tempfile::TempDir) {
+    let directory = tempdir().unwrap();
+    let store = KnowledgeStore::open(directory.path().join("index.sqlite3")).unwrap();
+    (store, directory)
+}
+
+fn capture_text(
+    store: &KnowledgeStore,
+    title: &str,
+    content: &str,
+) -> knowledge_ingestion::CaptureReceipt {
+    CaptureService::new(store)
+        .capture(CaptureRequest::Text { title, content })
+        .unwrap()
+}
+
 #[test]
 fn text_capture_reaches_completed_and_publishes_traceable_markdown() {
     let directory = tempdir().unwrap();
@@ -188,6 +215,7 @@ fn main_model_enrichment_controls_summary_concepts_and_overlapping_facets() {
             &receipt,
             text_content("Weekly sync"),
             Some(&KnowledgeEnrichment {
+                context: String::new(),
                 title: "Knowledge OS weekly sync".to_owned(),
                 summary: "Detailed decisions, evidence, open questions, and follow-up actions from the weekly architecture discussion.".to_owned(),
                 concepts: vec!["Knowledge OS".to_owned(), "Retrieval".to_owned(), "Knowledge Graph".to_owned()],
@@ -210,7 +238,9 @@ fn main_model_enrichment_controls_summary_concepts_and_overlapping_facets() {
     assert!(result.document.path.starts_with("Projects/Knowledge OS/"));
     assert!(directory.path().join(&result.document.path).is_file());
     let concept = store.resolve_concept("Knowledge OS").unwrap().unwrap();
-    let note_path = concept.note_path.expect("a first-seen concept gets its own note");
+    let note_path = concept
+        .note_path
+        .expect("a first-seen concept gets its own note");
     assert!(note_path.starts_with("Concepts/"));
     let note = fs::read_to_string(directory.path().join(&note_path)).unwrap();
     assert!(note.contains("local-first personal knowledge management application"));
@@ -231,6 +261,7 @@ fn enrichment_without_a_project_falls_back_to_its_first_area() {
             &receipt,
             text_content("Area only"),
             Some(&KnowledgeEnrichment {
+                context: String::new(),
                 title: "Area only".to_owned(),
                 summary: "Retrieval evaluation notes without a named project.".to_owned(),
                 concepts: vec!["Retrieval".to_owned()],
@@ -259,6 +290,7 @@ fn enrichment_without_project_or_area_stays_in_inbox() {
             &receipt,
             text_content("Untagged"),
             Some(&KnowledgeEnrichment {
+                context: String::new(),
                 title: "Untagged".to_owned(),
                 summary: "No project or area was identified.".to_owned(),
                 concepts: vec![],
@@ -300,6 +332,7 @@ fn enriched_capture_populates_the_concept_graph_while_unenriched_does_not() {
             &enriched,
             text_content("Enriched capture"),
             Some(&KnowledgeEnrichment {
+                context: String::new(),
                 title: "Enriched capture".to_owned(),
                 summary: "Organized summary.".to_owned(),
                 concepts: vec!["Knowledge Graph".to_owned(), "Retrieval".to_owned()],
@@ -331,6 +364,7 @@ fn a_concept_mentioned_by_a_second_source_keeps_its_first_note_untouched() {
             &first,
             text_content("Docker basics"),
             Some(&KnowledgeEnrichment {
+                context: String::new(),
                 title: "Docker basics".to_owned(),
                 summary: "An introduction to Docker.".to_owned(),
                 concepts: vec!["Docker".to_owned()],
@@ -360,6 +394,7 @@ fn a_concept_mentioned_by_a_second_source_keeps_its_first_note_untouched() {
             &second,
             text_content("Docker networking"),
             Some(&KnowledgeEnrichment {
+                context: String::new(),
                 title: "Docker networking".to_owned(),
                 summary: "Docker networking concepts.".to_owned(),
                 concepts: vec!["Docker".to_owned()],
@@ -408,4 +443,90 @@ fn blank_extraction_is_rejected_without_leasing_or_state_mutation() {
         ProcessingState::Pending
     );
     assert_eq!(store.job(&receipt.job.id).unwrap().unwrap().attempt, 0);
+}
+
+#[test]
+fn concept_notes_carry_the_same_context_field() {
+    let (store, directory) = seeded_store();
+    let receipt = capture_text(
+        &store,
+        "Optimizers",
+        "Adam adapts the learning rate per weight.",
+    );
+    DeterministicPipeline::new(&store, directory.path())
+        .process_enriched(
+            &receipt,
+            content_with("Optimizers", "Adam adapts the learning rate per weight."),
+            Some(&KnowledgeEnrichment {
+                context: "Compares Adam and SGD for training stability.".to_owned(),
+                title: "Optimizers".to_owned(),
+                summary: "A detailed comparison of Adam and SGD covering stability, tuning and convergence behaviour.".to_owned(),
+                concepts: vec!["Adam".to_owned()],
+                concept_definitions: vec![ConceptDefinition {
+                    name: "Adam".to_owned(),
+                    definition: "An optimizer that adapts the learning rate per parameter. It combines momentum with RMSProp.".to_owned(),
+                }],
+                projects: vec!["Machine Learning".to_owned()],
+                areas: Vec::new(),
+                tags: Vec::new(),
+            }),
+        )
+        .unwrap();
+
+    let concept = store.resolve_concept("Adam").unwrap().unwrap();
+    let note_path = concept.note_path.expect("a first-seen concept gets a note");
+    let note = fs::read_to_string(directory.path().join(&note_path)).unwrap();
+    assert!(
+        note.contains("context: \"An optimizer that adapts the learning rate per parameter.\""),
+        "concept note frontmatter was: {note}"
+    );
+}
+
+#[test]
+fn enriched_note_uses_the_models_context_verbatim_and_falls_back_without_it() {
+    let (store, directory) = seeded_store();
+    let receipt = capture_text(
+        &store,
+        "Routing",
+        "Model routing balances cost and quality.",
+    );
+    let enriched = DeterministicPipeline::new(&store, directory.path())
+        .process_enriched(
+            &receipt,
+            content_with("Routing", "Model routing balances cost and quality."),
+            Some(&KnowledgeEnrichment {
+                context: "Explains how model routing trades cost against answer quality."
+                    .to_owned(),
+                title: "Routing".to_owned(),
+                summary:
+                    "A detailed look at routing policies, budgets and fallbacks across providers."
+                        .to_owned(),
+                concepts: vec!["Routing".to_owned()],
+                concept_definitions: Vec::new(),
+                projects: Vec::new(),
+                areas: Vec::new(),
+                tags: Vec::new(),
+            }),
+        )
+        .unwrap();
+    let note = fs::read_to_string(directory.path().join(&enriched.document.path)).unwrap();
+    assert!(
+        note.contains(
+            "context: \"Explains how model routing trades cost against answer quality.\""
+        )
+    );
+
+    let plain_receipt = capture_text(&store, "Budgets", "Budgets cap spending. They fail closed.");
+    let plain = DeterministicPipeline::new(&store, directory.path())
+        .process_enriched(
+            &plain_receipt,
+            content_with("Budgets", "Budgets cap spending. They fail closed."),
+            None,
+        )
+        .unwrap();
+    let plain_note = fs::read_to_string(directory.path().join(&plain.document.path)).unwrap();
+    assert!(
+        plain_note.contains("context: \"Budgets cap spending.\""),
+        "unenriched note frontmatter was: {plain_note}"
+    );
 }

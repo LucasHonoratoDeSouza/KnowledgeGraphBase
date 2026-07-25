@@ -1,7 +1,7 @@
 use knowledge_ingestion::{
-    ExtractionArtifact, IngestionError, MAX_TEXT_BYTES, PIPELINE_VERSION, SourceLocator,
-    chunk_text, content_hash, normalize_url, parse_markdown, render_markdown, sanitize_html,
-    validate_text,
+    ExtractionArtifact, IngestionError, MAX_CONTEXT_CHARACTERS, MAX_TEXT_BYTES, PIPELINE_VERSION,
+    SourceLocator, chunk_text, content_hash, deterministic_context, normalize_url, parse_markdown,
+    render_markdown, sanitize_html, validate_text,
 };
 
 #[test]
@@ -109,6 +109,7 @@ fn artifact() -> ExtractionArtifact {
         source_kind: "youtube".to_owned(),
         original_uri: "https://www.youtube.com/watch?v=ppo".to_owned(),
         content_hash: content_hash(b"transcript"),
+        context: "Explains how PPO constrains policy updates in RL training.".to_owned(),
         summary: "PPO constrains policy updates.".to_owned(),
         concepts: vec!["PPO".to_owned(), "Reinforcement Learning".to_owned()],
         notes: vec!["Clipping stabilizes training.".to_owned()],
@@ -179,4 +180,52 @@ impl ChunkText for Vec<knowledge_storage::ChunkDraft> {
     fn concat_text_for_test(&self) -> String {
         self.iter().map(|chunk| chunk.text.as_str()).collect()
     }
+}
+
+#[test]
+fn rendered_note_carries_a_one_line_context_field_after_source_kind() {
+    let markdown = render_markdown(&artifact());
+    let frontmatter = parse_markdown(&markdown).unwrap().frontmatter.unwrap();
+    let lines: Vec<&str> = frontmatter.lines().collect();
+    let source_kind = lines
+        .iter()
+        .position(|line| line.starts_with("source_kind:"))
+        .unwrap();
+    assert_eq!(
+        lines[source_kind + 1],
+        "context: \"Explains how PPO constrains policy updates in RL training.\""
+    );
+}
+
+#[test]
+fn context_field_stays_parseable_when_the_value_has_quotes_and_newlines() {
+    let mut noisy = artifact();
+    noisy.context = "Covers \"clipping\"\nand trust regions.".to_owned();
+    let markdown = render_markdown(&noisy);
+    let frontmatter = parse_markdown(&markdown).unwrap().frontmatter.unwrap();
+    assert!(frontmatter.contains(r#"context: "Covers \"clipping\" and trust regions.""#));
+    assert_eq!(
+        frontmatter
+            .lines()
+            .filter(|line| line.starts_with("context:"))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn deterministic_context_takes_the_first_sentence_and_caps_it() {
+    assert_eq!(
+        deterministic_context("Docker", "Docker packages apps. It uses images."),
+        "Docker packages apps."
+    );
+    let long = "x".repeat(400);
+    let capped = deterministic_context("Title", &long);
+    assert_eq!(capped.chars().count(), MAX_CONTEXT_CHARACTERS);
+    assert!(capped.ends_with('…'));
+}
+
+#[test]
+fn deterministic_context_falls_back_to_the_title_for_an_empty_body() {
+    assert_eq!(deterministic_context("Reading list", "   "), "Reading list");
 }

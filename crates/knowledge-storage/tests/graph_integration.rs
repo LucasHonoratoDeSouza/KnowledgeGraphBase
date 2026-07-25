@@ -3,7 +3,6 @@ use knowledge_storage::{
     ConceptDraft, DocumentDraft, EdgeDraft, KnowledgeStore, SourceDraft, StorageError,
 };
 
-
 fn seeded() -> (KnowledgeStore, Vec<String>, String) {
     let store = KnowledgeStore::open_in_memory().unwrap();
     let source = store

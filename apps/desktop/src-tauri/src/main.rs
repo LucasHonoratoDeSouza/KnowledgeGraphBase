@@ -45,9 +45,7 @@ fn main() {
             "GTK_IM_MODULE_FILE",
         ];
         let is_snap_polluted = |key: &str| {
-            std::env::var_os(key).is_some_and(|value| {
-                value.to_string_lossy().contains("/snap/")
-            })
+            std::env::var_os(key).is_some_and(|value| value.to_string_lossy().contains("/snap/"))
         };
         let missing_failover = RENDER_FAILOVER_VARS
             .iter()
