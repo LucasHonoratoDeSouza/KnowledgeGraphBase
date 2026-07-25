@@ -20,6 +20,11 @@ export const tokens = {
   focus: {
     ring: "0 0 0 2px #8ab4ff",
   },
+  motion: {
+    fast: "110ms",
+    base: "170ms",
+    ease: "cubic-bezier(0.32, 0.08, 0.24, 1)",
+  },
 } as const;
 
 export const desktopStyles = `
@@ -36,6 +41,13 @@ export const desktopStyles = `
   --ko-control-height: ${tokens.size.controlHeight};
   --ko-radius: ${tokens.size.radius};
   --ko-panel-space: ${tokens.space.panel};
+  --ko-motion-fast: ${tokens.motion.fast};
+  --ko-motion-base: ${tokens.motion.base};
+  --ko-ease: ${tokens.motion.ease};
+}
+
+.ko-focus-ring {
+  transition: box-shadow var(--ko-motion-fast) var(--ko-ease);
 }
 
 .ko-focus-ring:focus-visible {
@@ -51,6 +63,17 @@ export const desktopStyles = `
   color: var(--ko-text);
   background: var(--ko-raised);
   font: inherit;
+  transition:
+    color var(--ko-motion-fast) var(--ko-ease),
+    border-color var(--ko-motion-fast) var(--ko-ease),
+    background-color var(--ko-motion-fast) var(--ko-ease),
+    opacity var(--ko-motion-fast) var(--ko-ease),
+    transform var(--ko-motion-fast) var(--ko-ease);
+}
+
+.ko-button:not(:disabled):active,
+.ko-menu-item:not(:disabled):active {
+  transform: translateY(1px);
 }
 
 .ko-button:disabled {
@@ -89,10 +112,17 @@ export const desktopStyles = `
   *,
   *::before,
   *::after {
+    animation-delay: 0ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
+    transition-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .ko-button:not(:disabled):active,
+  .ko-menu-item:not(:disabled):active {
+    transform: none;
   }
 }
 `;
