@@ -27,6 +27,22 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "appimage"]
+    "targets": ["deb", "appimage"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM3RUY5MTE0NzNBMURCMjUKUldRbDI2RnpGSkh2eHc3NHNPMXB0dGxIZnlIZnZzTFJOSDF5L1NVMDAxcFJjSFRlaC9zYjJZUmQK",
+      "endpoints": [
+        "https://github.com/LucasHonoratoDeSouza/KnowledgeGraphBase/releases/download/dev/latest.json"
+      ]
+    }
   }
 }
