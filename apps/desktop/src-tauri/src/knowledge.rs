@@ -14,8 +14,8 @@ use knowledge_ingestion::{
 };
 use knowledge_retrieval::{AssistantAnswer, GroundedAssistant, RetrievalEngine, RetrievalResult};
 use knowledge_storage::{
-    ConceptDraft, DocumentDraft, DocumentRecord, EdgeDraft, GraphView, KnowledgeStore, SourceDraft,
-    SourceRecord,
+    ConceptDraft, DocumentDraft, DocumentRecord, EdgeDraft, FacetMembershipRecord, FacetRecord,
+    GraphView, KnowledgeStore, SourceDraft, SourceRecord,
 };
 use serde::{Deserialize, Serialize};
 
@@ -78,6 +78,13 @@ pub struct LibrarySnapshot {
     pub documents: Vec<DocumentRecord>,
     pub sources: Vec<SourceRecord>,
     pub note_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrganizationSnapshot {
+    pub facets: Vec<FacetRecord>,
+    pub memberships: Vec<FacetMembershipRecord>,
 }
 
 pub trait KnowledgeEnrichmentPort {
@@ -420,6 +427,14 @@ fn detailed_excerpt(content: &str) -> String {
     } else {
         normalized
     }
+}
+
+pub fn organization_in_vault(vault_root: &Path) -> Result<OrganizationSnapshot, String> {
+    let store = open_store(vault_root)?;
+    Ok(OrganizationSnapshot {
+        facets: store.list_facets().map_err(command_error)?,
+        memberships: store.list_facet_memberships().map_err(command_error)?,
+    })
 }
 
 pub fn graph_in_vault(vault_root: &Path) -> Result<GraphView, String> {

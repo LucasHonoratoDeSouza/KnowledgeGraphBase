@@ -639,6 +639,30 @@ export function AISettings({ client, initial, onChange }: AISettingsProps) {
           <div className="privacy-grid">
             <label className="toggle-row">
               <input
+                aria-label="Enable AI processing"
+                checked={settings.aiEnabled}
+                onChange={(event) => {
+                  const enabled = event.currentTarget.checked;
+                  setSettings((current) => ({
+                    ...current,
+                    aiEnabled: enabled,
+                  }));
+                  void client.setAiEnabled(enabled).then(accept);
+                }}
+                type="checkbox"
+              />
+              <span>
+                <strong>Enable AI processing</strong>
+                <small>
+                  Turn on extraction, organization and the assistant for this
+                  workspace. A workspace set up local-only during onboarding
+                  can turn this on later once a provider and Main model are
+                  configured.
+                </small>
+              </span>
+            </label>
+            <label className="toggle-row">
+              <input
                 aria-label="Allow source content"
                 checked={settings.ai.privacy.allowSourceContent}
                 onChange={(event) => {

@@ -123,6 +123,11 @@ export const browserE2ESettingsClient: SettingsClient = {
     settings.ai = configuration;
     return writeSettings(settings);
   },
+  setAiEnabled: (enabled: boolean) => {
+    const settings = readSettings();
+    settings.aiEnabled = enabled;
+    return writeSettings(settings);
+  },
   saveWorkspaceState: (activeMode, layoutJson) => {
     const settings = readSettings();
     settings.activeMode = activeMode;
@@ -311,6 +316,11 @@ export const browserE2EKnowledgeClient: KnowledgeClient = {
     return Promise.resolve({ source, document, reused: false });
   },
   getLibrary: () => Promise.resolve(readLibrary()),
+  getOrganization: () =>
+    Promise.resolve({
+      facets: [],
+      memberships: [],
+    }),
   getGraph: () => {
     const documents = readLibrary().documents;
     return Promise.resolve({

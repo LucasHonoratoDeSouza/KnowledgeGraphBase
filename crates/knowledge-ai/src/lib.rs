@@ -239,18 +239,45 @@ pub struct ExtractedRelation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ConceptDefinition {
+    pub concept: String,
+    pub definition: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StructuredKnowledge {
     pub title: String,
     pub summary: String,
     pub concepts: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_lenient_vec")]
     pub relations: Vec<ExtractedRelation>,
+    #[serde(default, deserialize_with = "deserialize_lenient_vec")]
+    pub concept_definitions: Vec<ConceptDefinition>,
     #[serde(default)]
     pub projects: Vec<String>,
     #[serde(default)]
     pub areas: Vec<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+}
+
+/// Models frequently return list entries that do not match the expected
+/// object shape (a bare string summary, a missing field) for fields like
+/// `relations` or `conceptDefinitions`. Neither is required for a note to be
+/// useful, so a malformed entry is dropped instead of failing the whole
+/// structured response and discarding a valid title/summary/concepts
+/// extraction.
+fn deserialize_lenient_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let raw = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|value| serde_json::from_value(value).ok())
+        .collect())
 }
 
 impl StructuredKnowledge {

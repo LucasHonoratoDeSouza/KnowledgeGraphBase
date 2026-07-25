@@ -141,6 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id, ordinal);
 CREATE INDEX IF NOT EXISTS idx_edges_source ON knowledge_edges(source_concept_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON knowledge_edges(target_concept_id);
+CREATE INDEX IF NOT EXISTS idx_facet_memberships_facet ON facet_memberships(facet_id);
 PRAGMA user_version = 2;
 ";
 
@@ -272,6 +273,7 @@ pub struct ConceptRecord {
     pub id: String,
     pub normalized_name: String,
     pub display_name: String,
+    pub note_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -323,7 +325,8 @@ impl FacetDraft {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FacetRecord {
     pub id: String,
     pub kind: String,
@@ -335,6 +338,15 @@ pub struct FacetRecord {
 pub struct FacetMembership {
     pub facet_id: String,
     pub pinned: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FacetMembershipRecord {
+    pub facet_id: String,
+    pub source_id: String,
+    pub pinned: bool,
+    pub confidence_basis_points: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -408,6 +420,28 @@ impl KnowledgeStore {
     /// Returns a typed storage error if any schema statement fails.
     pub fn migrate(&self) -> Result<(), StorageError> {
         self.lock()?.execute_batch(MIGRATION_V1)?;
+        // `concepts.note_path` was added after MIGRATION_V1 shipped; SQLite has no
+        // `ADD COLUMN IF NOT EXISTS`, so this checks first instead of relying on an
+        // idempotent statement like the rest of the batch above.
+        self.add_column_if_missing("concepts", "note_path", "TEXT")?;
+        Ok(())
+    }
+
+    fn add_column_if_missing(
+        &self,
+        table: &str,
+        column: &str,
+        sql_type: &str,
+    ) -> Result<(), StorageError> {
+        let connection = self.lock()?;
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2)",
+            params![table, column],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            connection.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}"), [])?;
+        }
         Ok(())
     }
 
@@ -692,6 +726,16 @@ impl KnowledgeStore {
         concept_by_normalized(&connection, &normalized)?.ok_or(StorageError::NotFound("concept"))
     }
 
+    /// Records where a concept's own atomic note lives, once written. A concept with
+    /// `note_path` already set keeps its existing note untouched on later mentions.
+    pub fn set_concept_note_path(&self, concept_id: &str, path: &str) -> Result<(), StorageError> {
+        self.lock()?.execute(
+            "UPDATE concepts SET note_path = ?1 WHERE id = ?2",
+            params![path, concept_id],
+        )?;
+        Ok(())
+    }
+
     pub fn add_alias(&self, concept_id: &str, alias: &str) -> Result<(), StorageError> {
         self.lock()?.execute(
             "INSERT INTO concept_aliases(normalized_alias, display_alias, concept_id) VALUES (?, ?, ?)",
@@ -708,7 +752,7 @@ impl KnowledgeStore {
         }
         connection
             .query_row(
-                "SELECT c.id, c.normalized_name, c.display_name FROM concepts c JOIN concept_aliases a ON a.concept_id = c.id WHERE a.normalized_alias = ?",
+                "SELECT c.id, c.normalized_name, c.display_name, c.note_path FROM concepts c JOIN concept_aliases a ON a.concept_id = c.id WHERE a.normalized_alias = ?",
                 [normalized],
                 concept_from_row,
             )
@@ -786,6 +830,40 @@ impl KnowledgeStore {
             Ok(FacetMembership {
                 facet_id: row.get(0)?,
                 pinned: row.get(1)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    pub fn list_facets(&self) -> Result<Vec<FacetRecord>, StorageError> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT id, kind, normalized_name, display_name FROM facets ORDER BY kind, normalized_name",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(FacetRecord {
+                id: row.get(0)?,
+                kind: row.get(1)?,
+                normalized_name: row.get(2)?,
+                display_name: row.get(3)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Reverse of `memberships_for_source`: every source-membership row across all
+    /// facets in one indexed query, used to build a facet-grouped view of the vault.
+    pub fn list_facet_memberships(&self) -> Result<Vec<FacetMembershipRecord>, StorageError> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT facet_id, source_id, pinned, confidence_basis_points FROM facet_memberships ORDER BY facet_id, source_id",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(FacetMembershipRecord {
+                facet_id: row.get(0)?,
+                source_id: row.get(1)?,
+                pinned: row.get(2)?,
+                confidence_basis_points: row.get(3)?,
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -1011,6 +1089,7 @@ fn concept_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConceptRecord> 
         id: row.get(0)?,
         normalized_name: row.get(1)?,
         display_name: row.get(2)?,
+        note_path: row.get(3)?,
     })
 }
 
@@ -1020,7 +1099,7 @@ fn concept_by_normalized(
 ) -> Result<Option<ConceptRecord>, StorageError> {
     Ok(connection
         .query_row(
-            "SELECT id, normalized_name, display_name FROM concepts WHERE normalized_name = ?",
+            "SELECT id, normalized_name, display_name, note_path FROM concepts WHERE normalized_name = ?",
             [normalized],
             concept_from_row,
         )

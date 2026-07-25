@@ -243,6 +243,38 @@ fn blank_required_fields_are_rejected() {
 }
 
 #[test]
+fn malformed_relation_entries_are_dropped_without_failing_the_whole_response() {
+    let payload = r#"{
+        "title": "Docker basics",
+        "summary": "ok",
+        "concepts": ["Docker"],
+        "relations": [
+            "Docker vs Virtual Machines",
+            {"source": "Docker", "target": "Container", "relation": "USES"}
+        ]
+    }"#;
+    let parsed = StructuredKnowledge::parse(payload).unwrap();
+    assert_eq!(parsed.relations.len(), 1);
+    assert_eq!(parsed.relations[0].source, "Docker");
+}
+
+#[test]
+fn malformed_concept_definition_entries_are_dropped_without_failing_the_whole_response() {
+    let payload = r#"{
+        "title": "Docker basics",
+        "summary": "ok",
+        "concepts": ["Docker", "Container"],
+        "conceptDefinitions": [
+            "Docker is a containerization platform.",
+            {"concept": "Container", "definition": "An isolated, runnable unit of software."}
+        ]
+    }"#;
+    let parsed = StructuredKnowledge::parse(payload).unwrap();
+    assert_eq!(parsed.concept_definitions.len(), 1);
+    assert_eq!(parsed.concept_definitions[0].concept, "Container");
+}
+
+#[test]
 fn empty_concepts_are_rejected() {
     let invalid = r#"{"title":"RAG","summary":"ok","concepts":[]}"#;
     assert!(matches!(

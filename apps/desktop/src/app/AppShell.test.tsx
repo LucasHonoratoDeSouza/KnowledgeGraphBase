@@ -16,6 +16,7 @@ import type {
   GraphView,
   KnowledgeClient,
   LibrarySnapshot,
+  OrganizationSnapshot,
   RetrievalResult,
 } from "../knowledge";
 import type { SettingsSnapshot } from "../settings";
@@ -80,6 +81,12 @@ function createKnowledgeClient() {
       truncated: false,
     }),
   );
+  const getOrganization = vi.fn((): Promise<OrganizationSnapshot> =>
+    Promise.resolve({
+      facets: [],
+      memberships: [],
+    }),
+  );
   const search = vi.fn((query: string): Promise<RetrievalResult> =>
     Promise.resolve({
       plan: { lexicalQuery: query, filters: {}, expandGraph: false },
@@ -119,11 +126,20 @@ function createKnowledgeClient() {
   const client: KnowledgeClient = {
     capture,
     getLibrary,
+    getOrganization,
     getGraph,
     search,
     ask,
   };
-  return { ask, capture, client, getGraph, getLibrary, search };
+  return {
+    ask,
+    capture,
+    client,
+    getGraph,
+    getLibrary,
+    getOrganization,
+    search,
+  };
 }
 
 const configuredSettings: SettingsSnapshot = {

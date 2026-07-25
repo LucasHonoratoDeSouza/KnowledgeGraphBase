@@ -32,13 +32,24 @@ fn native_text_capture_is_searchable_and_visible_in_graph_and_library() {
     assert!(vault.path().join(&captured.document.path).is_file());
     let search = search_in_vault(vault.path(), "evidence citations").unwrap();
     assert_eq!(search.hits[0].document_id, captured.document.id);
-    let graph = graph_in_vault(vault.path()).unwrap();
-    assert!(graph.concepts.len() >= 2);
-    assert!(!graph.edges.is_empty());
     let library = library_in_vault(vault.path()).unwrap();
     assert_eq!(library.documents.len(), 2);
     assert_eq!(library.sources.len(), 2);
     assert_eq!(library.note_count, 2);
+    // A capture with no Main model enrichment stays fully searchable and
+    // filed, but it does not enter the concept graph — only Main-model
+    // organized content does. The manually-added "Existing.md" note (synced
+    // by title/heading/wiki-link during the library scan above, not through
+    // capture) is the only concept here.
+    let graph = graph_in_vault(vault.path()).unwrap();
+    assert_eq!(
+        graph
+            .concepts
+            .iter()
+            .map(|c| c.display_name.as_str())
+            .collect::<Vec<_>>(),
+        ["Existing local note"]
+    );
     assert_eq!(
         search_in_vault(vault.path(), "existing local note")
             .unwrap()
