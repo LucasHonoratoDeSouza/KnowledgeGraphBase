@@ -21,6 +21,7 @@ Implement these tasks with the `tlc-spec-driven` skill: activate it by name and 
 | T17 | vault journal/trash 14/14 fault tests and Clippy passed | ✅ Complete |
 | T18 | deterministic normalization/chunk/render 19/19 tests and Clippy passed | ✅ Complete |
 | T19 | bounded graph/backlinks 10/10 integration tests plus repository edge tests passed | ✅ Complete |
+| T20 | organization audit/pinned corrections/undo 10/10 tests; full storage suite 55/55 | ✅ Complete |
 
 ### Batch 1 / Phase 1 — Complete, independently verified, uncommitted
 

@@ -16,9 +16,11 @@ use thiserror::Error;
 use uuid::Uuid;
 
 mod graph;
+mod organization;
 mod vault;
 
 pub use graph::{GraphEdge, GraphView, SourceBacklink};
+pub use organization::{OrganizationAudit, OrganizationDecision};
 pub use vault::{JournalFault, RecoveryReport, TrashRecord};
 
 const MIGRATION_V1: &str = r"
