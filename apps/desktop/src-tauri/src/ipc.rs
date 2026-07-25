@@ -5,6 +5,7 @@ pub const DECLARED_COMMANDS: &[&str] = &[
     "search_execute",
     "source_capture",
     "library_get",
+    "folder_create",
     "organization_get",
     "graph_get",
     "assistant_ask",

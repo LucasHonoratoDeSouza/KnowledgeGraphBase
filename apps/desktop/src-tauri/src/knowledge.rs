@@ -225,6 +225,43 @@ pub fn library_in_vault(vault_root: &Path) -> Result<LibrarySnapshot, String> {
     })
 }
 
+/// Creates one empty folder inside the granted vault and returns the refreshed library.
+///
+/// Folder names stay ordinary filesystem names so the vault keeps working like
+/// a plain Obsidian-style directory; only traversal and hidden/metadata names
+/// are rejected.
+pub fn create_folder_in_vault(
+    vault_root: &Path,
+    relative: &str,
+) -> Result<LibrarySnapshot, String> {
+    let target = resolve_vault_child(vault_root, relative)?;
+    if target.exists() {
+        return Err("a folder with that name already exists".to_owned());
+    }
+    fs::create_dir_all(&target).map_err(command_error)?;
+    library_in_vault(vault_root)
+}
+
+fn resolve_vault_child(vault_root: &Path, relative: &str) -> Result<std::path::PathBuf, String> {
+    if !vault_root.is_absolute() || !vault_root.is_dir() {
+        return Err("local vault is unavailable".to_owned());
+    }
+    let candidate = Path::new(relative);
+    if relative.trim().is_empty() || candidate.is_absolute() {
+        return Err("folder name must stay inside the vault".to_owned());
+    }
+    for component in candidate.components() {
+        let std::path::Component::Normal(name) = component else {
+            return Err("folder name must stay inside the vault".to_owned());
+        };
+        let name = name.to_string_lossy();
+        if name.starts_with('.') {
+            return Err("folder name must not start with a dot".to_owned());
+        }
+    }
+    Ok(vault_root.join(candidate))
+}
+
 fn sync_existing_markdown(vault_root: &Path, store: &KnowledgeStore) -> Result<(), String> {
     let mut files = Vec::new();
     collect_markdown_files(vault_root, vault_root, &mut files)?;

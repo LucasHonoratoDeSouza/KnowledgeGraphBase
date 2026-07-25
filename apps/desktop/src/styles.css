@@ -663,30 +663,65 @@ input[readonly] {
   display: flex;
   height: 25px;
   min-width: 0;
+  width: 100%;
   align-items: center;
   gap: 5px;
+  border: 0;
   border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
 }
 
 .tree-root {
-  color: #d1d4db;
+  padding: 0 7px 0 3px;
+  color: var(--text-secondary);
   font-size: 10px;
   font-weight: 700;
 }
 
 .tree-row {
   padding: 0 7px 0 3px;
-  color: #aeb4c0;
+  color: var(--muted);
 }
 
+.tree-root:hover,
 .tree-row:hover {
-  color: #dde0e6;
-  background: #1c1e25;
+  color: var(--text);
+  background: var(--panel-hover);
 }
 
 .tree-row-active {
-  color: #f0effb;
+  color: var(--text);
   background: var(--accent-soft);
+}
+
+/* The row a new note or folder would be created in. */
+.tree-row-target,
+.tree-root.tree-row-target {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-bright);
+}
+
+/*
+ * One deliberate icon treatment per item kind (AD-010): folders carry the
+ * accent, notes read as primary text, attachments recede.
+ */
+.tree-icon-folder {
+  color: var(--accent);
+}
+
+.tree-icon-note {
+  color: var(--text-secondary);
+}
+
+.tree-icon-attachment {
+  color: var(--subtle);
+}
+
+.tree-chevron {
+  flex: none;
+  color: var(--subtle);
 }
 
 .tree-row > span {
@@ -700,12 +735,45 @@ input[readonly] {
   min-width: 17px;
   margin-left: auto;
   padding: 1px 5px;
-  color: #b9affb;
+  color: var(--accent-bright);
   border-radius: 999px;
-  background: rgb(139 124 246 / 12%);
+  background: var(--accent-soft);
   font-size: 9px;
   font-weight: 600;
   text-align: center;
+}
+
+.tree-draft {
+  display: flex;
+  height: 27px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 5px 0 3px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--panel-raised);
+}
+
+.tree-draft input {
+  width: 100%;
+  min-width: 0;
+  height: 23px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 11px;
+}
+
+.explorer-error {
+  margin: 6px 3px;
+  padding: 5px 7px;
+  color: var(--danger);
+  border: 1px solid rgb(238 133 133 / 25%);
+  border-radius: 4px;
+  background: rgb(238 133 133 / 7%);
+  font-size: 9px;
 }
 
 .tree-child {
@@ -806,6 +874,15 @@ input[readonly] {
   margin-left: 8px;
   color: var(--subtle);
   font-size: 15px;
+}
+
+/* Unsaved-changes dot, in the close button's place (VS Code / Obsidian). */
+.tab-dirty {
+  width: 7px;
+  height: 7px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--accent-bright);
 }
 
 .canvas-region > [role="tabpanel"] {
@@ -2274,9 +2351,15 @@ input[readonly] {
 
 .explorer-results {
   display: grid;
+  align-content: start;
   gap: 4px;
-  padding: 10px 8px;
-  border-top: 1px solid var(--border);
+  padding: 8px 2px;
+}
+
+.explorer-results > .eyebrow {
+  padding: 0 5px 2px;
+  color: var(--subtle);
+  font-size: 9px;
 }
 
 .explorer-results button {
@@ -2295,10 +2378,33 @@ input[readonly] {
   background: var(--panel-raised);
 }
 
+.explorer-results button strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-results button > span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.45;
+}
+
 .explorer-results span,
 .explorer-results p {
   color: var(--subtle);
   font-size: 8px;
+}
+
+.explorer-results button > p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .assistant-answer {

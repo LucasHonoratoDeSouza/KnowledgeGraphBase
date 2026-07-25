@@ -136,6 +136,7 @@ export interface AssistantAnswer {
 
 export interface KnowledgeClient {
   capture(request: CaptureRequest): Promise<CaptureResponse>;
+  createFolder(path: string): Promise<LibrarySnapshot>;
   getLibrary(): Promise<LibrarySnapshot>;
   getOrganization(): Promise<OrganizationSnapshot>;
   getGraph(): Promise<GraphView>;

@@ -1,8 +1,8 @@
 use std::fs;
 
 use knowledge_os_desktop_lib::knowledge::{
-    CaptureCommandRequest, CaptureKind, capture_in_vault, graph_in_vault, library_in_vault,
-    search_in_vault,
+    CaptureCommandRequest, CaptureKind, capture_in_vault, create_folder_in_vault, graph_in_vault,
+    library_in_vault, search_in_vault,
 };
 use tempfile::tempdir;
 
@@ -124,4 +124,31 @@ fn edited_local_markdown_replaces_the_search_revision_without_stale_hits() {
             .len(),
         1
     );
+}
+
+#[test]
+fn folder_creation_shows_the_new_folder_and_refuses_unsafe_names() {
+    let vault = tempdir().unwrap();
+    fs::create_dir(vault.path().join("Projects")).unwrap();
+
+    let snapshot = create_folder_in_vault(vault.path(), "Projects/Reading list").unwrap();
+    assert!(vault.path().join("Projects/Reading list").is_dir());
+    let projects = snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.name == "Projects")
+        .unwrap();
+    assert!(
+        projects
+            .children
+            .iter()
+            .any(|child| child.name == "Reading list")
+    );
+
+    assert!(create_folder_in_vault(vault.path(), "Projects/Reading list").is_err());
+    assert!(create_folder_in_vault(vault.path(), "../escape").is_err());
+    assert!(create_folder_in_vault(vault.path(), "/etc/passwd").is_err());
+    assert!(create_folder_in_vault(vault.path(), ".hidden").is_err());
+    assert!(create_folder_in_vault(vault.path(), "   ").is_err());
+    assert!(!vault.path().parent().unwrap().join("escape").exists());
 }

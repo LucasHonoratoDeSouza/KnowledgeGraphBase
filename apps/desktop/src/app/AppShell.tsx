@@ -32,6 +32,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Video,
+  X,
 } from "lucide-react";
 
 import { DesktopStyles, Pane, ProductMark } from "@knowledge-os/ui";
@@ -434,70 +435,171 @@ function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
   );
 }
 
+interface TreeState {
+  activeFolder: string;
+  collapsed: ReadonlySet<string>;
+  onOpen: (path: string) => void;
+  onSelectFolder: (path: string) => void;
+  onToggleFolder: (path: string) => void;
+  openNotePath: string;
+}
+
 function LibraryRows({
   entries,
-  onOpen,
+  tree,
 }: {
   entries: LibraryEntry[];
-  onOpen: (path: string) => void;
+  tree: TreeState;
 }) {
   return (
     <>
-      {entries.map((entry) => (
-        <li
-          aria-expanded={entry.kind === "folder" ? true : undefined}
-          key={entry.path}
-          role="treeitem"
-        >
-          {entry.kind === "markdown" ? (
+      {entries.map((entry) => {
+        const expanded = !tree.collapsed.has(entry.path);
+        if (entry.kind === "markdown") {
+          return (
+            <li key={entry.path} role="treeitem">
+              <button
+                aria-current={
+                  entry.path === tree.openNotePath ? "true" : undefined
+                }
+                className={`tree-row tree-file-button${
+                  entry.path === tree.openNotePath ? " tree-row-active" : ""
+                }`}
+                onClick={() => {
+                  tree.onOpen(entry.path);
+                }}
+                type="button"
+              >
+                <FileText
+                  aria-hidden="true"
+                  className="tree-icon tree-icon-note"
+                  size={14}
+                />
+                <span>{entry.name.replace(/\.md$/i, "")}</span>
+              </button>
+            </li>
+          );
+        }
+        if (entry.kind === "attachment") {
+          return (
+            <li key={entry.path} role="treeitem">
+              <span className="tree-row">
+                <File
+                  aria-hidden="true"
+                  className="tree-icon tree-icon-attachment"
+                  size={14}
+                />
+                <span>{entry.name}</span>
+              </span>
+            </li>
+          );
+        }
+        return (
+          <li aria-expanded={expanded} key={entry.path} role="treeitem">
             <button
-              className="tree-row tree-file-button"
+              className={`tree-row tree-folder-button${
+                entry.path === tree.activeFolder ? " tree-row-target" : ""
+              }`}
               onClick={() => {
-                onOpen(entry.path);
+                tree.onToggleFolder(entry.path);
+                tree.onSelectFolder(entry.path);
               }}
               type="button"
             >
-              <FileText aria-hidden="true" size={14} />
-              <span>{entry.name.replace(/\.md$/i, "")}</span>
-            </button>
-          ) : (
-            <span className="tree-row">
-              {entry.kind === "folder" ? (
-                <>
-                  <ChevronDown aria-hidden="true" size={13} />
-                  <FolderOpen aria-hidden="true" size={15} />
-                </>
+              {expanded ? (
+                <ChevronDown
+                  aria-hidden="true"
+                  className="tree-chevron"
+                  size={13}
+                />
               ) : (
-                <File aria-hidden="true" size={14} />
+                <ChevronRight
+                  aria-hidden="true"
+                  className="tree-chevron"
+                  size={13}
+                />
+              )}
+              {expanded ? (
+                <FolderOpen
+                  aria-hidden="true"
+                  className="tree-icon tree-icon-folder"
+                  size={15}
+                />
+              ) : (
+                <Folder
+                  aria-hidden="true"
+                  className="tree-icon tree-icon-folder"
+                  size={15}
+                />
               )}
               <span>{entry.name}</span>
-            </span>
-          )}
-          {entry.children.length > 0 ? (
-            <ul role="group">
-              <LibraryRows entries={entry.children} onOpen={onOpen} />
-            </ul>
-          ) : null}
-        </li>
-      ))}
+            </button>
+            {expanded && entry.children.length > 0 ? (
+              <ul role="group">
+                <LibraryRows entries={entry.children} tree={tree} />
+              </ul>
+            ) : null}
+          </li>
+        );
+      })}
     </>
   );
 }
 
-function ExplorerPane({
-  library,
-  onOpen,
-  onSearch,
-  searchResult,
-  vaultName,
-}: {
+/**
+ * One ranked row per document: FTS returns a hit per chunk, and repeating the
+ * same note three times reads like a broken search.
+ */
+function documentHits(result: RetrievalResult) {
+  const best = new Map<string, RetrievalResult["hits"][number]>();
+  for (const hit of result.hits) {
+    if (!best.has(hit.path)) best.set(hit.path, hit);
+  }
+  return [...best.values()];
+}
+
+function collapsedStorageKey(vaultName: string) {
+  return `knowledge-os:explorer:collapsed:${vaultName}`;
+}
+
+function restoreCollapsed(vaultName: string): Set<string> {
+  try {
+    const saved = localStorage.getItem(collapsedStorageKey(vaultName));
+    return new Set(saved ? (JSON.parse(saved) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+interface ExplorerPaneProps {
   library: LibrarySnapshot | null;
+  onCreateFolder: (path: string) => Promise<void>;
+  onCreateNote: (path: string) => Promise<void>;
   onOpen: (path: string) => void;
   onSearch: (query: string) => void;
+  openNotePath: string;
   searchResult: RetrievalResult | null;
   vaultName: string;
-}) {
+}
+
+function ExplorerPane({
+  library,
+  onCreateFolder,
+  onCreateNote,
+  onOpen,
+  onSearch,
+  openNotePath,
+  searchResult,
+  vaultName,
+}: ExplorerPaneProps) {
   const [query, setQuery] = useState("");
+  const [collapsed, setCollapsed] = useState(() => restoreCollapsed(vaultName));
+  const [activeFolder, setActiveFolder] = useState("");
+  const [draft, setDraft] = useState<{
+    kind: "note" | "folder";
+    name: string;
+  } | null>(null);
+  const [error, setError] = useState("");
   const defaultEntries: LibraryEntry[] = ["Inbox", "Projects", "Research"].map(
     (name) => ({
       name,
@@ -506,6 +608,63 @@ function ExplorerPane({
       children: [],
     }),
   );
+  const searching = query.trim().length > 0;
+  const runSearch = useRef(onSearch);
+  useEffect(() => {
+    runSearch.current = onSearch;
+  }, [onSearch]);
+
+  // Searching as the query settles is what makes the box feel like search
+  // instead of a filter that silently does nothing until Enter.
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      runSearch.current("");
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      runSearch.current(trimmed);
+    }, 220);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  function toggleFolder(path: string) {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (!next.delete(path)) next.add(path);
+      try {
+        localStorage.setItem(
+          collapsedStorageKey(vaultName),
+          JSON.stringify([...next]),
+        );
+      } catch {
+        // Collapse state is a convenience; a blocked store must not break the tree.
+      }
+      return next;
+    });
+  }
+
+  async function commitDraft() {
+    if (!draft) return;
+    const name = draft.name.trim();
+    if (!name) {
+      setDraft(null);
+      return;
+    }
+    const path = activeFolder ? `${activeFolder}/${name}` : name;
+    try {
+      setError("");
+      if (draft.kind === "note") await onCreateNote(path);
+      else await onCreateFolder(path);
+      setDraft(null);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    }
+  }
+
+  const hits = searchResult ? documentHits(searchResult) : [];
   return (
     <div className="explorer-pane">
       <header className="pane-header">
@@ -514,6 +673,10 @@ function ExplorerPane({
           <button
             aria-label="New note"
             className="bare-icon-button"
+            onClick={() => {
+              setError("");
+              setDraft({ kind: "note", name: "" });
+            }}
             type="button"
           >
             <FileText aria-hidden="true" size={15} />
@@ -521,6 +684,10 @@ function ExplorerPane({
           <button
             aria-label="New folder"
             className="bare-icon-button"
+            onClick={() => {
+              setError("");
+              setDraft({ kind: "folder", name: "" });
+            }}
             type="button"
           >
             <Folder aria-hidden="true" size={15} />
@@ -543,30 +710,36 @@ function ExplorerPane({
             setQuery(event.currentTarget.value);
           }}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && query.trim()) {
-              onSearch(query);
-            }
+            if (event.key === "Enter" && query.trim()) onSearch(query.trim());
+            if (event.key === "Escape") setQuery("");
           }}
           placeholder="Search knowledge"
           value={query}
         />
-        <kbd>⌘F</kbd>
+        {searching ? (
+          <button
+            aria-label="Clear search"
+            className="bare-icon-button"
+            onClick={() => {
+              setQuery("");
+            }}
+            type="button"
+          >
+            <X aria-hidden="true" size={13} />
+          </button>
+        ) : (
+          <kbd>⌘F</kbd>
+        )}
       </label>
       <nav aria-label="Knowledge library" className="knowledge-tree">
-        <div className="tree-root">
-          <ChevronDown aria-hidden="true" size={14} />
-          <span>{vaultName.toUpperCase()}</span>
-        </div>
-        <ul role="tree">
-          <LibraryRows
-            entries={library?.entries ?? defaultEntries}
-            onOpen={onOpen}
-          />
-        </ul>
-        {searchResult ? (
+        {searching ? (
           <div className="explorer-results" aria-label="Search results">
-            <span className="eyebrow">SEARCH RESULTS</span>
-            {searchResult.hits.map((hit) => (
+            <span className="eyebrow">
+              {searchResult
+                ? `${String(hits.length)} ${hits.length === 1 ? "MATCH" : "MATCHES"}`
+                : "SEARCHING…"}
+            </span>
+            {hits.map((hit) => (
               <button
                 key={hit.chunkId}
                 onClick={() => {
@@ -576,11 +749,84 @@ function ExplorerPane({
               >
                 <strong>{hit.title}</strong>
                 <span>{hit.snippet.replace(/<\/?mark>/g, "")}</span>
+                <p>{hit.path}</p>
               </button>
             ))}
-            {searchResult.hits.length === 0 ? <p>No local matches.</p> : null}
+            {searchResult && hits.length === 0 ? (
+              <p>No local matches.</p>
+            ) : null}
           </div>
-        ) : null}
+        ) : (
+          <>
+            <button
+              className={`tree-root${activeFolder === "" ? " tree-row-target" : ""}`}
+              onClick={() => {
+                setActiveFolder("");
+              }}
+              type="button"
+            >
+              <ChevronDown aria-hidden="true" size={14} />
+              <span>{vaultName.toUpperCase()}</span>
+            </button>
+            {draft ? (
+              <div className="tree-draft">
+                {draft.kind === "note" ? (
+                  <FileText
+                    aria-hidden="true"
+                    className="tree-icon tree-icon-note"
+                    size={14}
+                  />
+                ) : (
+                  <Folder
+                    aria-hidden="true"
+                    className="tree-icon tree-icon-folder"
+                    size={14}
+                  />
+                )}
+                <input
+                  aria-label={
+                    draft.kind === "note" ? "New note name" : "New folder name"
+                  }
+                  autoFocus
+                  onChange={(event) => {
+                    setDraft({ ...draft, name: event.currentTarget.value });
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void commitDraft();
+                    if (event.key === "Escape") {
+                      setDraft(null);
+                      setError("");
+                    }
+                  }}
+                  placeholder={
+                    draft.kind === "note"
+                      ? `Note name in ${activeFolder || vaultName}`
+                      : `Folder name in ${activeFolder || vaultName}`
+                  }
+                  value={draft.name}
+                />
+              </div>
+            ) : null}
+            {error ? (
+              <p className="explorer-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <ul role="tree">
+              <LibraryRows
+                entries={library?.entries ?? defaultEntries}
+                tree={{
+                  activeFolder,
+                  collapsed,
+                  onOpen,
+                  onSelectFolder: setActiveFolder,
+                  onToggleFolder: toggleFolder,
+                  openNotePath,
+                }}
+              />
+            </ul>
+          </>
+        )}
       </nav>
       <footer className="explorer-footer">
         <span>
@@ -749,6 +995,7 @@ function RetrieveSurface({
   const [canvasView, setCanvasView] = useState<"graph" | "note">("graph");
   const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
   const [graph, setGraph] = useState<GraphView | null>(null);
+  const [noteDirty, setNoteDirty] = useState(false);
   const [searchResult, setSearchResult] = useState<RetrievalResult | null>(
     null,
   );
@@ -793,6 +1040,25 @@ function RetrieveSurface({
     } catch {
       // Attachments remain visible but only Markdown opens in the editor.
     }
+  }
+
+  async function refreshLibrary() {
+    setLibrary(await knowledgeClient.getLibrary());
+  }
+
+  async function createNote(path: string) {
+    const notePath = /\.md$/i.test(path) ? path : `${path}.md`;
+    const title = (notePath.split("/").at(-1) ?? notePath).replace(
+      /\.md$/i,
+      "",
+    );
+    setDocument(await editorClient.saveNote(notePath, `# ${title}\n\n`));
+    setCanvasView("note");
+    await refreshLibrary();
+  }
+
+  async function createFolder(path: string) {
+    setLibrary(await knowledgeClient.createFolder(path));
   }
 
   return (
@@ -876,15 +1142,30 @@ function RetrieveSurface({
         >
           <ExplorerPane
             library={library}
+            onCreateFolder={createFolder}
+            onCreateNote={createNote}
             onOpen={(path) => void openDocument(path)}
             onSearch={(query) => {
+              if (!query) {
+                setSearchResult(null);
+                return;
+              }
               void knowledgeClient
                 .search(query)
                 .then(setSearchResult)
                 .catch(() => {
-                  setSearchResult(null);
+                  setSearchResult({
+                    plan: {
+                      lexicalQuery: query,
+                      filters: {},
+                      expandGraph: false,
+                    },
+                    hits: [],
+                    lexicalFallback: true,
+                  });
                 });
             }}
+            openNotePath={canvasView === "note" ? document.path : ""}
             searchResult={searchResult}
             vaultName={vaultName}
           />
@@ -920,9 +1201,20 @@ function RetrieveSurface({
               >
                 <FileText aria-hidden="true" size={14} />
                 {document.path.split("/").at(-1) ?? "Note.md"}
-                <span className="tab-close" aria-hidden="true">
-                  ×
-                </span>
+                {noteDirty ? (
+                  // Kept out of the accessible name so the tab stays
+                  // addressable as the note; the editor's live status region
+                  // is what announces unsaved changes.
+                  <span
+                    aria-hidden="true"
+                    className="tab-dirty"
+                    title="Unsaved changes"
+                  />
+                ) : (
+                  <span className="tab-close" aria-hidden="true">
+                    ×
+                  </span>
+                )}
               </button>
             </div>
             <button
@@ -945,6 +1237,7 @@ function RetrieveSurface({
             >
               <MarkdownEditor
                 document={document}
+                onDirtyChange={setNoteDirty}
                 onSave={async (content) => {
                   const saved = await editorClient.saveNote(
                     document.path,
