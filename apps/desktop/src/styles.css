@@ -1,20 +1,24 @@
 /*
- * Palette roles (#32). Two accents, two jobs — never swap them:
+ * Palette roles (#32). One hue — indigo — plus neutral grays. The issue asked
+ * for a second hue; a single hue in two tones was chosen instead, because two
+ * competing colors read as noise on a UI this dark and this dense. The two
+ * roles still never share a token:
  *
- *   --accent (sand)      identity and state: the brand mark, the active mode,
+ *   --accent / -bright   identity and state: the brand mark, the active mode,
  *                        selection, focus rings, primary actions. If it means
- *                        "you are here" or "this is the button", it is sand.
- *   --accent-2 (teal)    knowledge and structure: graph node tiers, wiki links
- *                        and backlinks, facet/tag chips, grounded-citation
- *                        markers, the ambient background graph. Structure is
- *                        never selection, so this hue must never mark state.
+ *                        "you are here" or "this is the button", it is this.
+ *   --accent-2 / -bright the same hue stepped down: knowledge and structure —
+ *                        graph node tiers, wiki links and backlinks, facet
+ *                        chips, grounded-citation markers, the ambient
+ *                        background graph. Structure is never selection, so
+ *                        this step must never mark state.
  *
  * Surfaces climb --bg → --panel-deep → --panel → --chrome → --panel-raised, in
  * steps wide enough to read as separate layers rather than one sheet.
  */
 :root {
-  color: #e8e5df;
-  background: #141414;
+  color: #e6e8ea;
+  background: #121314;
   font-family:
     Inter,
     ui-sans-serif,
@@ -24,25 +28,25 @@
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --bg: #141414;
-  --chrome: #262626;
-  --panel: #202020;
-  --panel-deep: #1a1a1a;
-  --panel-raised: #2a2a29;
-  --panel-hover: #363531;
-  --border: #3a3936;
-  --border-bright: #504e48;
-  --border-soft: #302f2d;
-  --text: #e8e5df;
-  --text-secondary: #cbc6bb;
-  --muted: #aaa398;
-  --subtle: #999288;
-  --accent: #b7a47e;
-  --accent-bright: #d0bf99;
-  --accent-soft: rgb(183 164 126 / 14%);
-  --accent-2: #6fa8b4;
-  --accent-2-bright: #9ccfd8;
-  --accent-2-soft: rgb(111 168 180 / 14%);
+  --bg: #121314;
+  --chrome: #232527;
+  --panel: #1d1f21;
+  --panel-deep: #17191a;
+  --panel-raised: #282a2c;
+  --panel-hover: #313437;
+  --border: #343739;
+  --border-bright: #4a4e52;
+  --border-soft: #2b2e30;
+  --text: #e6e8ea;
+  --text-secondary: #c6c9cd;
+  --muted: #a4a8ad;
+  --subtle: #91959b;
+  --accent: #8b8cf0;
+  --accent-bright: #b0b1ff;
+  --accent-soft: rgb(139 140 240 / 14%);
+  --accent-2: #7275c4;
+  --accent-2-bright: #a3a4e4;
+  --accent-2-soft: rgb(114 117 196 / 14%);
   --success: #9aad91;
   --danger: #ee8585;
   --warning: #e7b86d;
@@ -169,14 +173,14 @@ input[readonly] {
 .primary-button {
   min-height: 36px;
   padding: 0 16px;
-  color: #24221f;
+  color: #14142a;
   font-weight: 650;
   background: var(--accent-bright);
   box-shadow: none;
 }
 
 .primary-button:hover {
-  background: #ded0ae;
+  background: #c6c7ff;
 }
 
 .secondary-button {
@@ -427,9 +431,10 @@ input[readonly] {
   content: "";
   display: grid;
   place-items: center;
-  border: 1px solid #4a4945;
+  border: 1px solid var(--border-bright);
   border-radius: 3px;
-  background: #2a2a29 url("/knowledge-os-icon.png") center / cover no-repeat;
+  background: var(--panel-raised) url("/knowledge-os-icon.png") center / cover
+    no-repeat;
   box-shadow: none;
 }
 
@@ -472,8 +477,8 @@ input[readonly] {
 
 .mode-switch button[aria-selected="true"] {
   color: #fff;
-  background: #393834;
-  box-shadow: inset 0 0 0 1px #4a4842;
+  background: #32334a;
+  box-shadow: inset 0 0 0 1px #4c4d75;
 }
 
 .workspace-status {
@@ -638,7 +643,7 @@ input[readonly] {
   width: 33px;
   height: 33px;
   place-items: center;
-  color: #24221f;
+  color: #14142a;
   border: 1px solid #c7b68e;
   border-radius: 4px;
   background: var(--accent-bright);
@@ -1126,29 +1131,42 @@ input[readonly] {
   background: transparent;
 }
 
+/* Edges stay hidden until a node is pointed at or focused, so the resting
+   graph is a field of dots rather than a web. */
 .graph-edge-layer line {
   pointer-events: none;
-  stroke: #56534d;
+  stroke: var(--accent);
   stroke-width: 1.2;
-  opacity: 0.6;
+  opacity: 0;
   vector-effect: non-scaling-stroke;
 }
 
+.graph-edge-layer line.graph-edge-revealed {
+  opacity: 0.7;
+}
+
 .graph-node circle {
-  fill: #77736b;
-  stroke: #a49e93;
+  fill: #5c6165;
+  stroke: #7f858b;
   stroke-width: 1.2;
 }
 
+/* Degree is carried by size, not hue: every tier rests in gray. */
 .graph-node-linked circle {
-  fill: var(--accent-2);
-  stroke: var(--accent-2-bright);
+  fill: #767c81;
+  stroke: #9aa0a6;
 }
 
 .graph-node-hub circle {
-  fill: var(--accent-2-bright);
-  stroke: #cbe6ea;
+  fill: #8b9197;
+  stroke: #b3b9bf;
   stroke-width: 1.5;
+}
+
+.graph-node-focused circle,
+.graph-node:hover circle {
+  fill: var(--accent);
+  stroke: var(--accent-bright);
 }
 
 /* Dragging a node (#13): the whole group is the grab target. */
@@ -1179,23 +1197,28 @@ input[readonly] {
 .graph-node circle,
 .graph-edge-layer line {
   transition:
-    fill var(--motion-base) var(--ease-standard),
-    stroke var(--motion-base) var(--ease-standard);
+    fill var(--motion-fast) var(--ease-standard),
+    stroke var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-base) var(--ease-out);
 }
 
 .legend-dot-hub {
-  background: var(--accent-2-bright);
+  width: 8px;
+  height: 8px;
+  background: #8b9197;
 }
 
 .legend-dot-linked {
-  background: var(--accent-2);
+  width: 7px;
+  height: 7px;
+  background: #767c81;
 }
 
 .graph-node text {
   pointer-events: none;
   user-select: none;
   opacity: 0;
-  fill: #aaa398;
+  fill: var(--muted);
   font-size: 11px;
   font-family: inherit;
   transform: translateY(2px);
@@ -1206,14 +1229,14 @@ input[readonly] {
 
 .graph-node:hover text,
 .graph-node:focus-visible text,
+.graph-node-focused text,
 .graph-node-dragging text {
   opacity: 1;
   transform: translateY(0);
 }
 
-.graph-node-hub text,
-.graph-node-linked text {
-  fill: #d8d3c9;
+.graph-node-focused text {
+  fill: var(--accent-bright);
 }
 
 .graph-view-controls {
@@ -1267,7 +1290,7 @@ input[readonly] {
   z-index: 1;
   bottom: 51px;
   left: 17px;
-  color: #777169;
+  color: #71767c;
   font-size: 9px;
   pointer-events: none;
 }
@@ -1297,7 +1320,7 @@ input[readonly] {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #8d94a2;
+  background: #7c8188;
 }
 
 .legend-dot-focus {
@@ -1493,12 +1516,12 @@ input[readonly] {
 .markdown-editor .cm-gutters {
   color: #545b68;
   border-right: 1px solid var(--border-soft);
-  background: #0f1115;
+  background: var(--panel-deep);
 }
 
 .markdown-editor .cm-activeLine,
 .markdown-editor .cm-activeLineGutter {
-  background: rgb(139 124 246 / 7%);
+  background: var(--accent-soft);
 }
 
 .markdown-editor .cm-content {
@@ -1762,19 +1785,19 @@ input[readonly] {
 }
 
 .provider-openai .provider-monogram {
-  background: #31413a;
+  background: var(--panel-raised);
 }
 
 .provider-anthropic .provider-monogram {
-  background: #493c34;
+  background: var(--panel-raised);
 }
 
 .provider-deepseek .provider-monogram {
-  background: #343d49;
+  background: var(--panel-raised);
 }
 
 .provider-groq .provider-monogram {
-  background: #45362a;
+  background: var(--panel-raised);
 }
 
 .provider-card-header h3 {
@@ -2204,7 +2227,7 @@ input[readonly] {
   color: var(--success);
   border: 1px solid rgb(104 214 160 / 18%);
   border-radius: 3px;
-  background: #2c312c;
+  background: var(--panel-raised);
 }
 
 .onboarding-story li > div {
@@ -2253,7 +2276,7 @@ input[readonly] {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #6f63bd;
+  background: var(--accent-2);
   box-shadow: 0 0 18px rgb(139 124 246 / 55%);
 }
 
@@ -2871,7 +2894,7 @@ input[readonly] {
 }
 
 .composer-submit:hover:not(:disabled) {
-  background: #ded0ae;
+  background: #c6c7ff;
 }
 
 .icon-text-button:hover,
@@ -3438,22 +3461,22 @@ textarea:hover {
 
 .provider-openai .provider-mark {
   color: #8fd6b4;
-  background: #31413a;
+  background: var(--panel-raised);
 }
 
 .provider-anthropic .provider-mark {
   color: #e0a97e;
-  background: #493c34;
+  background: var(--panel-raised);
 }
 
 .provider-deepseek .provider-mark {
   color: #93b4e0;
-  background: #343d49;
+  background: var(--panel-raised);
 }
 
 .provider-groq .provider-mark {
   color: #e5b170;
-  background: #45362a;
+  background: var(--panel-raised);
 }
 
 .provider-advanced {

@@ -406,6 +406,25 @@ describe("fluid knowledge graph", () => {
     expect(gamma).not.toHaveAttribute("tabindex");
   });
 
+  it("rests as plain nodes and reveals a node's own edges on hover", () => {
+    const { container } = render(<KnowledgeGraph graph={connectedGraph} />);
+    const edge = container.querySelector("line");
+    const alpha = container.querySelector<SVGGElement>('[data-graph-node="a"]');
+    const gamma = container.querySelector<SVGGElement>('[data-graph-node="c"]');
+    if (!edge || !alpha || !gamma) throw new Error("graph did not render");
+
+    expect(edge).not.toHaveClass("graph-edge-revealed");
+
+    fireEvent.pointerEnter(alpha);
+    expect(edge).toHaveClass("graph-edge-revealed");
+    expect(alpha).toHaveClass("graph-node-focused");
+
+    // An unrelated node reveals nothing of this edge.
+    fireEvent.pointerLeave(alpha);
+    fireEvent.pointerEnter(gamma);
+    expect(edge).not.toHaveClass("graph-edge-revealed");
+  });
+
   it("keeps the existing empty state", () => {
     render(
       <KnowledgeGraph graph={{ concepts: [], edges: [], truncated: false }} />,
