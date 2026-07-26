@@ -32,7 +32,6 @@ export interface GraphSimulation {
   collisionGap: number;
 }
 
-const GOLDEN_ANGLE = 2.399_963_229_728_653;
 const INITIAL_ALPHA = 0.72;
 const DRAG_ALPHA = 0.58;
 const RELEASE_ALPHA = 0.28;
@@ -42,7 +41,6 @@ const VELOCITY_DECAY = 0.82;
 const ALPHA_DECAY = 0.93;
 const SPRING_LENGTH = 118;
 const SPRING_STRENGTH = 0.045;
-const CENTER_STRENGTH = 0.0008;
 const CHARGE_RADIUS = 112;
 const CHARGE_STRENGTH = 1.1;
 const DRAG_CHARGE_STRENGTH = 4.4;
@@ -61,9 +59,18 @@ function densityScale(nodeCount: number) {
   return Math.min(1, Math.sqrt(90 / Math.max(1, nodeCount)));
 }
 
+function deterministicUnit(value: string, salt: number) {
+  let hash = (2_166_136_261 ^ salt) >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619) >>> 0;
+  }
+  return (hash + 0.5) / 4_294_967_296;
+}
+
 /**
- * Seeds a stable sunflower distribution in O(n). The initial frame is useful
- * immediately, while the live simulation can refine it across animation frames.
+ * Seeds a stable shape-free scatter in O(n). The initial frame is useful
+ * immediately, while graph forces refine it across animation frames.
  */
 export function createGraphSimulation(
   input: LayoutInput,
@@ -76,25 +83,23 @@ export function createGraphSimulation(
     (left, right) =>
       right.degree - left.degree || left.id.localeCompare(right.id),
   );
-  const centerX = bounds.width / 2;
-  const centerY = bounds.height / 2;
-  const spreadX = Math.max(0, centerX - 42);
-  const spreadY = Math.max(0, centerY - 42);
-  const denominator = Math.max(1, ordered.length - 1);
   const nodes = new Map<string, SimulationNode>();
   const geometryScale = densityScale(ordered.length);
 
-  ordered.forEach((item, index) => {
+  ordered.forEach((item) => {
     const radius = Math.max(3, radiusFor(item.degree) * geometryScale);
-    const distance = index === 0 ? 0 : Math.sqrt(index / denominator);
-    const angle = index * GOLDEN_ANGLE;
+    const padding = radius + 8;
     const x = clamp(
-      centerX + Math.cos(angle) * spreadX * distance,
+      padding +
+        deterministicUnit(item.id, 0x9e37_79b9) *
+          Math.max(0, bounds.width - padding * 2),
       radius,
       bounds.width - radius,
     );
     const y = clamp(
-      centerY + Math.sin(angle) * spreadY * distance,
+      padding +
+        deterministicUnit(item.id, 0x85eb_ca6b) *
+          Math.max(0, bounds.height - padding * 2),
       radius,
       bounds.height - radius,
     );
@@ -361,12 +366,8 @@ export function tickGraphSimulation(simulation: GraphSimulation) {
   }
 
   applyLocalCharge(nodes, alpha);
-  const centerX = simulation.width / 2;
-  const centerY = simulation.height / 2;
   for (const node of nodes) {
     if (node.fixed) continue;
-    node.vx += (centerX - node.x) * CENTER_STRENGTH * alpha;
-    node.vy += (centerY - node.y) * CENTER_STRENGTH * alpha;
     node.vx *= VELOCITY_DECAY;
     node.vy *= VELOCITY_DECAY;
     node.x += node.vx;
