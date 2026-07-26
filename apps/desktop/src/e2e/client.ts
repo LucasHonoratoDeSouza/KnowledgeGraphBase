@@ -14,6 +14,12 @@ const noteKey = "knowledge-os:e2e:welcome-note";
 const notesKey = "knowledge-os:e2e:notes";
 const providerCallKey = "knowledge-os:e2e:provider-call-count";
 const libraryKey = "knowledge-os:e2e:library";
+const initialNotes: Record<string, string> = {
+  "Projects/Knowledge OS.md":
+    "# Knowledge OS\n\nLocal-first retrieval, organization and grounded knowledge.\n",
+  "Projects/AI Research.md":
+    "# AI Research\n\nResearch notes about agents, RAG and language models.\n",
+};
 
 export const browserE2EFolderPicker: FolderPicker = {
   chooseParentLocation: () => Promise.resolve("/tmp/knowledge-os-e2e"),
@@ -172,7 +178,9 @@ function inspectMarkdown(content: string): NoteDocument["diagnostics"] {
 
 function readNotes(): Record<string, string> {
   const saved = localStorage.getItem(notesKey);
-  return saved ? (JSON.parse(saved) as Record<string, string>) : {};
+  return saved
+    ? (JSON.parse(saved) as Record<string, string>)
+    : structuredClone(initialNotes);
 }
 
 export const browserE2EEditorClient: EditorClient = {
@@ -456,6 +464,7 @@ export const browserE2EKnowledgeClient: KnowledgeClient = {
         id: document.id,
         normalizedName: document.title.toLowerCase(),
         displayName: document.title,
+        notePath: document.path,
       })),
       edges: documents.flatMap((document, index) => {
         const target = documents[index + 1];

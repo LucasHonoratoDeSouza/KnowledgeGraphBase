@@ -205,7 +205,7 @@ test("keeps graph drag, connected motion, pan and zoom fluid", async ({
   await createLocalKnowledgeBase(page);
   await page.getByRole("tab", { name: "Retrieve" }).click();
 
-  const graph = page.getByRole("img", { name: "Knowledge graph" });
+  const graph = page.getByRole("group", { name: "Knowledge graph" });
   const stage = page.locator(".graph-stage");
   const dragged = graph.locator('[data-graph-node="document-knowledge-os"]');
   const neighbor = graph.locator('[data-graph-node="document-ai-research"]');
@@ -264,9 +264,16 @@ test("keeps graph drag, connected motion, pan and zoom fluid", async ({
     x: Number((element as SVGGElement).dataset.graphX),
     y: Number((element as SVGGElement).dataset.graphY),
   }));
-  const circle = await dragged.locator("circle").boundingBox();
+  const draggedCircle = dragged.locator("circle");
+  const draggedLabel = dragged.locator("text");
+  const circle = await draggedCircle.boundingBox();
   const graphBox = await graph.boundingBox();
   if (!circle || !graphBox) throw new Error("graph node has no bounding box");
+  await expect(draggedLabel).toHaveCSS("opacity", "0");
+  await draggedCircle.hover();
+  await expect(draggedLabel).toHaveCSS("opacity", "1");
+  await page.locator(".graph-heading").hover();
+  await expect(draggedLabel).toHaveCSS("opacity", "0");
   const start = {
     x: circle.x + circle.width / 2,
     y: circle.y + circle.height / 2,
@@ -340,6 +347,18 @@ test("keeps graph drag, connected motion, pan and zoom fluid", async ({
   expect(
     await page.evaluate(() => window.getSelection()?.toString() ?? ""),
   ).toBe("");
+
+  await page.getByRole("button", { name: "Reset graph view" }).click();
+  await expect(graph).toHaveAttribute("viewBox", "0 0 800 520");
+  const clickTarget = await draggedCircle.boundingBox();
+  if (!clickTarget) throw new Error("graph node is not clickable");
+  await page.mouse.click(
+    clickTarget.x + clickTarget.width / 2,
+    clickTarget.y + clickTarget.height / 2,
+  );
+  await expect(
+    page.getByRole("tab", { name: /Knowledge OS\.md/ }),
+  ).toHaveAttribute("aria-selected", "true");
 });
 
 test("restores a collapsed Explorer and active mode after restart", async ({

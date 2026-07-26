@@ -75,6 +75,7 @@ function createKnowledgeClient() {
           id: "concept-1",
           normalizedName: "transformers",
           displayName: "Transformers",
+          notePath: "Research/Transformers.md",
         },
       ],
       edges: [],
@@ -491,11 +492,48 @@ describe("application shell", () => {
     );
 
     expect((await screen.findAllByText("Transformers"))[0]).toBeVisible();
-    expect(screen.getByRole("img", { name: "Knowledge graph" })).toBeVisible();
+    expect(
+      screen.getByRole("group", { name: "Knowledge graph" }),
+    ).toBeVisible();
     // The shell also reads the library to offer real folders in the Ingest
     // composer (#5), so this asserts the surface loaded, not the call count.
     expect(getLibrary).toHaveBeenCalled();
     expect(getGraph).toHaveBeenCalledOnce();
+  });
+
+  it("opens the concept Markdown note from the graph", async () => {
+    const { client } = createKnowledgeClient();
+    const openNote = vi.fn((path: string) =>
+      Promise.resolve({
+        path,
+        content: "# Transformers\n\nAttention research.\n",
+        diagnostics: [],
+      }),
+    );
+    render(
+      <App
+        editorClient={{
+          openNote,
+          saveNote: (path, content) =>
+            Promise.resolve({ path, content, diagnostics: [] }),
+        }}
+        initialMode="Retrieve"
+        knowledgeClient={client}
+        setupComplete
+      />,
+    );
+
+    fireEvent.keyDown(
+      await screen.findByRole("link", { name: "Transformers" }),
+      { key: "Enter" },
+    );
+
+    await waitFor(() => {
+      expect(openNote).toHaveBeenCalledWith("Research/Transformers.md");
+    });
+    expect(
+      await screen.findByRole("tab", { name: /Transformers\.md/ }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
   it("runs local retrieval from the Explorer and renders resolvable evidence", async () => {

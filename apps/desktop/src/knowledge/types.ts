@@ -97,6 +97,7 @@ export interface GraphConcept {
   id: string;
   normalizedName: string;
   displayName: string;
+  notePath: string | null;
 }
 
 export interface GraphEdge {
