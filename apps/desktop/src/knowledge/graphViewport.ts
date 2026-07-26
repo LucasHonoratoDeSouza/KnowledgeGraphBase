@@ -14,9 +14,20 @@ export interface NormalizedPoint {
 export const MIN_GRAPH_SCALE = 0.35;
 export const MAX_GRAPH_SCALE = 4;
 
+/**
+ * The default view frames the layout plus a margin on every side, so a graph
+ * opens with room around it instead of pressed against the stage edges.
+ */
+export const GRAPH_VIEW_PADDING = 70;
+
+export const GRAPH_VIEW_BOX = {
+  width: DEFAULT_LAYOUT_OPTIONS.width + GRAPH_VIEW_PADDING * 2,
+  height: DEFAULT_LAYOUT_OPTIONS.height + GRAPH_VIEW_PADDING * 2,
+};
+
 export const DEFAULT_GRAPH_VIEWPORT: GraphViewport = {
-  x: 0,
-  y: 0,
+  x: -GRAPH_VIEW_PADDING,
+  y: -GRAPH_VIEW_PADDING,
   scale: 1,
 };
 
@@ -28,9 +39,17 @@ export function viewBoxFor(viewport: GraphViewport) {
   return {
     x: viewport.x,
     y: viewport.y,
-    width: DEFAULT_LAYOUT_OPTIONS.width / viewport.scale,
-    height: DEFAULT_LAYOUT_OPTIONS.height / viewport.scale,
+    width: GRAPH_VIEW_BOX.width / viewport.scale,
+    height: GRAPH_VIEW_BOX.height / viewport.scale,
   };
+}
+
+/** The `viewBox` attribute string for a viewport, trimmed of float noise. */
+export function serializeViewBox(viewport: GraphViewport) {
+  const box = viewBoxFor(viewport);
+  return [box.x, box.y, box.width, box.height]
+    .map((value) => String(Number(value.toFixed(4))))
+    .join(" ");
 }
 
 export function zoomViewportAt(
@@ -46,8 +65,8 @@ export function zoomViewportAt(
   if (scale === viewport.scale) return viewport;
 
   const before = viewBoxFor(viewport);
-  const afterWidth = DEFAULT_LAYOUT_OPTIONS.width / scale;
-  const afterHeight = DEFAULT_LAYOUT_OPTIONS.height / scale;
+  const afterWidth = GRAPH_VIEW_BOX.width / scale;
+  const afterHeight = GRAPH_VIEW_BOX.height / scale;
   const anchorX = clamp(anchor.x, 0, 1);
   const anchorY = clamp(anchor.y, 0, 1);
 

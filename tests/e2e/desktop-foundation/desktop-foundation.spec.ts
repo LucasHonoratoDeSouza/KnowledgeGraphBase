@@ -277,6 +277,10 @@ test("keeps graph drag, connected motion, pan and zoom fluid", async ({
   const neighbor = graph.locator('[data-graph-node="document-ai-research"]');
   await expect(dragged).toBeVisible();
   await expect(neighbor).toBeVisible();
+  // The opening view frames the layout plus a margin; reading it here keeps the
+  // reset assertions from re-stating the padding the stylesheet chose.
+  const defaultViewBox = await graph.getAttribute("viewBox");
+  expect(defaultViewBox).toMatch(/^-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+$/);
   await expect(graph.locator(".graph-edge-layer line")).toHaveCount(1);
   await expect(stage).toHaveCSS("user-select", "none");
   await expect(stage).toHaveCSS("touch-action", "none");
@@ -404,18 +408,18 @@ test("keeps graph drag, connected motion, pan and zoom fluid", async ({
     .toBeGreaterThan(scaleBefore);
 
   await page.getByRole("button", { name: "Reset graph view" }).click();
-  await expect(graph).toHaveAttribute("viewBox", "0 0 800 520");
+  await expect(graph).toHaveAttribute("viewBox", defaultViewBox ?? "");
   await page.mouse.move(graphBox.x + 24, graphBox.y + 24);
   await page.mouse.down();
   await page.mouse.move(graphBox.x + 84, graphBox.y + 54, { steps: 5 });
   await page.mouse.up();
-  await expect(graph).not.toHaveAttribute("viewBox", "0 0 800 520");
+  await expect(graph).not.toHaveAttribute("viewBox", defaultViewBox ?? "");
   expect(
     await page.evaluate(() => window.getSelection()?.toString() ?? ""),
   ).toBe("");
 
   await page.getByRole("button", { name: "Reset graph view" }).click();
-  await expect(graph).toHaveAttribute("viewBox", "0 0 800 520");
+  await expect(graph).toHaveAttribute("viewBox", defaultViewBox ?? "");
   const clickTarget = await draggedCircle.boundingBox();
   if (!clickTarget) throw new Error("graph node is not clickable");
   await page.mouse.click(
@@ -529,6 +533,37 @@ test("keeps OpenAI, Anthropic, DeepSeek and Groq provider state independent", as
     await group.getByRole("button", { name: `Connect ${provider}` }).click();
     await expect(group.getByText("Configured ••••••••")).toBeVisible();
   }
+});
+
+test("draws no graph edges until a node is singled out", async ({ page }) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  const edges = page.locator(".graph-edge-layer line");
+  await expect(edges.first()).toBeAttached();
+
+  // Computed opacity, not the class: an animation with a `both` fill mode once
+  // pinned every edge visible even though the rule said otherwise.
+  const snapshot = () =>
+    edges.evaluateAll((elements) => ({
+      total: elements.length,
+      revealed: elements.filter((element) =>
+        element.classList.contains("graph-edge-revealed"),
+      ).length,
+      visible: elements.filter(
+        (element) => getComputedStyle(element).opacity !== "0",
+      ).length,
+    }));
+  const resting = await snapshot();
+  expect(resting.total).toBeGreaterThan(0);
+  expect(resting.visible).toBe(0);
+
+  // Focus rather than hover: the layout is still settling, so a node can drift
+  // out from under a parked cursor mid-assertion.
+  await page.locator("[data-graph-node][tabindex]").first().focus();
+
+  await expect.poll(async () => (await snapshot()).visible).toBeGreaterThan(0);
+  const singled = await snapshot();
+  expect(singled.visible).toBe(singled.revealed);
 });
 
 test("keeps the ambient graph behind Ingest out of every interaction", async ({
