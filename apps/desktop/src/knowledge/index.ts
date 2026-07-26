@@ -1,4 +1,5 @@
 export { ipcKnowledgeClient } from "./ipc";
+export { KnowledgeGraph } from "./KnowledgeGraph";
 export { DEFAULT_LAYOUT_OPTIONS, layoutGraph, radiusFor } from "./forceLayout";
 export type { LayoutNode } from "./forceLayout";
 export {

@@ -6,7 +6,6 @@ import {
   type DragEvent,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 
@@ -32,7 +31,6 @@ import {
   Plus,
   Search,
   Settings2,
-  SlidersHorizontal,
   Sparkles,
   Video,
   X,
@@ -70,10 +68,8 @@ import {
   type WorkspaceLayout,
 } from "../workspace/layout";
 import {
-  DEFAULT_LAYOUT_OPTIONS,
+  KnowledgeGraph,
   ipcKnowledgeClient,
-  layoutGraph,
-  type LayoutNode,
   type AssistantAnswer,
   type GraphView,
   type KnowledgeClient,
@@ -407,216 +403,6 @@ const welcomeNote: NoteDocument = {
     "# Knowledge OS\n\n## Current threads\n\n- Local-first knowledge systems\n- Retrieval and grounded agents\n- Notes from books and papers\n\nConnected to [[AI Research]] and [[Systems]].\n",
   diagnostics: [],
 };
-
-function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
-  const concepts = graph?.concepts ?? [];
-  const graphEdges = graph?.edges ?? [];
-  // Dragged positions live beside the simulation, keyed by the graph they
-  // belong to, so a new capture re-lays out cleanly without a reset effect.
-  const [dragged, setDragged] = useState<{
-    signature: string;
-    nodes: Map<string, LayoutNode>;
-  }>({ signature: "", nodes: new Map() });
-  const [dragging, setDragging] = useState<string | null>(null);
-  const stage = useRef<SVGSVGElement | null>(null);
-
-  const degree = new Map<string, number>();
-  for (const edge of graphEdges) {
-    degree.set(
-      edge.sourceConceptId,
-      (degree.get(edge.sourceConceptId) ?? 0) + 1,
-    );
-    degree.set(
-      edge.targetConceptId,
-      (degree.get(edge.targetConceptId) ?? 0) + 1,
-    );
-  }
-  const maxDegree = Math.max(1, ...degree.values());
-  const signature = concepts
-    .map((concept) => concept.id)
-    .concat(graphEdges.map((edge) => edge.id))
-    .join("|");
-
-  const settled = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const edge of graphEdges) {
-      counts.set(
-        edge.sourceConceptId,
-        (counts.get(edge.sourceConceptId) ?? 0) + 1,
-      );
-      counts.set(
-        edge.targetConceptId,
-        (counts.get(edge.targetConceptId) ?? 0) + 1,
-      );
-    }
-    return new Map(
-      layoutGraph({
-        nodes: concepts.map((concept) => ({
-          id: concept.id,
-          degree: counts.get(concept.id) ?? 0,
-        })),
-        edges: graphEdges.map((edge) => ({
-          source: edge.sourceConceptId,
-          target: edge.targetConceptId,
-        })),
-      }).map((node) => [node.id, node] as const),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the graph's identity; concepts/edges are rebuilt render
-  }, [signature]);
-
-  const positions =
-    dragged.signature === signature && dragged.nodes.size > 0
-      ? new Map([...settled, ...dragged.nodes])
-      : settled;
-
-  function moveNode(id: string, event: ReactPointerEvent<SVGGElement>) {
-    const svg = stage.current;
-    if (!svg) return;
-    const bounds = svg.getBoundingClientRect();
-    const viewBoxWidth = DEFAULT_LAYOUT_OPTIONS.width;
-    const viewBoxHeight = DEFAULT_LAYOUT_OPTIONS.height;
-    const x = ((event.clientX - bounds.left) / bounds.width) * viewBoxWidth;
-    const y = ((event.clientY - bounds.top) / bounds.height) * viewBoxHeight;
-    const node = positions.get(id);
-    if (!node) return;
-    setDragged((current) => {
-      const nodes: Map<string, LayoutNode> =
-        current.signature === signature
-          ? new Map(current.nodes)
-          : new Map<string, LayoutNode>();
-      nodes.set(id, { ...node, x, y });
-      return { signature, nodes };
-    });
-  }
-
-  return (
-    <div className="graph-view">
-      <div className="graph-heading">
-        <div>
-          <span className="eyebrow">LOCAL GRAPH</span>
-          <h2>Your knowledge, connected</h2>
-          <p>
-            {concepts.length} concepts · {graphEdges.length} relationships ·
-            local index
-          </p>
-        </div>
-        <div className="graph-actions">
-          <button
-            aria-label="Search graph"
-            className="icon-button"
-            type="button"
-          >
-            <Search aria-hidden="true" size={15} />
-          </button>
-          <button
-            aria-label="Filter graph"
-            className="icon-button"
-            type="button"
-          >
-            <SlidersHorizontal aria-hidden="true" size={15} />
-          </button>
-          <button
-            aria-label="More graph actions"
-            className="icon-button"
-            type="button"
-          >
-            <MoreHorizontal aria-hidden="true" size={16} />
-          </button>
-        </div>
-      </div>
-      <div className="graph-stage">
-        <svg
-          aria-label="Knowledge graph"
-          ref={stage}
-          role="img"
-          viewBox={`0 0 ${String(DEFAULT_LAYOUT_OPTIONS.width)} ${String(
-            DEFAULT_LAYOUT_OPTIONS.height,
-          )}`}
-        >
-          <g className="graph-edge-layer">
-            {graphEdges.map((edge) => {
-              const source = positions.get(edge.sourceConceptId);
-              const target = positions.get(edge.targetConceptId);
-              if (!source || !target) return null;
-              return (
-                <line
-                  key={edge.id}
-                  x1={source.x}
-                  x2={target.x}
-                  y1={source.y}
-                  y2={target.y}
-                />
-              );
-            })}
-          </g>
-          <g className="graph-node-layer">
-            {concepts.map((concept) => {
-              const node = positions.get(concept.id);
-              if (!node) return null;
-              const connections = degree.get(concept.id) ?? 0;
-              const tone =
-                connections >= Math.max(2, maxDegree * 0.6)
-                  ? "hub"
-                  : connections > 0
-                    ? "linked"
-                    : "isolated";
-              return (
-                <g
-                  className={`graph-node graph-node-${tone}${
-                    dragging === concept.id ? " graph-node-dragging" : ""
-                  }`}
-                  key={concept.id}
-                  onPointerDown={(event) => {
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    setDragging(concept.id);
-                  }}
-                  onPointerMove={(event) => {
-                    if (dragging === concept.id) moveNode(concept.id, event);
-                  }}
-                  onPointerUp={(event) => {
-                    event.currentTarget.releasePointerCapture(event.pointerId);
-                    setDragging(null);
-                  }}
-                >
-                  <title>{`${concept.displayName} — ${String(connections)} ${
-                    connections === 1 ? "link" : "links"
-                  }`}</title>
-                  <circle cx={node.x} cy={node.y} r={node.radius} />
-                  <text
-                    textAnchor="middle"
-                    x={node.x}
-                    y={node.y + node.radius + 17}
-                  >
-                    {concept.displayName}
-                  </text>
-                </g>
-              );
-            })}
-          </g>
-        </svg>
-        {concepts.length === 0 ? (
-          <div className="graph-empty">
-            Capture a source to grow your local graph.
-          </div>
-        ) : null}
-        <div className="graph-legend">
-          <span>
-            <i className="legend-dot legend-dot-hub" />
-            Hub
-          </span>
-          <span>
-            <i className="legend-dot legend-dot-linked" />
-            Connected
-          </span>
-          <span>
-            <i className="legend-dot" />
-            Standalone
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 interface TreeState {
   activeFolder: string;

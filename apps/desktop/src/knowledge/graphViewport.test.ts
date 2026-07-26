@@ -61,4 +61,14 @@ describe("graph viewport", () => {
       ),
     ).toBe(DEFAULT_GRAPH_VIEWPORT);
   });
+
+  it("uses the SVG meet scale when the stage is letterboxed", () => {
+    expect(
+      panViewportByPixels(
+        DEFAULT_GRAPH_VIEWPORT,
+        { x: 40, y: 20 },
+        { width: 800, height: 260 },
+      ),
+    ).toEqual({ x: -80, y: -40, scale: 1 });
+  });
 });
