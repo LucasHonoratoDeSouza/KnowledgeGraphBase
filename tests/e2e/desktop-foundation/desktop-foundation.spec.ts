@@ -214,6 +214,24 @@ test("keeps graph drag, connected motion, pan and zoom fluid", async ({
   await expect(graph.locator(".graph-edge-layer line")).toHaveCount(1);
   await expect(stage).toHaveCSS("user-select", "none");
   await expect(stage).toHaveCSS("touch-action", "none");
+  const controlIconsFit = await page
+    .getByLabel("Graph view controls")
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const icon = button.querySelector("svg");
+        if (!icon) return false;
+        const buttonBounds = button.getBoundingClientRect();
+        const iconBounds = icon.getBoundingClientRect();
+        return (
+          iconBounds.width <= buttonBounds.width &&
+          iconBounds.height <= buttonBounds.height &&
+          iconBounds.left >= buttonBounds.left &&
+          iconBounds.right <= buttonBounds.right
+        );
+      }),
+    );
+  expect(controlIconsFit).toEqual([true, true, true]);
 
   await expect
     .poll(async () => {

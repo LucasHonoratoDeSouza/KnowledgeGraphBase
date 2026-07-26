@@ -940,7 +940,7 @@ input[readonly] {
   content: none;
 }
 
-.graph-stage svg {
+.graph-stage > svg {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -952,7 +952,7 @@ input[readonly] {
   -webkit-tap-highlight-color: transparent;
 }
 
-.graph-stage-panning svg {
+.graph-stage-panning > svg {
   cursor: grabbing;
 }
 
