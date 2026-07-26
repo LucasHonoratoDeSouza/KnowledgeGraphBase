@@ -73,6 +73,13 @@ function releasePointer(element: Element, pointerId: number) {
   }
 }
 
+function prefersReducedMotion() {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
   const concepts = graph?.concepts ?? EMPTY_CONCEPTS;
   const graphEdges = graph?.edges ?? EMPTY_EDGES;
@@ -108,6 +115,7 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
     });
     return {
       degree,
+      edges: graphEdges,
       maxDegree: Math.max(1, ...degree.values()),
       simulation,
     };
@@ -139,7 +147,7 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
       element.dataset.graphX = String(node.x);
       element.dataset.graphY = String(node.y);
     }
-    for (const edge of graphEdges) {
+    for (const edge of model.edges) {
       const element = edgeElements.current.get(edge.id);
       const source = current.nodes.get(edge.sourceConceptId);
       const target = current.nodes.get(edge.targetConceptId);
@@ -149,7 +157,7 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
       element.setAttribute("y1", String(source.y));
       element.setAttribute("y2", String(target.y));
     }
-  }, [graphEdges]);
+  }, [model]);
 
   const paintViewport = useCallback(() => {
     stage.current?.setAttribute("viewBox", serializeViewBox(viewport.current));
@@ -165,6 +173,11 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
   const runSimulationFrame = useCallback(
     function runFrame() {
       animationFrame.current = null;
+      if (prefersReducedMotion()) {
+        settleGraphSimulation(simulation.current);
+        paintSimulation();
+        return;
+      }
       let active = false;
       for (let step = 0; step < 2; step += 1) {
         active = tickGraphSimulation(simulation.current);
@@ -179,10 +192,18 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
   );
 
   const scheduleSimulation = useCallback(() => {
+    if (prefersReducedMotion()) {
+      if (animationFrame.current !== null) {
+        window.cancelAnimationFrame(animationFrame.current);
+        animationFrame.current = null;
+      }
+      settleGraphSimulation(simulation.current);
+      paintSimulation();
+      return;
+    }
     if (animationFrame.current !== null) return;
     if (typeof window.requestAnimationFrame !== "function") {
-      tickGraphSimulation(simulation.current);
-      tickGraphSimulation(simulation.current);
+      settleGraphSimulation(simulation.current);
       paintSimulation();
       return;
     }
@@ -205,10 +226,10 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
     simulation.current = model.simulation;
     viewport.current = { ...DEFAULT_GRAPH_VIEWPORT };
     gesture.current = null;
-    const reducedMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion || typeof window.requestAnimationFrame !== "function") {
+    if (
+      prefersReducedMotion() ||
+      typeof window.requestAnimationFrame !== "function"
+    ) {
       settleGraphSimulation(simulation.current);
       paintSimulation();
     } else {
@@ -227,7 +248,7 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
         viewportFrame.current = null;
       }
     };
-  }, [model.simulation, paintSimulation, paintViewport, scheduleSimulation]);
+  }, [model, paintSimulation, paintViewport, scheduleSimulation]);
 
   function graphPoint(clientX: number, clientY: number) {
     const svg = stage.current;

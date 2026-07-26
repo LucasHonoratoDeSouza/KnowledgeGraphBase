@@ -309,6 +309,20 @@ test("keeps graph drag, connected motion, pan and zoom fluid", async ({
     await page.evaluate(() => window.getSelection()?.toString() ?? ""),
   ).toBe("");
 
+  const labelBox = await dragged.locator("text").boundingBox();
+  if (!labelBox) throw new Error("graph label has no bounding box");
+  await page.mouse.move(labelBox.x + 2, labelBox.y + labelBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    labelBox.x + Math.max(12, labelBox.width - 2),
+    labelBox.y + labelBox.height / 2,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  expect(
+    await page.evaluate(() => window.getSelection()?.toString() ?? ""),
+  ).toBe("");
+
   const scaleBefore = Number(await graph.getAttribute("data-graph-scale"));
   await page.mouse.move(graphBox.x + graphBox.width * 0.3, graphBox.y + 80);
   await page.mouse.wheel(0, -360);

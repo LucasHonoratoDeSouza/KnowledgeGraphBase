@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_GRAPH_VIEWPORT,
-  MAX_GRAPH_SCALE,
-  MIN_GRAPH_SCALE,
   panViewportByPixels,
   viewBoxFor,
   zoomViewportAt,
@@ -36,10 +34,10 @@ describe("graph viewport", () => {
   it("clamps zoom inclusively at both specified limits", () => {
     expect(
       zoomViewportAt(DEFAULT_GRAPH_VIEWPORT, 100, { x: 0.5, y: 0.5 }).scale,
-    ).toBe(MAX_GRAPH_SCALE);
+    ).toBe(4);
     expect(
       zoomViewportAt(DEFAULT_GRAPH_VIEWPORT, 0.001, { x: 0.5, y: 0.5 }).scale,
-    ).toBe(MIN_GRAPH_SCALE);
+    ).toBe(0.35);
   });
 
   it("converts a background pointer delta into graph-space pan", () => {
