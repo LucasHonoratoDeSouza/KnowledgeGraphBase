@@ -30,7 +30,8 @@ through pointer drags, which produces Ubuntu's orange selection highlight.
 | Position lifetime | Current mounted graph only | Persistence was not requested and would add a storage/state contract |
 | Rendering | Existing SVG with imperative frame paints | Avoids React rerenders per tick and honors AD-012 (no new runtime dependencies) |
 | Dense graph geometry | Scale visible node radii and collision clearance as node count grows | Keeps the 800×520 simulation physically feasible at the 500-node ceiling while retaining larger hubs |
-| Macro layout | Deterministic shape-free scatter, then force-only movement | Bounds keep nodes visible; springs, local repulsion, collisions and direct manipulation determine the organic resting layout without a geometric home force |
+| Initial organization | Component-aware radial seed through 80 nodes; deterministic scatter above it | The common 38-node graph opens as separated structural clusters, while the 500-node ceiling keeps an O(n) seed and no global silhouette |
+| Macro layout | Force-only movement after the seed | Bounds keep nodes visible; springs, local repulsion, collisions and direct manipulation determine the organic resting layout without a geometric home force |
 | Node activation | Primary click under `5px`, plus `Enter`/`Space` | Separates opening a note from dragging and keeps the same action keyboard-accessible |
 | Reduced motion | Settle before paint, without an animated loop | Preserves the final readable layout while avoiding visible motion |
 
@@ -107,10 +108,14 @@ concurrency.
    open a note.
 3. WHEN a focusable node with a `notePath` receives `Enter` or `Space` THEN it
    SHALL request the same Markdown note and prevent the default key action.
-4. WHEN a graph is seeded THEN nodes SHALL be deterministically scattered across
-   the available stage without a circular, triangular or other geometric home
-   target, and subsequent movement SHALL be produced only by graph springs,
-   local repulsion, collision resolution and direct manipulation.
+4. WHEN a graph with at most 80 nodes is seeded THEN each connected component
+   SHALL start in its own deterministic stage region, its highest-degree node
+   SHALL occupy that region's center and increasing breadth-first depth SHALL
+   occupy increasing local radial layers; larger graphs SHALL use the bounded
+   deterministic scatter.
+5. WHEN the seed is complete THEN no circular, triangular or other geometric home
+   target SHALL influence subsequent movement; only graph springs, local
+   repulsion, collision resolution and direct manipulation SHALL move nodes.
 
 ## Out of Scope
 
