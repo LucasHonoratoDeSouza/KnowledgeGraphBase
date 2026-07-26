@@ -1,6 +1,20 @@
+/*
+ * Palette roles (#32). Two accents, two jobs — never swap them:
+ *
+ *   --accent (sand)      identity and state: the brand mark, the active mode,
+ *                        selection, focus rings, primary actions. If it means
+ *                        "you are here" or "this is the button", it is sand.
+ *   --accent-2 (teal)    knowledge and structure: graph node tiers, wiki links
+ *                        and backlinks, facet/tag chips, grounded-citation
+ *                        markers, the ambient background graph. Structure is
+ *                        never selection, so this hue must never mark state.
+ *
+ * Surfaces climb --bg → --panel-deep → --panel → --chrome → --panel-raised, in
+ * steps wide enough to read as separate layers rather than one sheet.
+ */
 :root {
   color: #e8e5df;
-  background: #1e1e1e;
+  background: #141414;
   font-family:
     Inter,
     ui-sans-serif,
@@ -10,12 +24,12 @@
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --bg: #1e1e1e;
-  --chrome: #252525;
-  --panel: #242424;
-  --panel-deep: #1f1f1f;
-  --panel-raised: #2b2b2b;
-  --panel-hover: #33322f;
+  --bg: #141414;
+  --chrome: #262626;
+  --panel: #202020;
+  --panel-deep: #1a1a1a;
+  --panel-raised: #2a2a29;
+  --panel-hover: #363531;
   --border: #3a3936;
   --border-bright: #504e48;
   --border-soft: #302f2d;
@@ -26,6 +40,9 @@
   --accent: #b7a47e;
   --accent-bright: #d0bf99;
   --accent-soft: rgb(183 164 126 / 14%);
+  --accent-2: #6fa8b4;
+  --accent-2-bright: #9ccfd8;
+  --accent-2-soft: rgb(111 168 180 / 14%);
   --success: #9aad91;
   --danger: #ee8585;
   --warning: #e7b86d;
@@ -289,7 +306,7 @@ input[readonly] {
   padding: 3px;
   border: 1px solid var(--border-soft);
   border-radius: 5px;
-  background: #1d1d1d;
+  background: var(--panel-deep);
 }
 
 .mode-switch button {
@@ -505,6 +522,10 @@ input[readonly] {
   font-size: 10px;
 }
 
+.source-types span > svg {
+  color: var(--accent-2);
+}
+
 .ingest-privacy {
   display: flex;
   align-items: center;
@@ -619,7 +640,7 @@ input[readonly] {
   color: var(--subtle);
   border: 1px solid var(--border-soft);
   border-radius: 5px;
-  background: #101217;
+  background: var(--panel-deep);
 }
 
 .explorer-search input {
@@ -807,7 +828,7 @@ input[readonly] {
 
 .canvas-region {
   position: relative;
-  background: #111318 !important;
+  background: var(--bg) !important;
 }
 
 .canvas-tabbar {
@@ -815,7 +836,7 @@ input[readonly] {
   height: 38px;
   align-items: stretch;
   border-bottom: 1px solid var(--border);
-  background: #121419;
+  background: var(--panel-deep);
 }
 
 .canvas-tabs {
@@ -976,13 +997,13 @@ input[readonly] {
 }
 
 .graph-node-linked circle {
-  fill: #bbb6ac;
-  stroke: #e1ddd4;
+  fill: var(--accent-2);
+  stroke: var(--accent-2-bright);
 }
 
 .graph-node-hub circle {
-  fill: #c0ad85;
-  stroke: #e0d3b5;
+  fill: var(--accent-2-bright);
+  stroke: #cbe6ea;
   stroke-width: 1.5;
 }
 
@@ -1019,11 +1040,11 @@ input[readonly] {
 }
 
 .legend-dot-hub {
-  background: var(--accent-bright);
+  background: var(--accent-2-bright);
 }
 
 .legend-dot-linked {
-  background: #bbb6ac;
+  background: var(--accent-2);
 }
 
 .graph-node text {
@@ -1064,7 +1085,7 @@ input[readonly] {
   color: var(--muted);
   border: 1px solid var(--border-soft);
   border-radius: 6px;
-  background: #252525;
+  background: var(--panel-raised);
 }
 
 .graph-view-controls .icon-button {
@@ -1140,7 +1161,7 @@ input[readonly] {
 }
 
 .assistant-region {
-  background: #13151a !important;
+  background: var(--panel-deep) !important;
 }
 
 .assistant-header {
@@ -1309,7 +1330,7 @@ input[readonly] {
   height: 100%;
   min-height: 0;
   grid-template-rows: minmax(0, 1fr) auto;
-  background: #111318;
+  background: var(--bg);
 }
 
 .markdown-editor > div {
@@ -1319,8 +1340,8 @@ input[readonly] {
 
 .markdown-editor .cm-editor {
   height: 100%;
-  color: #dfe2e8;
-  background: #111318;
+  color: var(--text);
+  background: var(--bg);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 13px;
 }
@@ -2557,6 +2578,11 @@ input[readonly] {
   background: var(--panel-raised);
 }
 
+.assistant-citation b {
+  color: var(--accent-2-bright);
+  font-weight: 650;
+}
+
 .assistant-citation span {
   color: var(--subtle);
   font-size: 8px;
@@ -3173,7 +3199,7 @@ textarea:hover {
 
 .reading-wiki-link {
   padding: 0;
-  color: var(--accent-bright);
+  color: var(--accent-2-bright);
   border: 0;
   background: transparent;
   font: inherit;
