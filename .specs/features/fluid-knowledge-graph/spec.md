@@ -13,6 +13,10 @@ through pointer drags, which produces Ubuntu's orange selection highlight.
   pointer with damping while connected and nearby nodes smoothly clear its path.
 - Support cursor-anchored wheel zoom, explicit zoom controls, background pan and
   one-action viewport reset.
+- Keep the canvas quiet by revealing a concept label only on hover or keyboard
+  focus, and open that concept's Markdown note on an intentional click.
+- Give the whole graph an upright triangular tendency instead of the previous
+  circular/elliptical envelope.
 - Keep the interaction frame-driven and responsive up to the backend's 500-node
   graph ceiling without adding a runtime dependency.
 - Prevent native selection/touch gestures from competing with graph interaction.
@@ -26,6 +30,8 @@ through pointer drags, which produces Ubuntu's orange selection highlight.
 | Position lifetime | Current mounted graph only | Persistence was not requested and would add a storage/state contract |
 | Rendering | Existing SVG with imperative frame paints | Avoids React rerenders per tick and honors AD-012 (no new runtime dependencies) |
 | Dense graph geometry | Scale visible node radii and collision clearance as node count grows | Keeps the 800×520 simulation physically feasible at the 500-node ceiling while retaining larger hubs |
+| Macro layout | Deterministic per-node home targets inside an upright triangle | A weak home force preserves the requested silhouette while springs, repulsion and direct manipulation stay fluid |
+| Node activation | Primary click under `5px`, plus `Enter`/`Space` | Separates opening a note from dragging and keeps the same action keyboard-accessible |
 | Reduced motion | Settle before paint, without an animated loop | Preserves the final readable layout while avoiding visible motion |
 
 All remaining implicit-requirement dimensions are N/A: this is local renderer
@@ -90,12 +96,27 @@ concurrency.
 3. WHEN pointer zoom is unavailable THEN named Zoom in, Zoom out and Reset view
    buttons SHALL expose the same camera controls.
 
+### FG-06 — Obsidian-inspired clarity and navigation (P1)
+
+1. WHEN a node is idle and neither hovered nor keyboard-focused THEN its visible
+   text label SHALL have opacity `0`; hover, focus or active drag SHALL reveal it
+   with a short opacity transition.
+2. WHEN a primary pointer is pressed and released on a node with less than `5px`
+   of client-space travel THEN the graph SHALL request opening that concept's
+   `notePath`; travel at or above `5px`, cancellation or lost capture SHALL NOT
+   open a note.
+3. WHEN a focusable node with a `notePath` receives `Enter` or `Space` THEN it
+   SHALL request the same Markdown note and prevent the default key action.
+4. WHEN a graph is seeded THEN every node SHALL receive a deterministic home
+   point inside the upright triangular envelope, and WHEN a displaced simulation
+   is reheated THEN its home force SHALL reduce aggregate distance to those home
+   points while retaining collision separation and stage bounds.
+
 ## Out of Scope
 
 - Persisting manual positions or camera state across graph refreshes/restarts.
-- Pinch-to-zoom, node multi-selection, search/filter implementation or opening a
-  note from a node.
-- Canvas/WebGL migration and adaptive label visibility.
+- Pinch-to-zoom, node multi-selection and search/filter implementation.
+- Canvas/WebGL migration.
 
 ## Verification
 
@@ -103,7 +124,9 @@ concurrency.
   camera anchoring/clamps, including literal `0.35x`/`4x` limits and the
   500-node/500-edge rest workload.
 - Component tests for named controls, exact zoom steps, viewport-only pan, lost
-  pointer capture, frame batching/cessation and reduced-motion interaction.
+  pointer capture, click-versus-drag navigation, keyboard activation,
+  frame batching/cessation and reduced-motion interaction.
 - Chromium E2E for connected-node response, pan/zoom and empty native selection
-  when dragging both a node and a label.
+  when dragging both a node and a label, computed label visibility and opening the
+  corresponding Markdown note from a click.
 - Desktop lint, typecheck, full unit suite, production build and targeted E2E pass.
