@@ -100,6 +100,51 @@ test("local setup performs no provider or external network call", async ({
     .toBeNull();
 });
 
+async function windowChromeCalls(page: Page) {
+  return page.evaluate(() =>
+    JSON.parse(
+      localStorage.getItem("knowledge-os:e2e:window-chrome") ?? "[]",
+    ),
+  ) as Promise<string[]>;
+}
+
+test("owns the window chrome with keyboard-reachable controls", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+
+  const controls = page.getByRole("group", { name: "Window controls" });
+  await expect(controls.getByRole("button", { name: "Minimize" })).toBeVisible();
+  await expect(controls.getByRole("button", { name: "Maximize" })).toBeVisible();
+  await expect(controls.getByRole("button", { name: "Close" })).toBeVisible();
+
+  const minimize = controls.getByRole("button", { name: "Minimize" });
+  await minimize.focus();
+  await expect(minimize).toBeFocused();
+  await minimize.press("Enter");
+  await expect.poll(() => windowChromeCalls(page)).toEqual(["minimize"]);
+
+  await controls.getByRole("button", { name: "Maximize" }).click();
+  await expect
+    .poll(() => windowChromeCalls(page))
+    .toEqual(["minimize", "toggleMaximize"]);
+});
+
+test("drags the window from the header background and maximizes on double click", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  const header = page.getByRole("banner");
+
+  await header.click({ position: { x: 8, y: 42 } });
+  await expect.poll(() => windowChromeCalls(page)).toEqual(["startDragging"]);
+
+  await header.dblclick({ position: { x: 8, y: 42 } });
+  await expect
+    .poll(() => windowChromeCalls(page))
+    .toEqual(["startDragging", "startDragging", "toggleMaximize"]);
+});
+
 test("exposes exactly the Ingest and Retrieve primary modes", async ({
   page,
 }) => {

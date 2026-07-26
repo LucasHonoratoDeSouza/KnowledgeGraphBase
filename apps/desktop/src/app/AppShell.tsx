@@ -67,6 +67,13 @@ import {
   togglePane,
   type WorkspaceLayout,
 } from "../workspace/layout";
+import { WindowControls, WindowResizeHandles } from "./WindowControls";
+import {
+  beginWindowDrag,
+  detectWindowChrome,
+  useWindowMaximized,
+  type WindowChromeClient,
+} from "./windowChrome";
 import {
   KnowledgeGraph,
   ipcKnowledgeClient,
@@ -91,6 +98,7 @@ interface AppShellProps {
   online?: boolean;
   settingsClient?: SettingsClient;
   setupComplete?: boolean;
+  windowChrome?: WindowChromeClient | null;
 }
 
 const modes: PrimaryMode[] = ["Ingest", "Retrieve"];
@@ -1679,6 +1687,7 @@ export function AppShell({
   online = true,
   settingsClient = ipcSettingsClient,
   setupComplete,
+  windowChrome = detectWindowChrome(),
 }: AppShellProps) {
   const [mode, setMode] = useState<PrimaryMode>(
     initialSettings?.activeMode ?? initialMode,
@@ -1699,6 +1708,7 @@ export function AppShell({
     Ingest: null,
     Retrieve: null,
   });
+  const maximized = useWindowMaximized(windowChrome);
   const commands = useMemo(
     () =>
       new CommandRegistry(
@@ -1794,6 +1804,20 @@ export function AppShell({
     return (
       <>
         <DesktopStyles />
+        {/* Onboarding fills a frameless window too, so it needs its own drag
+            strip and resize handles or the window becomes immovable. */}
+        <WindowResizeHandles chrome={windowChrome} maximized={maximized} />
+        {windowChrome ? (
+          <div
+            className="onboarding-window-chrome"
+            data-window-drag-region="true"
+            onMouseDown={(event) => {
+              beginWindowDrag(windowChrome, event);
+            }}
+          >
+            <WindowControls chrome={windowChrome} maximized={maximized} />
+          </div>
+        ) : null}
         <Onboarding
           client={settingsClient}
           {...(folderPicker ? { folderPicker } : {})}
@@ -1812,14 +1836,31 @@ export function AppShell({
   return (
     <CommandPaletteHost registry={commands}>
       <DesktopStyles />
-      <main aria-label="Knowledge workspace" className="app-shell">
-        <header className="app-header" data-ui="desktop-chrome">
-          <div className="app-identity">
+      <main
+        aria-label="Knowledge workspace"
+        className="app-shell"
+        data-window-maximized={windowChrome ? String(maximized) : undefined}
+      >
+        <WindowResizeHandles chrome={windowChrome} maximized={maximized} />
+        <header
+          className="app-header"
+          data-ui="desktop-chrome"
+          data-window-drag-region={windowChrome ? "true" : undefined}
+          onMouseDown={(event) => {
+            beginWindowDrag(windowChrome, event);
+          }}
+        >
+          <div className="app-identity" data-window-no-drag="true">
             <ProductMark />
             <span className="vault-breadcrumb">/</span>
             <span>{vaultName}</span>
           </div>
-          <div aria-label="Primary mode" className="mode-switch" role="tablist">
+          <div
+            aria-label="Primary mode"
+            className="mode-switch"
+            data-window-no-drag="true"
+            role="tablist"
+          >
             {modes.map((candidate) => (
               <button
                 aria-controls={`${candidate.toLowerCase()}-surface`}
@@ -1845,6 +1886,7 @@ export function AppShell({
           <div
             aria-label="Workspace status"
             className="workspace-status"
+            data-window-no-drag="true"
             role="status"
           >
             <span data-status="ready">
@@ -1867,6 +1909,7 @@ export function AppShell({
               <Settings2 aria-hidden="true" size={16} />
             </button>
           </div>
+          <WindowControls chrome={windowChrome} maximized={maximized} />
         </header>
         {settingsOpen ? (
           <AISettings

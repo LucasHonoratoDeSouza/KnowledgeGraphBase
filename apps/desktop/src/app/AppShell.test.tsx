@@ -20,6 +20,7 @@ import type {
   RetrievalResult,
 } from "../knowledge";
 import type { SettingsClient, SettingsSnapshot } from "../settings";
+import type { WindowEdge } from "./windowChrome";
 
 function createKnowledgeClient() {
   const capture = vi.fn((request: CaptureRequest): Promise<CaptureResponse> =>
@@ -271,6 +272,25 @@ function settingsStub(
     saveWorkspaceState,
     testProvider: snapshot,
     removeProvider: snapshot,
+  };
+}
+
+/** Records which window command each control invoked (#33). */
+function windowChromeStub(maximized = false) {
+  const calls: string[] = [];
+  const record = (call: string) => {
+    calls.push(call);
+    return Promise.resolve();
+  };
+  return {
+    calls,
+    close: () => record("close"),
+    isMaximized: () => Promise.resolve(maximized),
+    minimize: () => record("minimize"),
+    onMaximizeChange: () => Promise.resolve(() => undefined),
+    startDragging: () => record("startDragging"),
+    startResize: (edge: WindowEdge) => record(`startResize:${edge}`),
+    toggleMaximize: () => record("toggleMaximize"),
   };
 }
 
@@ -913,6 +933,74 @@ describe("application shell", () => {
         }
       ).panes.assistant.width,
     ).toBe(336);
+  });
+
+  it("draws its own window controls and invokes the matching commands", async () => {
+    const chrome = windowChromeStub();
+    render(<App setupComplete windowChrome={chrome} />);
+
+    const controls = screen.getByRole("group", { name: "Window controls" });
+    const minimize = within(controls).getByRole("button", { name: "Minimize" });
+    const maximize = within(controls).getByRole("button", { name: "Maximize" });
+    const close = within(controls).getByRole("button", { name: "Close" });
+
+    minimize.focus();
+    expect(minimize).toHaveFocus();
+    fireEvent.click(minimize);
+    fireEvent.click(maximize);
+    fireEvent.click(close);
+
+    await waitFor(() => {
+      expect(chrome.calls).toEqual(["minimize", "toggleMaximize", "close"]);
+    });
+  });
+
+  it("flips the maximize control to Restore while the window is maximized", async () => {
+    const chrome = windowChromeStub(true);
+    render(<App setupComplete windowChrome={chrome} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Restore" })).toBeVisible();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Maximize" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("drags the window from the header background but not from its controls", () => {
+    const chrome = windowChromeStub();
+    render(<App setupComplete windowChrome={chrome} />);
+
+    const header = screen.getByRole("banner");
+    fireEvent.mouseDown(header, { button: 0, detail: 1 });
+    expect(chrome.calls).toEqual(["startDragging"]);
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Retrieve" }), {
+      button: 0,
+      detail: 1,
+    });
+    fireEvent.mouseDown(screen.getByRole("button", { name: "Settings" }), {
+      button: 0,
+      detail: 1,
+    });
+    expect(chrome.calls).toEqual(["startDragging"]);
+  });
+
+  it("toggles maximize when the drag region is double clicked", () => {
+    const chrome = windowChromeStub();
+    render(<App setupComplete windowChrome={chrome} />);
+
+    fireEvent.mouseDown(screen.getByRole("banner"), { button: 0, detail: 2 });
+
+    expect(chrome.calls).toEqual(["toggleMaximize"]);
+  });
+
+  it("keeps the OS chrome when no window client is available", () => {
+    render(<App setupComplete windowChrome={null} />);
+
+    expect(
+      screen.queryByRole("group", { name: "Window controls" }),
+    ).not.toBeInTheDocument();
   });
 
   it("has no detectable accessibility violations in either mode", async () => {
