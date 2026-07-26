@@ -25,6 +25,7 @@ const initialNotes: Record<string, string> = {
 export const browserE2EFolderPicker: FolderPicker = {
   chooseParentLocation: () => Promise.resolve("/tmp/knowledge-os-e2e"),
   chooseExistingVault: () => Promise.resolve("/tmp/Existing Vault"),
+  defaultParentLocation: () => Promise.resolve("/tmp/knowledge-os-e2e"),
 };
 
 const initialSettings: SettingsSnapshot = {
