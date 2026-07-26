@@ -43,6 +43,7 @@ import {
   CommandRegistry,
   createDefaultCommands,
 } from "../commands";
+import { Select, type SelectOption } from "../controls";
 import {
   MarkdownEditor,
   ipcEditorClient,
@@ -150,6 +151,27 @@ function IngestSurface({
   const [organize, setOrganize] = useState<OrganizeMode>("auto");
   const [organizeFolder, setOrganizeFolder] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // Folders arrive as full paths. Showing only the leaf and indenting by depth
+  // keeps deep paths readable in the menu; the trigger still names the whole
+  // path so the chosen destination is never ambiguous (#31).
+  const organizeOptions = useMemo<SelectOption[]>(() => {
+    const folderOptions = folders.map((folder) => {
+      const segments = folder.split("/");
+      return {
+        depth: segments.length - 1,
+        label: segments[segments.length - 1] ?? folder,
+        selectedLabel: `File in ${folder}`,
+        title: folder,
+        value: folder,
+      };
+    });
+    return [
+      { label: "Auto organize", value: "auto" },
+      ...folderOptions,
+      { label: "Don't organize", value: "none" },
+    ];
+  }, [folders]);
 
   async function submit() {
     if (!content.trim() && !file) return;
@@ -264,33 +286,22 @@ function IngestSurface({
                 ref={fileInput}
                 type="file"
               />
-              <label className="composer-select">
-                <Sparkles aria-hidden="true" size={15} />
-                <span className="visually-hidden">Organize this capture</span>
-                <select
-                  aria-label="Organize this capture"
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    if (value === "auto" || value === "none") {
-                      setOrganize(value);
-                      setOrganizeFolder("");
-                      return;
-                    }
-                    setOrganize("folder");
-                    setOrganizeFolder(value);
-                  }}
-                  value={organize === "folder" ? organizeFolder : organize}
-                >
-                  <option value="auto">Auto organize</option>
-                  {folders.map((folder) => (
-                    <option key={folder} value={folder}>
-                      File in {folder}
-                    </option>
-                  ))}
-                  <option value="none">Don&apos;t organize</option>
-                </select>
-                <ChevronDown aria-hidden="true" size={13} />
-              </label>
+              <Select
+                aria-label="Organize this capture"
+                className="composer-select"
+                icon={<Sparkles aria-hidden="true" size={15} />}
+                onChange={(value) => {
+                  if (value === "auto" || value === "none") {
+                    setOrganize(value);
+                    setOrganizeFolder("");
+                    return;
+                  }
+                  setOrganize("folder");
+                  setOrganizeFolder(value);
+                }}
+                options={organizeOptions}
+                value={organize === "folder" ? organizeFolder : organize}
+              />
             </div>
             <button
               aria-label="Process source"

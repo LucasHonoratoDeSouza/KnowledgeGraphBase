@@ -711,12 +711,13 @@ describe("application shell", () => {
     const organize = await screen.findByRole("combobox", {
       name: "Organize this capture",
     });
-    expect(organize).toHaveValue("auto");
+    expect(organize).toHaveTextContent("Auto organize");
 
     fireEvent.change(screen.getByRole("textbox", { name: "Add knowledge" }), {
       target: { value: "A note about retrieval." },
     });
-    fireEvent.change(organize, { target: { value: "Research" } });
+    fireEvent.click(organize);
+    fireEvent.click(await screen.findByRole("option", { name: "Research" }));
     fireEvent.click(screen.getByRole("button", { name: "Process source" }));
 
     await waitFor(() => {
@@ -735,9 +736,11 @@ describe("application shell", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Add knowledge" }), {
       target: { value: "A loose thought." },
     });
-    fireEvent.change(
+    fireEvent.click(
       await screen.findByRole("combobox", { name: "Organize this capture" }),
-      { target: { value: "none" } },
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Don't organize" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Process source" }));
 
