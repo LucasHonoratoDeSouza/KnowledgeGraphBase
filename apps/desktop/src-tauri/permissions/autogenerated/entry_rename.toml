@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-entry-rename"
+description = "Enables the entry_rename command without any pre-configured scope."
+commands.allow = ["entry_rename"]
+
+[[permission]]
+identifier = "deny-entry-rename"
+description = "Denies the entry_rename command without any pre-configured scope."
+commands.deny = ["entry_rename"]

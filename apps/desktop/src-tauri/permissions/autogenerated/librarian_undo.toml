@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-librarian-undo"
+description = "Enables the librarian_undo command without any pre-configured scope."
+commands.allow = ["librarian_undo"]
+
+[[permission]]
+identifier = "deny-librarian-undo"
+description = "Denies the librarian_undo command without any pre-configured scope."
+commands.deny = ["librarian_undo"]
