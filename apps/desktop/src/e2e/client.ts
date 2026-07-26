@@ -457,7 +457,21 @@ export const browserE2EKnowledgeClient: KnowledgeClient = {
         normalizedName: document.title.toLowerCase(),
         displayName: document.title,
       })),
-      edges: [],
+      edges: documents.flatMap((document, index) => {
+        const target = documents[index + 1];
+        return target
+          ? [
+              {
+                id: `edge-${document.id}-${target.id}`,
+                sourceConceptId: document.id,
+                targetConceptId: target.id,
+                relation: "related",
+                confidenceBasisPoints: 9_000,
+                originDocumentIds: [document.id, target.id],
+              },
+            ]
+          : [];
+      }),
       truncated: false,
     });
   },
