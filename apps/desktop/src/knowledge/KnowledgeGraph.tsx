@@ -28,6 +28,7 @@ import {
 import {
   DEFAULT_GRAPH_VIEWPORT,
   panViewportByPixels,
+  serializeViewBox,
   viewBoxFor,
   zoomViewportAt,
   type GraphViewport,
@@ -52,13 +53,6 @@ type ActiveGesture =
       lastClientX: number;
       lastClientY: number;
     };
-
-function serializeViewBox(viewport: GraphViewport) {
-  const box = viewBoxFor(viewport);
-  return [box.x, box.y, box.width, box.height]
-    .map((value) => String(Number(value.toFixed(4))))
-    .join(" ");
-}
 
 function isPrimaryPointer(event: ReactPointerEvent) {
   return event.button === 0 && event.isPrimary;

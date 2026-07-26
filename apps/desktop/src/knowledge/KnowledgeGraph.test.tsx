@@ -1,7 +1,22 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  DEFAULT_GRAPH_VIEWPORT,
+  panViewportByPixels,
+  serializeViewBox,
+  zoomViewportAt,
+} from "./graphViewport";
 import { KnowledgeGraph } from "./KnowledgeGraph";
+
+const CENTER = { x: 0.5, y: 0.5 };
+const defaultViewBox = serializeViewBox(DEFAULT_GRAPH_VIEWPORT);
+const zoomedInViewBox = serializeViewBox(
+  zoomViewportAt(DEFAULT_GRAPH_VIEWPORT, 1.25, CENTER),
+);
+const zoomedOutViewBox = serializeViewBox(
+  zoomViewportAt(DEFAULT_GRAPH_VIEWPORT, 1 / 1.25, CENTER),
+);
 import type { GraphView } from "./types";
 
 const connectedGraph: GraphView = {
@@ -107,7 +122,7 @@ describe("fluid knowledge graph", () => {
     const svg = screen.getByRole("group", { name: "Knowledge graph" });
 
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-    expect(svg).toHaveAttribute("viewBox", "80 52 640 416");
+    expect(svg).toHaveAttribute("viewBox", zoomedInViewBox);
     expect(screen.getByLabelText("Graph zoom")).toHaveTextContent("125%");
     rerender(
       <KnowledgeGraph
@@ -118,13 +133,13 @@ describe("fluid knowledge graph", () => {
         }}
       />,
     );
-    expect(svg).toHaveAttribute("viewBox", "80 52 640 416");
+    expect(svg).toHaveAttribute("viewBox", zoomedInViewBox);
 
     fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
-    expect(svg).toHaveAttribute("viewBox", "0 0 800 520");
+    expect(svg).toHaveAttribute("viewBox", defaultViewBox);
     expect(screen.getByLabelText("Graph zoom")).toHaveTextContent("100%");
     fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
-    expect(svg).toHaveAttribute("viewBox", "-100 -65 1000 650");
+    expect(svg).toHaveAttribute("viewBox", zoomedOutViewBox);
     expect(screen.getByLabelText("Graph zoom")).toHaveTextContent("80%");
 
     for (let step = 0; step < 20; step += 1) {
@@ -133,7 +148,7 @@ describe("fluid knowledge graph", () => {
     expect(svg).toHaveAttribute("data-graph-scale", "0.35");
 
     fireEvent.click(screen.getByRole("button", { name: "Reset graph view" }));
-    expect(svg).toHaveAttribute("viewBox", "0 0 800 520");
+    expect(svg).toHaveAttribute("viewBox", defaultViewBox);
     expect(screen.getByLabelText("Graph zoom")).toHaveTextContent("100%");
   });
 
@@ -164,7 +179,14 @@ describe("fluid knowledge graph", () => {
       pointerId: 7,
     });
 
-    expect(svg).toHaveAttribute("viewBox", "-40 -20 800 520");
+    const pannedViewBox = serializeViewBox(
+      panViewportByPixels(
+        DEFAULT_GRAPH_VIEWPORT,
+        { x: 40, y: 20 },
+        { width: 800, height: 520 },
+      ),
+    );
+    expect(svg).toHaveAttribute("viewBox", pannedViewBox);
     expect(node?.dataset.graphX).toBe(nodeBefore.x);
     expect(node?.dataset.graphY).toBe(nodeBefore.y);
     expect(svg.parentElement).toHaveClass("graph-stage-panning");
@@ -177,7 +199,7 @@ describe("fluid knowledge graph", () => {
       isPrimary: true,
       pointerId: 7,
     });
-    expect(svg).toHaveAttribute("viewBox", "-40 -20 800 520");
+    expect(svg).toHaveAttribute("viewBox", pannedViewBox);
 
     fireEvent.pointerDown(svg, {
       button: 0,

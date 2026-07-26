@@ -3022,8 +3022,10 @@ textarea:hover {
   animation: ko-palette-in var(--motion-base) var(--ease-out) both;
 }
 
-.graph-node,
-.graph-edge-layer line {
+/* Edges are deliberately absent from this fade-in: an animation with a `both`
+   fill mode pins them at the keyframe's opacity: 1, which would override the
+   resting opacity: 0 that keeps the graph a field of dots (#32). */
+.graph-node {
   animation: ko-fade-in var(--motion-slow) var(--ease-out) both;
 }
 
