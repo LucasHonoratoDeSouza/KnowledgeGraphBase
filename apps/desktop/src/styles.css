@@ -538,6 +538,38 @@ input[readonly] {
   display: none;
 }
 
+/* Ambient knowledge graph (#35): texture, never content. Anchored off to the
+   upper right and scaled past the viewport so only a fragment is on screen,
+   masked so it fades out before it reaches the composer. */
+.ambient-graph {
+  position: absolute;
+  z-index: 0;
+  top: -14%;
+  right: -18%;
+  width: 78%;
+  height: 96%;
+  opacity: 0.5;
+  pointer-events: none;
+  mask-image: radial-gradient(
+    circle at 72% 26%,
+    rgb(0 0 0 / 100%) 0%,
+    rgb(0 0 0 / 55%) 45%,
+    rgb(0 0 0 / 0%) 78%
+  );
+}
+
+.ambient-graph-nodes circle {
+  fill: var(--accent-2);
+  opacity: 0.14;
+}
+
+.ambient-graph-edges line {
+  stroke: var(--accent-2);
+  stroke-width: 1;
+  opacity: 0.08;
+  vector-effect: non-scaling-stroke;
+}
+
 .ingest-ambient-one {
   top: 9%;
   left: 18%;
