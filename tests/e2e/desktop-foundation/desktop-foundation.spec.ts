@@ -3,12 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function createLocalKnowledgeBase(page: Page, name = "teste n1") {
   await page.goto("/");
-  await page.getByRole("button", { name: "Choose location" }).click();
-  await expect(
-    page.getByRole("textbox", { name: "Parent location" }),
-  ).toHaveValue("/tmp/knowledge-os-e2e");
+  // Setup is one field: the location is already resolved for us (#37).
+  await expect(page.getByText("/tmp/knowledge-os-e2e/…")).toBeVisible();
   await page.getByRole("textbox", { name: "Vault name" }).fill(name);
-  await page.getByRole("button", { name: "Continue without account" }).click();
   await page.getByRole("button", { name: "Open workspace" }).click();
   await expect(
     page.getByRole("tablist", { name: "Primary mode" }),
@@ -28,14 +25,14 @@ test("offers explicit accountless local knowledge-base creation", async ({
   await page.goto("/");
 
   await expect(
-    page.getByRole("button", { name: "Continue without account" }),
-  ).toBeVisible();
-  await expect(
     page.getByRole("radio", { name: "Create local knowledge base" }),
   ).toBeChecked();
+  // Nothing in setup may ask for an account, a provider or a key.
+  await expect(page.getByRole("radio")).toHaveCount(2);
+  await expect(page.getByLabel("Provider key")).toHaveCount(0);
   await expect(
-    page.getByRole("textbox", { name: "Parent location" }),
-  ).toHaveAttribute("readonly");
+    page.getByRole("button", { name: "Continue without account" }),
+  ).toHaveCount(0);
   await createLocalKnowledgeBase(page);
   await expect(page.getByRole("tab", { name: "Ingest" })).toHaveAttribute(
     "aria-selected",
@@ -48,7 +45,7 @@ test("opens an existing vault through the injected directory chooser", async ({
 }) => {
   await page.goto("/");
   await page.getByRole("radio", { name: "Open existing vault" }).click();
-  await page.getByRole("button", { name: "Choose existing vault" }).click();
+  await page.getByRole("button", { name: "Choose folder" }).click();
 
   await expect(
     page.getByRole("textbox", { name: "Existing vault path" }),
@@ -66,7 +63,6 @@ test("reports a colliding new-vault target without opening a partial workspace",
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Choose location" }).click();
   await page.getByRole("textbox", { name: "Vault name" }).fill("Existing");
   await page.getByRole("button", { name: "Open workspace" }).click();
 

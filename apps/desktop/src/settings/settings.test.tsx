@@ -85,53 +85,17 @@ function client() {
 function folderPicker(
   parent: string | null = "/vaults",
   existing: string | null = "/vaults/Existing",
+  fallback: string | null = "/home/lucas",
 ): FolderPicker {
   return {
     chooseExistingVault: vi.fn().mockResolvedValue(existing),
     chooseParentLocation: vi.fn().mockResolvedValue(parent),
+    defaultParentLocation: vi.fn().mockResolvedValue(fallback),
   };
 }
 
 describe("first-run onboarding", () => {
   it("presents a focused local-first welcome experience", () => {
-    render(<Onboarding client={client()} onComplete={vi.fn()} />);
-
-    expect(screen.getByText("DESKTOP KNOWLEDGE SYSTEM")).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Built for the long term." }),
-    ).toBeVisible();
-    expect(screen.getByText("1 of 2")).toBeVisible();
-  });
-
-  it("collects a parent location and vault name before creating locally", () => {
-    render(<Onboarding client={client()} onComplete={vi.fn()} />);
-
-    expect(
-      screen.getByRole("radio", { name: "Create local knowledge base" }),
-    ).toBeChecked();
-    expect(
-      screen.getByRole("textbox", { name: "Parent location" }),
-    ).toBeRequired();
-    expect(
-      screen.getByRole("textbox", { name: "Parent location" }),
-    ).toHaveAttribute("readonly");
-    expect(screen.getByRole("textbox", { name: "Vault name" })).toBeRequired();
-    expect(
-      screen.getByRole("button", { name: "Open workspace" }),
-    ).toBeVisible();
-  });
-
-  it("defaults to complete local-only operation", () => {
-    render(<Onboarding client={client()} onComplete={vi.fn()} />);
-
-    expect(screen.getByRole("radio", { name: "Local only" })).toBeChecked();
-    expect(
-      screen.getByRole("button", { name: "Continue without account" }),
-    ).toBeVisible();
-    expect(screen.queryByLabelText("Provider key")).not.toBeInTheDocument();
-  });
-
-  it("can open an explicitly selected existing vault", async () => {
     render(
       <Onboarding
         client={client()}
@@ -140,46 +104,74 @@ describe("first-run onboarding", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: "Open existing vault" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Choose existing vault" }),
-    );
-
+    expect(screen.getByText("DESKTOP KNOWLEDGE SYSTEM")).toBeVisible();
     expect(
-      screen.getByRole("textbox", { name: "Existing vault path" }),
-    ).toBeRequired();
-    expect(
-      screen.getByRole("textbox", { name: "Existing vault path" }),
-    ).toHaveAttribute("readonly");
-    await waitFor(() =>
-      expect(
-        screen.getByRole("textbox", { name: "Existing vault path" }),
-      ).toHaveValue("/vaults/Existing"),
-    );
-    expect(
-      screen.queryByRole("textbox", { name: "Vault name" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("heading", { name: "Built for the long term." }),
+    ).toBeVisible();
   });
 
-  it("leaves the selected parent unchanged when the chooser is cancelled", async () => {
+  it("offers exactly two local choices and no account or AI step", () => {
     render(
       <Onboarding
         client={client()}
-        folderPicker={folderPicker(null)}
+        folderPicker={folderPicker()}
         onComplete={vi.fn()}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose location" }));
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("textbox", { name: "Parent location" }),
-      ).toHaveValue(""),
-    );
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(
+      screen.getByRole("radio", { name: "Create local knowledge base" }),
+    ).toBeChecked();
+    expect(screen.queryByLabelText("Provider key")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Main model")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: "AI enabled" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Continue without account" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("completes local-only setup without a provider request", async () => {
+  it("asks only for a name and fills the location in by itself", async () => {
+    render(
+      <Onboarding
+        client={client()}
+        folderPicker={folderPicker()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Vault name" })).toBeRequired();
+    // The destination is reported, not asked for: no path field to fill in.
+    expect(
+      screen.queryByRole("textbox", { name: "Parent location" }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("/home/lucas/…")).toBeVisible();
+    });
+  });
+
+  it("previews the exact folder the new vault will occupy", async () => {
+    render(
+      <Onboarding
+        client={client()}
+        folderPicker={folderPicker()}
+        onComplete={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("/home/lucas/…")).toBeVisible();
+    });
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Vault name" }), {
+      target: { value: "Research" },
+    });
+
+    expect(screen.getByText("/home/lucas/Research")).toBeVisible();
+  });
+
+  it("creates the vault in the default location with one name and one click", async () => {
     const settingsClient = client();
     const onComplete = vi.fn();
     render(
@@ -189,12 +181,9 @@ describe("first-run onboarding", () => {
         onComplete={onComplete}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Choose location" }));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("textbox", { name: "Parent location" }),
-      ).toHaveValue("/vaults"),
-    );
+    await waitFor(() => {
+      expect(screen.getByText("/home/lucas/…")).toBeVisible();
+    });
     fireEvent.change(screen.getByRole("textbox", { name: "Vault name" }), {
       target: { value: "Research" },
     });
@@ -203,7 +192,11 @@ describe("first-run onboarding", () => {
 
     await waitFor(() => {
       expect(settingsClient.completeOnboarding).toHaveBeenCalledWith({
-        vault: { kind: "create", parentPath: "/vaults", vaultName: "Research" },
+        vault: {
+          kind: "create",
+          parentPath: "/home/lucas",
+          vaultName: "Research",
+        },
         aiEnabled: false,
         provider: null,
         endpoint: null,
@@ -218,20 +211,7 @@ describe("first-run onboarding", () => {
     expect(onComplete).toHaveBeenCalledOnce();
   });
 
-  it("uses a password input for transient AI credentials", () => {
-    render(<Onboarding client={client()} onComplete={vi.fn()} />);
-    fireEvent.click(screen.getByRole("radio", { name: "AI enabled" }));
-
-    expect(screen.getByLabelText("Provider key")).toHaveAttribute(
-      "type",
-      "password",
-    );
-    expect(screen.getByRole("combobox", { name: "Provider" })).toHaveValue(
-      "openai",
-    );
-  });
-
-  it("submits AI policy and budgets in the secure setup request", async () => {
+  it("lets the default location be overridden", async () => {
     const settingsClient = client();
     render(
       <Onboarding
@@ -240,27 +220,12 @@ describe("first-run onboarding", () => {
         onComplete={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Choose location" }));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("textbox", { name: "Parent location" }),
-      ).toHaveValue("/vaults"),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Change location" }));
+    await waitFor(() => {
+      expect(screen.getByText("/vaults/…")).toBeVisible();
+    });
     fireEvent.change(screen.getByRole("textbox", { name: "Vault name" }), {
       target: { value: "Research" },
-    });
-    fireEvent.click(screen.getByRole("radio", { name: "AI enabled" }));
-    fireEvent.change(screen.getByLabelText("Provider key"), {
-      target: { value: "transient" },
-    });
-    fireEvent.change(screen.getByLabelText("Main model"), {
-      target: { value: "gpt-main" },
-    });
-    fireEvent.change(screen.getByLabelText("Daily budget (cents)"), {
-      target: { value: "250" },
-    });
-    fireEvent.change(screen.getByLabelText("Monthly budget (cents)"), {
-      target: { value: "4000" },
     });
 
     fireEvent.submit(screen.getByRole("form", { name: "Workspace setup" }));
@@ -268,14 +233,89 @@ describe("first-run onboarding", () => {
     await waitFor(() => {
       expect(settingsClient.completeOnboarding).toHaveBeenCalledWith(
         expect.objectContaining({
-          credential: "transient",
-          mainModelId: "gpt-main",
-          dailyBudgetCents: 250,
-          monthlyBudgetCents: 4000,
+          vault: {
+            kind: "create",
+            parentPath: "/vaults",
+            vaultName: "Research",
+          },
         }),
       );
     });
-    expect(screen.getByLabelText("Provider key")).toHaveValue("");
+  });
+
+  it("keeps the resolved default when the chooser is cancelled", async () => {
+    render(
+      <Onboarding
+        client={client()}
+        folderPicker={folderPicker(null)}
+        onComplete={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("/home/lucas/…")).toBeVisible();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Change location" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("/home/lucas/…")).toBeVisible();
+    });
+  });
+
+  it("refuses to submit when no location could be resolved", async () => {
+    const settingsClient = client();
+    render(
+      <Onboarding
+        client={settingsClient}
+        folderPicker={folderPicker("/vaults", "/vaults/Existing", null)}
+        onComplete={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Vault name" }), {
+      target: { value: "Research" },
+    });
+
+    fireEvent.submit(screen.getByRole("form", { name: "Workspace setup" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Choose where the vault should live.",
+    );
+    expect(settingsClient.completeOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("can open an explicitly selected existing folder", async () => {
+    const settingsClient = client();
+    render(
+      <Onboarding
+        client={settingsClient}
+        folderPicker={folderPicker()}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Open existing vault" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+
+    const path = screen.getByRole("textbox", { name: "Existing vault path" });
+    expect(path).toBeRequired();
+    expect(path).toHaveAttribute("readonly");
+    await waitFor(() => {
+      expect(path).toHaveValue("/vaults/Existing");
+    });
+    expect(
+      screen.queryByRole("textbox", { name: "Vault name" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.submit(screen.getByRole("form", { name: "Workspace setup" }));
+
+    await waitFor(() => {
+      expect(settingsClient.completeOnboarding).toHaveBeenCalledWith(
+        expect.objectContaining({
+          aiEnabled: false,
+          vault: { kind: "open_existing", vaultPath: "/vaults/Existing" },
+        }),
+      );
+    });
   });
 });
 
