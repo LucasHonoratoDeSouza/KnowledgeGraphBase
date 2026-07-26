@@ -65,9 +65,13 @@ export function panViewportByPixels(
 ): GraphViewport {
   if (surface.width <= 0 || surface.height <= 0) return viewport;
   const box = viewBoxFor(viewport);
+  const displayScale = Math.min(
+    surface.width / box.width,
+    surface.height / box.height,
+  );
   return {
-    x: viewport.x - (delta.x / surface.width) * box.width,
-    y: viewport.y - (delta.y / surface.height) * box.height,
+    x: viewport.x - delta.x / displayScale,
+    y: viewport.y - delta.y / displayScale,
     scale: viewport.scale,
   };
 }

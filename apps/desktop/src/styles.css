@@ -929,6 +929,11 @@ input[readonly] {
   flex: 1;
   overflow: hidden;
   background: var(--panel-deep);
+  overscroll-behavior: contain;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .graph-stage::before {
@@ -940,12 +945,28 @@ input[readonly] {
   inset: 0;
   width: 100%;
   height: 100%;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.graph-stage-panning svg {
+  cursor: grabbing;
+}
+
+.graph-stage ::selection {
+  color: inherit;
+  background: transparent;
 }
 
 .graph-edge-layer line {
+  pointer-events: none;
   stroke: #56534d;
   stroke-width: 1.2;
   opacity: 0.6;
+  vector-effect: non-scaling-stroke;
 }
 
 .graph-node circle {
@@ -968,6 +989,8 @@ input[readonly] {
 /* Dragging a node (#13): the whole group is the grab target. */
 .graph-node {
   cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .graph-node-dragging {
@@ -995,6 +1018,8 @@ input[readonly] {
 }
 
 .graph-node text {
+  pointer-events: none;
+  user-select: none;
   fill: #aaa398;
   font-size: 11px;
   font-family: inherit;
@@ -1003,6 +1028,62 @@ input[readonly] {
 .graph-node-hub text,
 .graph-node-linked text {
   fill: #d8d3c9;
+}
+
+.graph-view-controls {
+  position: absolute;
+  z-index: 2;
+  bottom: 14px;
+  left: 16px;
+  display: flex;
+  height: 30px;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  color: var(--muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #252525;
+}
+
+.graph-view-controls .icon-button {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+}
+
+.graph-view-controls .icon-button:hover {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+
+.graph-view-controls output {
+  min-width: 38px;
+  color: var(--subtle);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.graph-control-divider {
+  width: 1px;
+  height: 15px;
+  margin: 0 2px;
+  background: var(--border);
+}
+
+.graph-navigation-hint {
+  position: absolute;
+  z-index: 1;
+  bottom: 51px;
+  left: 17px;
+  color: #777169;
+  font-size: 9px;
+  pointer-events: none;
 }
 
 .graph-legend {
