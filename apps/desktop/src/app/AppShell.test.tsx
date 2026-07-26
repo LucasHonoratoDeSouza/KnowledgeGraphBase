@@ -20,6 +20,7 @@ import type {
   RetrievalResult,
 } from "../knowledge";
 import type { SettingsClient, SettingsSnapshot } from "../settings";
+import type { WindowEdge } from "./windowChrome";
 
 function createKnowledgeClient() {
   const capture = vi.fn((request: CaptureRequest): Promise<CaptureResponse> =>
@@ -271,6 +272,25 @@ function settingsStub(
     saveWorkspaceState,
     testProvider: snapshot,
     removeProvider: snapshot,
+  };
+}
+
+/** Records which window command each control invoked (#33). */
+function windowChromeStub(maximized = false) {
+  const calls: string[] = [];
+  const record = (call: string) => {
+    calls.push(call);
+    return Promise.resolve();
+  };
+  return {
+    calls,
+    close: () => record("close"),
+    isMaximized: () => Promise.resolve(maximized),
+    minimize: () => record("minimize"),
+    onMaximizeChange: () => Promise.resolve(() => undefined),
+    startDragging: () => record("startDragging"),
+    startResize: (edge: WindowEdge) => record(`startResize:${edge}`),
+    toggleMaximize: () => record("toggleMaximize"),
   };
 }
 
@@ -691,12 +711,13 @@ describe("application shell", () => {
     const organize = await screen.findByRole("combobox", {
       name: "Organize this capture",
     });
-    expect(organize).toHaveValue("auto");
+    expect(organize).toHaveTextContent("Auto organize");
 
     fireEvent.change(screen.getByRole("textbox", { name: "Add knowledge" }), {
       target: { value: "A note about retrieval." },
     });
-    fireEvent.change(organize, { target: { value: "Research" } });
+    fireEvent.click(organize);
+    fireEvent.click(await screen.findByRole("option", { name: "Research" }));
     fireEvent.click(screen.getByRole("button", { name: "Process source" }));
 
     await waitFor(() => {
@@ -715,9 +736,11 @@ describe("application shell", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Add knowledge" }), {
       target: { value: "A loose thought." },
     });
-    fireEvent.change(
+    fireEvent.click(
       await screen.findByRole("combobox", { name: "Organize this capture" }),
-      { target: { value: "none" } },
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Don't organize" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Process source" }));
 
@@ -913,6 +936,185 @@ describe("application shell", () => {
         }
       ).panes.assistant.width,
     ).toBe(336);
+  });
+
+  it("draws its own window controls and invokes the matching commands", async () => {
+    const chrome = windowChromeStub();
+    render(<App setupComplete windowChrome={chrome} />);
+
+    const controls = screen.getByRole("group", { name: "Window controls" });
+    const minimize = within(controls).getByRole("button", { name: "Minimize" });
+    const maximize = within(controls).getByRole("button", { name: "Maximize" });
+    const close = within(controls).getByRole("button", { name: "Close" });
+
+    minimize.focus();
+    expect(minimize).toHaveFocus();
+    fireEvent.click(minimize);
+    fireEvent.click(maximize);
+    fireEvent.click(close);
+
+    await waitFor(() => {
+      expect(chrome.calls).toEqual(["minimize", "toggleMaximize", "close"]);
+    });
+  });
+
+  it("flips the maximize control to Restore while the window is maximized", async () => {
+    const chrome = windowChromeStub(true);
+    render(<App setupComplete windowChrome={chrome} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Restore" })).toBeVisible();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Maximize" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("drags the window from the header background but not from its controls", () => {
+    const chrome = windowChromeStub();
+    render(<App setupComplete windowChrome={chrome} />);
+
+    const header = screen.getByRole("banner");
+    fireEvent.mouseDown(header, { button: 0, detail: 1 });
+    expect(chrome.calls).toEqual(["startDragging"]);
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Retrieve" }), {
+      button: 0,
+      detail: 1,
+    });
+    fireEvent.mouseDown(screen.getByRole("button", { name: "Settings" }), {
+      button: 0,
+      detail: 1,
+    });
+    expect(chrome.calls).toEqual(["startDragging"]);
+  });
+
+  it("toggles maximize when the drag region is double clicked", () => {
+    const chrome = windowChromeStub();
+    render(<App setupComplete windowChrome={chrome} />);
+
+    fireEvent.mouseDown(screen.getByRole("banner"), { button: 0, detail: 2 });
+
+    expect(chrome.calls).toEqual(["toggleMaximize"]);
+  });
+
+  it("keeps the OS chrome when no window client is available", () => {
+    render(<App setupComplete windowChrome={null} />);
+
+    expect(
+      screen.queryByRole("group", { name: "Window controls" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("focuses the Explorer search from Ingest with Cmd/Ctrl+F", async () => {
+    render(<App setupComplete />);
+    expect(screen.getByRole("tab", { name: "Ingest" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("textbox", { name: "Filter knowledge" }),
+      ).toHaveFocus();
+    });
+    expect(screen.getByRole("tab", { name: "Retrieve" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("selects the standing query so Cmd/Ctrl+F replaces it", async () => {
+    render(<App setupComplete initialMode="Retrieve" />);
+    const search = screen.getByRole("textbox", { name: "Filter knowledge" });
+    fireEvent.change(search, { target: { value: "agents" } });
+
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
+
+    await waitFor(() => {
+      expect(search).toHaveFocus();
+    });
+    expect((search as HTMLInputElement).selectionStart).toBe(0);
+    expect((search as HTMLInputElement).selectionEnd).toBe("agents".length);
+  });
+
+  it("clears the query and returns focus when Escape leaves the search", async () => {
+    render(<App setupComplete initialMode="Retrieve" />);
+    const retrieve = screen.getByRole("tab", { name: "Retrieve" });
+    retrieve.focus();
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
+    const search = screen.getByRole("textbox", { name: "Filter knowledge" });
+    await waitFor(() => {
+      expect(search).toHaveFocus();
+    });
+    fireEvent.change(search, { target: { value: "agents" } });
+
+    fireEvent.keyDown(search, { key: "Escape" });
+
+    expect(search).toHaveValue("");
+    expect(retrieve).toHaveFocus();
+  });
+
+  it("ignores shortcuts while a modal owns the screen", () => {
+    render(<App setupComplete />);
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    expect(
+      screen.getByRole("dialog", { name: "Command palette" }),
+    ).toBeVisible();
+
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
+
+    expect(screen.getByRole("tab", { name: "Ingest" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("lists a command's shortcut next to it in the palette", () => {
+    render(<App setupComplete />);
+
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+
+    const command = screen
+      .getAllByRole("option")
+      .find((option) => option.textContent.startsWith("Search Knowledge"));
+    expect(command?.textContent).toContain("Ctrl+F");
+  });
+
+  it("renders the ambient graph behind Ingest as inert decoration", async () => {
+    const { container } = render(
+      <App knowledgeClient={createKnowledgeClient()} setupComplete />,
+    );
+
+    const ambient = await waitFor(() => {
+      const found = container.querySelector(".ambient-graph");
+      if (!found) throw new Error("ambient layer not rendered");
+      return found;
+    });
+    expect(ambient).toHaveAttribute("aria-hidden", "true");
+    expect(ambient.querySelector("[tabindex]")).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Add knowledge" }),
+    ).toBeVisible();
+  });
+
+  it("leaves the Ingest surface untouched when the index is empty", async () => {
+    const client = createKnowledgeClient();
+    const empty = {
+      ...client,
+      getGraph: () =>
+        Promise.resolve({ concepts: [], edges: [], truncated: false }),
+    };
+    const { container } = render(<App knowledgeClient={empty} setupComplete />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Capture a source" }),
+      ).toBeVisible();
+    });
+    expect(container.querySelector(".ambient-graph")).toBeNull();
   });
 
   it("has no detectable accessibility violations in either mode", async () => {

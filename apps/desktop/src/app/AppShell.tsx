@@ -43,6 +43,7 @@ import {
   CommandRegistry,
   createDefaultCommands,
 } from "../commands";
+import { Select, type SelectOption } from "../controls";
 import {
   MarkdownEditor,
   ipcEditorClient,
@@ -67,7 +68,16 @@ import {
   togglePane,
   type WorkspaceLayout,
 } from "../workspace/layout";
+import { useShortcuts } from "../shortcuts";
+import { WindowControls, WindowResizeHandles } from "./WindowControls";
 import {
+  beginWindowDrag,
+  detectWindowChrome,
+  useWindowMaximized,
+  type WindowChromeClient,
+} from "./windowChrome";
+import {
+  AmbientGraph,
   KnowledgeGraph,
   ipcKnowledgeClient,
   type AssistantAnswer,
@@ -91,6 +101,7 @@ interface AppShellProps {
   online?: boolean;
   settingsClient?: SettingsClient;
   setupComplete?: boolean;
+  windowChrome?: WindowChromeClient | null;
 }
 
 const modes: PrimaryMode[] = ["Ingest", "Retrieve"];
@@ -115,6 +126,7 @@ const emptySettings: SettingsSnapshot = {
 };
 
 interface IngestSurfaceProps {
+  ambientGraph: GraphView | null;
   client: KnowledgeClient;
   folders: string[];
   onCaptured: () => void;
@@ -122,6 +134,7 @@ interface IngestSurfaceProps {
 }
 
 function IngestSurface({
+  ambientGraph,
   client,
   folders,
   onCaptured,
@@ -138,6 +151,27 @@ function IngestSurface({
   const [organize, setOrganize] = useState<OrganizeMode>("auto");
   const [organizeFolder, setOrganizeFolder] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // Folders arrive as full paths. Showing only the leaf and indenting by depth
+  // keeps deep paths readable in the menu; the trigger still names the whole
+  // path so the chosen destination is never ambiguous (#31).
+  const organizeOptions = useMemo<SelectOption[]>(() => {
+    const folderOptions = folders.map((folder) => {
+      const segments = folder.split("/");
+      return {
+        depth: segments.length - 1,
+        label: segments[segments.length - 1] ?? folder,
+        selectedLabel: `File in ${folder}`,
+        title: folder,
+        value: folder,
+      };
+    });
+    return [
+      { label: "Auto organize", value: "auto" },
+      ...folderOptions,
+      { label: "Don't organize", value: "none" },
+    ];
+  }, [folders]);
 
   async function submit() {
     if (!content.trim() && !file) return;
@@ -182,6 +216,7 @@ function IngestSurface({
 
   return (
     <section aria-labelledby="ingest-heading" className="ingest-surface">
+      <AmbientGraph graph={ambientGraph} />
       <div className="ingest-content">
         <div className="ingest-kicker">
           <span>NEW SOURCE</span>
@@ -251,33 +286,22 @@ function IngestSurface({
                 ref={fileInput}
                 type="file"
               />
-              <label className="composer-select">
-                <Sparkles aria-hidden="true" size={15} />
-                <span className="visually-hidden">Organize this capture</span>
-                <select
-                  aria-label="Organize this capture"
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    if (value === "auto" || value === "none") {
-                      setOrganize(value);
-                      setOrganizeFolder("");
-                      return;
-                    }
-                    setOrganize("folder");
-                    setOrganizeFolder(value);
-                  }}
-                  value={organize === "folder" ? organizeFolder : organize}
-                >
-                  <option value="auto">Auto organize</option>
-                  {folders.map((folder) => (
-                    <option key={folder} value={folder}>
-                      File in {folder}
-                    </option>
-                  ))}
-                  <option value="none">Don&apos;t organize</option>
-                </select>
-                <ChevronDown aria-hidden="true" size={13} />
-              </label>
+              <Select
+                aria-label="Organize this capture"
+                className="composer-select"
+                icon={<Sparkles aria-hidden="true" size={15} />}
+                onChange={(value) => {
+                  if (value === "auto" || value === "none") {
+                    setOrganize(value);
+                    setOrganizeFolder("");
+                    return;
+                  }
+                  setOrganize("folder");
+                  setOrganizeFolder(value);
+                }}
+                options={organizeOptions}
+                value={organize === "folder" ? organizeFolder : organize}
+              />
             </div>
             <button
               aria-label="Process source"
@@ -334,6 +358,7 @@ interface RetrieveSurfaceProps {
   layout: WorkspaceLayout;
   models: ModelProfile[];
   onLayoutChange: (layout: WorkspaceLayout) => void;
+  searchFocusRequest: number;
   vaultName: string;
 }
 
@@ -736,6 +761,7 @@ interface ExplorerPaneProps {
   onReorganize: (folder: string) => Promise<void>;
   onSearch: (query: string) => void;
   openNotePath: string;
+  searchFocusRequest: number;
   searchResult: RetrievalResult | null;
   vaultName: string;
 }
@@ -758,6 +784,7 @@ function ExplorerPane({
   onReorganize,
   onSearch,
   openNotePath,
+  searchFocusRequest,
   searchResult,
   vaultName,
 }: ExplorerPaneProps) {
@@ -774,6 +801,9 @@ function ExplorerPane({
   const [dragged, setDragged] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const searchInput = useRef<HTMLInputElement | null>(null);
+  // Where focus came from, so Escape in the field can hand it back (#34).
+  const focusOrigin = useRef<HTMLElement | null>(null);
   const defaultEntries: LibraryEntry[] = ["Inbox", "Projects", "Research"].map(
     (name) => ({
       name,
@@ -803,6 +833,19 @@ function ExplorerPane({
       clearTimeout(timer);
     };
   }, [query]);
+
+  // Cmd/Ctrl+F asks for this field; selecting the existing query means the
+  // next keystroke replaces a stale search instead of appending to it.
+  useEffect(() => {
+    if (searchFocusRequest === 0) return;
+    focusOrigin.current =
+      document.activeElement instanceof HTMLElement &&
+      document.activeElement !== searchInput.current
+        ? document.activeElement
+        : null;
+    searchInput.current?.focus();
+    searchInput.current?.select();
+  }, [searchFocusRequest]);
 
   function toggleFolder(path: string) {
     setCollapsed((current) => {
@@ -906,9 +949,14 @@ function ExplorerPane({
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && query.trim()) onSearch(query.trim());
-            if (event.key === "Escape") setQuery("");
+            if (event.key === "Escape") {
+              setQuery("");
+              focusOrigin.current?.focus();
+              focusOrigin.current = null;
+            }
           }}
           placeholder="Search knowledge"
+          ref={searchInput}
           value={query}
         />
         {searching ? (
@@ -1287,6 +1335,7 @@ function RetrieveSurface({
   layout,
   models,
   onLayoutChange,
+  searchFocusRequest,
   vaultName,
 }: RetrieveSurfaceProps) {
   const explorer = layout.panes.explorer;
@@ -1340,6 +1389,14 @@ function RetrieveSurface({
       cancelled = true;
     };
   }, [knowledgeClient]);
+
+  useEffect(() => {
+    if (searchFocusRequest === 0 || !explorer.collapsed) return;
+    onLayoutChange(togglePane(layout, "explorer"));
+    // The layout is read once per request; re-running on every layout change
+    // would fight a deliberate collapse right after the shortcut.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchFocusRequest]);
 
   async function openDocument(path: string) {
     try {
@@ -1514,6 +1571,7 @@ function RetrieveSurface({
                 });
             }}
             openNotePath={canvasView === "note" ? document.path : ""}
+            searchFocusRequest={searchFocusRequest}
             searchResult={searchResult}
             vaultName={vaultName}
           />
@@ -1679,6 +1737,7 @@ export function AppShell({
   online = true,
   settingsClient = ipcSettingsClient,
   setupComplete,
+  windowChrome = detectWindowChrome(),
 }: AppShellProps) {
   const [mode, setMode] = useState<PrimaryMode>(
     initialSettings?.activeMode ?? initialMode,
@@ -1690,6 +1749,7 @@ export function AppShell({
   const [settings, setSettings] = useState(initialSettings ?? emptySettings);
   const [knowledgeRevision, setKnowledgeRevision] = useState(0);
   const [captureFolders, setCaptureFolders] = useState<string[]>([]);
+  const [ambientGraph, setAmbientGraph] = useState<GraphView | null>(null);
   const [layout, setLayout] = useState(() =>
     restoreLayout(
       initialSettings?.layoutJson ?? serializeLayout(DEFAULT_LAYOUT),
@@ -1699,16 +1759,46 @@ export function AppShell({
     Ingest: null,
     Retrieve: null,
   });
+  const maximized = useWindowMaximized(windowChrome);
+  // Cmd/Ctrl+F runs the Search Knowledge command, which lands in Retrieve and
+  // asks the Explorer for focus; the surface itself opens a collapsed pane.
+  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
   const commands = useMemo(
     () =>
       new CommandRegistry(
         createDefaultCommands((id) => {
           setSettingsOpen(false);
+          if (id === "search-knowledge") {
+            setMode("Retrieve");
+            setSearchFocusRequest((current) => current + 1);
+            return;
+          }
           setMode(id === "add-source" ? "Ingest" : "Retrieve");
         }),
       ),
     [],
   );
+  // Every chord a command declares becomes a live binding (#34), so adding
+  // one later is a single entry in the registry.
+  const commandBindings = useMemo(
+    () =>
+      Object.fromEntries(
+        commands.all().flatMap((command) =>
+          command.shortcut
+            ? [
+                [
+                  command.shortcut,
+                  () => {
+                    commands.execute(command.id);
+                  },
+                ] as const,
+              ]
+            : [],
+        ),
+      ),
+    [commands],
+  );
+  useShortcuts(commandBindings);
 
   useEffect(() => {
     if (setupComplete !== undefined || initialSettings !== undefined)
@@ -1749,6 +1839,24 @@ export function AppShell({
       cancelled = true;
     };
   }, [knowledgeClient, knowledgeRevision, setupDone]);
+
+  // The ambient layer only loads for the surface that shows it (#35), so
+  // opening straight into Retrieve costs nothing extra.
+  useEffect(() => {
+    if (!setupDone || mode !== "Ingest") return undefined;
+    let cancelled = false;
+    void knowledgeClient
+      .getGraph()
+      .then((graph) => {
+        if (!cancelled) setAmbientGraph(graph);
+      })
+      .catch(() => {
+        // A still-building index simply leaves the surface as it was.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [knowledgeClient, knowledgeRevision, mode, setupDone]);
 
   function persistWorkspace(
     nextMode: PrimaryMode,
@@ -1794,6 +1902,20 @@ export function AppShell({
     return (
       <>
         <DesktopStyles />
+        {/* Onboarding fills a frameless window too, so it needs its own drag
+            strip and resize handles or the window becomes immovable. */}
+        <WindowResizeHandles chrome={windowChrome} maximized={maximized} />
+        {windowChrome ? (
+          <div
+            className="onboarding-window-chrome"
+            data-window-drag-region="true"
+            onMouseDown={(event) => {
+              beginWindowDrag(windowChrome, event);
+            }}
+          >
+            <WindowControls chrome={windowChrome} maximized={maximized} />
+          </div>
+        ) : null}
         <Onboarding
           client={settingsClient}
           {...(folderPicker ? { folderPicker } : {})}
@@ -1812,14 +1934,31 @@ export function AppShell({
   return (
     <CommandPaletteHost registry={commands}>
       <DesktopStyles />
-      <main aria-label="Knowledge workspace" className="app-shell">
-        <header className="app-header" data-ui="desktop-chrome">
-          <div className="app-identity">
+      <main
+        aria-label="Knowledge workspace"
+        className="app-shell"
+        data-window-maximized={windowChrome ? String(maximized) : undefined}
+      >
+        <WindowResizeHandles chrome={windowChrome} maximized={maximized} />
+        <header
+          className="app-header"
+          data-ui="desktop-chrome"
+          data-window-drag-region={windowChrome ? "true" : undefined}
+          onMouseDown={(event) => {
+            beginWindowDrag(windowChrome, event);
+          }}
+        >
+          <div className="app-identity" data-window-no-drag="true">
             <ProductMark />
             <span className="vault-breadcrumb">/</span>
             <span>{vaultName}</span>
           </div>
-          <div aria-label="Primary mode" className="mode-switch" role="tablist">
+          <div
+            aria-label="Primary mode"
+            className="mode-switch"
+            data-window-no-drag="true"
+            role="tablist"
+          >
             {modes.map((candidate) => (
               <button
                 aria-controls={`${candidate.toLowerCase()}-surface`}
@@ -1845,6 +1984,7 @@ export function AppShell({
           <div
             aria-label="Workspace status"
             className="workspace-status"
+            data-window-no-drag="true"
             role="status"
           >
             <span data-status="ready">
@@ -1867,6 +2007,7 @@ export function AppShell({
               <Settings2 aria-hidden="true" size={16} />
             </button>
           </div>
+          <WindowControls chrome={windowChrome} maximized={maximized} />
         </header>
         {settingsOpen ? (
           <AISettings
@@ -1883,6 +2024,7 @@ export function AppShell({
           >
             {mode === "Ingest" ? (
               <IngestSurface
+                ambientGraph={ambientGraph}
                 client={knowledgeClient}
                 folders={captureFolders}
                 onCaptured={() => {
@@ -1906,6 +2048,7 @@ export function AppShell({
                     ),
                 )}
                 onLayoutChange={updateLayout}
+                searchFocusRequest={searchFocusRequest}
                 vaultName={vaultName}
               />
             )}

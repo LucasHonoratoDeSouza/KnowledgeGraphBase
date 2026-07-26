@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -7,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { shortcutLabel, useShortcuts } from "../shortcuts";
 import type { CommandRegistry } from "./registry";
 
 interface CommandPaletteHostProps {
@@ -44,22 +44,13 @@ export function CommandPaletteHost({
     closePalette();
   }
 
-  useEffect(() => {
-    function onKeyDown(event: globalThis.KeyboardEvent) {
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.key.toLocaleLowerCase() === "k"
-      ) {
-        event.preventDefault();
-        openPalette();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, []);
+  // The palette's own binding lives on the shared registry too (#34), so
+  // there is exactly one place that decides what a chord means.
+  useShortcuts({
+    "mod+k": () => {
+      openPalette();
+    },
+  });
 
   function onSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
@@ -121,7 +112,10 @@ export function CommandPaletteHost({
                 role="option"
                 type="button"
               >
-                {command.label}
+                <span>{command.label}</span>
+                {command.shortcut ? (
+                  <kbd>{shortcutLabel(command.shortcut)}</kbd>
+                ) : null}
               </button>
             ))}
           </div>

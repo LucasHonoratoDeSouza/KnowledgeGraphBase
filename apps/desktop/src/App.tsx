@@ -6,6 +6,7 @@ import type {
   SettingsSnapshot,
 } from "./settings";
 import type { KnowledgeClient } from "./knowledge";
+import type { WindowChromeClient } from "./app/windowChrome";
 
 interface AppProps {
   editorClient?: EditorClient;
@@ -16,6 +17,7 @@ interface AppProps {
   online?: boolean;
   settingsClient?: SettingsClient;
   setupComplete?: boolean;
+  windowChrome?: WindowChromeClient | null;
 }
 
 export function App(props: AppProps) {

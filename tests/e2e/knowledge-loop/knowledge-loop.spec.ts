@@ -2,9 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function createLocalKnowledgeBase(page: Page, name = "teste n1") {
   await page.goto("/");
-  await page.getByRole("button", { name: "Choose location" }).click();
   await page.getByRole("textbox", { name: "Vault name" }).fill(name);
-  await page.getByRole("button", { name: "Continue without account" }).click();
   await page.getByRole("button", { name: "Open workspace" }).click();
   await expect(
     page.getByRole("tablist", { name: "Primary mode" }),
@@ -26,9 +24,7 @@ test("captures a source and finds it again through search", async ({
   await page
     .getByRole("textbox", { name: "Filter knowledge" })
     .fill("retrieval-augmented");
-  await page
-    .getByRole("textbox", { name: "Filter knowledge" })
-    .press("Enter");
+  await page.getByRole("textbox", { name: "Filter knowledge" }).press("Enter");
 
   await expect(
     page

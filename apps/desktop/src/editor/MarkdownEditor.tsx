@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorView, basicSetup } from "codemirror";
 
+import { useShortcuts } from "../shortcuts";
 import { ReadingView } from "./ReadingView";
 
 export interface MarkdownDiagnostic {
@@ -96,6 +97,15 @@ export function MarkdownEditor({
     // `content` is deliberately absent: rebuilding the view on every keystroke
     // would fight the editor. Switching modes replays the current buffer.
   }, [document.content, document.path, mode, onViewReady]);
+
+  // Cmd/Ctrl+S saves the open note through the same path as the button (#34).
+  // The shared layer listens in the capture phase, which is what lets the
+  // chord through CodeMirror, and a clean note simply consumes the key.
+  useShortcuts({
+    "mod+s": () => {
+      if (dirty) void save();
+    },
+  });
 
   async function save() {
     const saved = await onSave(content);

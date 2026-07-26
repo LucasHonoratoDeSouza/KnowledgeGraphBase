@@ -52,6 +52,12 @@ export class CommandRegistry {
   }
 }
 
+/** Chords declared here become live bindings and palette hints (#34). */
+const commandShortcuts: Record<string, string> = {
+  "add-source": "Mod+Shift+V",
+  "search-knowledge": "Mod+F",
+};
+
 const commandDefinitions = [
   ["add-source", "Add Source", ["capture", "ingest"]],
   ["open-note", "Open Note", ["markdown", "document"]],
@@ -73,7 +79,7 @@ export function createDefaultCommands(
     id,
     label,
     keywords: [...keywords],
-    ...(id === "add-source" ? { shortcut: "Mod+Shift+V" } : {}),
+    ...(commandShortcuts[id] ? { shortcut: commandShortcuts[id] } : {}),
     execute: () => {
       onCommand(id);
     },

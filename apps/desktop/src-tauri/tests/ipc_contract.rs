@@ -98,37 +98,70 @@ fn remote_origin_fails_closed() {
     );
 }
 
-#[test]
-fn capability_grants_only_manifest_permissions_to_main() {
+/// Permissions the window legitimately holds that do not map to one of our own
+/// commands. Anything else in the capability has to be a declared command.
+const NON_COMMAND_PERMISSIONS: &[&str] = &[
+    "dialog:allow-open",
+    "core:path:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+];
+
+fn main_capability() -> Value {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities/main.json");
-    let capability: Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+    serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn permissions(capability: &Value) -> Vec<String> {
+    capability["permissions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// Every declared command needs its `allow-` grant, or the renderer's invoke is
+/// rejected at runtime with "not allowed. Command not found" — a failure mode no
+/// unit test catches, because the command itself is perfectly well registered.
+/// Deriving the expectation from `DECLARED_COMMANDS` is what keeps the two lists
+/// from drifting apart again.
+#[test]
+fn capability_grants_every_declared_command_to_main() {
+    let capability = main_capability();
+    let granted = permissions(&capability);
 
     assert_eq!(capability["windows"], json!(["main"]));
-    assert_eq!(
-        capability["permissions"],
-        json!([
-            "allow-workspace-get-state",
-            "allow-search-execute",
-            "allow-source-capture",
-            "allow-library-get",
-            "allow-organization-get",
-            "allow-graph-get",
-            "allow-assistant-ask",
-            "allow-workspace-open",
-            "allow-document-open",
-            "allow-document-save",
-            "allow-settings-get",
-            "allow-settings-complete-onboarding",
-            "allow-settings-update-ai",
-            "allow-settings-set-ai-enabled",
-            "allow-settings-update-workspace",
-            "allow-provider-connect",
-            "allow-provider-rotate",
-            "allow-provider-test",
-            "allow-provider-remove",
-            "dialog:allow-open",
-            "core:path:default",
-        ]),
-    );
+    for command in DECLARED_COMMANDS {
+        let permission = format!("allow-{}", command.replace('_', "-"));
+        assert!(
+            granted.contains(&permission),
+            "{command} is declared but the main capability never grants {permission}",
+        );
+    }
+}
+
+#[test]
+fn capability_grants_nothing_beyond_the_declared_commands() {
+    let capability = main_capability();
+
+    for permission in permissions(&capability) {
+        if NON_COMMAND_PERMISSIONS.contains(&permission.as_str()) {
+            continue;
+        }
+        let command = permission
+            .strip_prefix("allow-")
+            .map(|name| name.replace('-', "_"));
+        assert!(
+            command.is_some_and(|name| DECLARED_COMMANDS.contains(&name.as_str())),
+            "{permission} is granted to the main window but matches no declared command",
+        );
+    }
     assert_eq!(capability.get("remote"), None);
 }

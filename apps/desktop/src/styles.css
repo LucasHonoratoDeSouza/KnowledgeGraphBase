@@ -1,6 +1,24 @@
+/*
+ * Palette roles (#32). One hue — indigo — plus neutral grays. The issue asked
+ * for a second hue; a single hue in two tones was chosen instead, because two
+ * competing colors read as noise on a UI this dark and this dense. The two
+ * roles still never share a token:
+ *
+ *   --accent / -bright   identity and state: the brand mark, the active mode,
+ *                        selection, focus rings, primary actions. If it means
+ *                        "you are here" or "this is the button", it is this.
+ *   --accent-2 / -bright the same hue stepped down: knowledge and structure —
+ *                        graph node tiers, wiki links and backlinks, facet
+ *                        chips, grounded-citation markers, the ambient
+ *                        background graph. Structure is never selection, so
+ *                        this step must never mark state.
+ *
+ * Surfaces climb --bg → --panel-deep → --panel → --chrome → --panel-raised, in
+ * steps wide enough to read as separate layers rather than one sheet.
+ */
 :root {
-  color: #e8e5df;
-  background: #1e1e1e;
+  color: #e6e8ea;
+  background: #121314;
   font-family:
     Inter,
     ui-sans-serif,
@@ -10,22 +28,25 @@
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --bg: #1e1e1e;
-  --chrome: #252525;
-  --panel: #242424;
-  --panel-deep: #1f1f1f;
-  --panel-raised: #2b2b2b;
-  --panel-hover: #33322f;
-  --border: #3a3936;
-  --border-bright: #504e48;
-  --border-soft: #302f2d;
-  --text: #e8e5df;
-  --text-secondary: #cbc6bb;
-  --muted: #aaa398;
-  --subtle: #999288;
-  --accent: #b7a47e;
-  --accent-bright: #d0bf99;
-  --accent-soft: rgb(183 164 126 / 14%);
+  --bg: #121314;
+  --chrome: #232527;
+  --panel: #1d1f21;
+  --panel-deep: #17191a;
+  --panel-raised: #282a2c;
+  --panel-hover: #313437;
+  --border: #343739;
+  --border-bright: #4a4e52;
+  --border-soft: #2b2e30;
+  --text: #e6e8ea;
+  --text-secondary: #c6c9cd;
+  --muted: #a4a8ad;
+  --subtle: #91959b;
+  --accent: #8b8cf0;
+  --accent-bright: #b0b1ff;
+  --accent-soft: rgb(139 140 240 / 14%);
+  --accent-2: #7275c4;
+  --accent-2-bright: #a3a4e4;
+  --accent-2-soft: rgb(114 117 196 / 14%);
   --success: #9aad91;
   --danger: #ee8585;
   --warning: #e7b86d;
@@ -152,14 +173,14 @@ input[readonly] {
 .primary-button {
   min-height: 36px;
   padding: 0 16px;
-  color: #24221f;
+  color: #14142a;
   font-weight: 650;
   background: var(--accent-bright);
   box-shadow: none;
 }
 
 .primary-button:hover {
-  background: #ded0ae;
+  background: #c6c7ff;
 }
 
 .secondary-button {
@@ -221,23 +242,167 @@ input[readonly] {
 /* Main shell — placement intentionally remains top modes + current surfaces. */
 
 .app-shell {
+  display: grid;
   height: 100vh;
   min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
   background: var(--bg);
+}
+
+.app-shell[data-window-maximized="false"] {
+  border: 1px solid var(--border);
 }
 
 .app-header {
   position: relative;
   z-index: 5;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto 1fr auto;
   align-items: center;
   height: 46px;
   padding: 0 10px 0 14px;
   border-bottom: 1px solid var(--border);
   background: var(--chrome);
   box-shadow: none;
+}
+
+/* Custom window chrome (#33). The header is the title bar, so its background
+   is the drag surface and everything interactive opts out of the drag. */
+.app-header[data-window-drag-region="true"] {
+  padding-right: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.window-controls {
+  display: flex;
+  align-self: stretch;
+  align-items: stretch;
+  margin-left: 8px;
+}
+
+.window-controls button {
+  display: grid;
+  width: 44px;
+  place-items: center;
+  color: var(--muted);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard);
+}
+
+.window-controls button:hover {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+
+.window-controls .window-control-close:hover {
+  color: #fff;
+  background: #c2413f;
+}
+
+.window-controls button:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -3px;
+}
+
+/* Losing the decorations also loses the OS resize border; these give it back. */
+.window-resize-handles {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  pointer-events: none;
+}
+
+.window-resize-handle {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.window-resize-n,
+.window-resize-s {
+  right: 4px;
+  left: 4px;
+  height: 4px;
+  cursor: ns-resize;
+}
+
+.window-resize-e,
+.window-resize-w {
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
+  cursor: ew-resize;
+}
+
+.window-resize-n {
+  top: 0;
+}
+
+.window-resize-s {
+  bottom: 0;
+}
+
+.window-resize-e {
+  right: 0;
+}
+
+.window-resize-w {
+  left: 0;
+}
+
+.window-resize-nw,
+.window-resize-ne,
+.window-resize-sw,
+.window-resize-se {
+  width: 8px;
+  height: 8px;
+}
+
+.window-resize-nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.window-resize-ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.window-resize-sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.window-resize-se {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+/* Onboarding has no header of its own, so it gets a slim title bar. */
+.onboarding-window-chrome {
+  position: fixed;
+  z-index: 30;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  height: 34px;
+  justify-content: flex-end;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.onboarding-window-chrome .window-controls button:hover {
+  background: rgb(255 255 255 / 8%);
 }
 
 .app-identity {
@@ -260,16 +425,13 @@ input[readonly] {
   letter-spacing: -0.01em;
 }
 
+/* The mark carries its own shape and glow, so a border and panel fill behind it
+   only read as a stray chip. */
 .app-identity h1::before {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   content: "";
-  display: grid;
-  place-items: center;
-  border: 1px solid #4a4945;
-  border-radius: 3px;
-  background: #2a2a29 url("/knowledge-os-icon.png") center / cover no-repeat;
-  box-shadow: none;
+  background: url("/knowledge-os-icon.png") center / contain no-repeat;
 }
 
 .vault-breadcrumb {
@@ -289,7 +451,7 @@ input[readonly] {
   padding: 3px;
   border: 1px solid var(--border-soft);
   border-radius: 5px;
-  background: #1d1d1d;
+  background: var(--panel-deep);
 }
 
 .mode-switch button {
@@ -311,8 +473,8 @@ input[readonly] {
 
 .mode-switch button[aria-selected="true"] {
   color: #fff;
-  background: #393834;
-  box-shadow: inset 0 0 0 1px #4a4842;
+  background: #32334a;
+  box-shadow: inset 0 0 0 1px #4c4d75;
 }
 
 .workspace-status {
@@ -348,7 +510,7 @@ input[readonly] {
 }
 
 .primary-surface {
-  height: calc(100vh - 46px);
+  height: 100%;
   min-height: 0;
 }
 
@@ -370,6 +532,38 @@ input[readonly] {
 
 .ingest-ambient {
   display: none;
+}
+
+/* Ambient knowledge graph (#35): texture, never content. Anchored off to the
+   upper right and scaled past the viewport so only a fragment is on screen,
+   masked so it fades out before it reaches the composer. */
+.ambient-graph {
+  position: absolute;
+  z-index: 0;
+  top: -14%;
+  right: -18%;
+  width: 78%;
+  height: 96%;
+  opacity: 0.62;
+  pointer-events: none;
+  mask-image: radial-gradient(
+    circle at 72% 26%,
+    rgb(0 0 0 / 100%) 0%,
+    rgb(0 0 0 / 62%) 50%,
+    rgb(0 0 0 / 0%) 84%
+  );
+}
+
+.ambient-graph-nodes circle {
+  fill: var(--accent-2);
+  opacity: 0.22;
+}
+
+.ambient-graph-edges line {
+  stroke: var(--accent-2);
+  stroke-width: 1;
+  opacity: 0.16;
+  vector-effect: non-scaling-stroke;
 }
 
 .ingest-ambient-one {
@@ -472,12 +666,110 @@ input[readonly] {
   font-size: 11px;
 }
 
+/* The organize control (#31). The trigger reuses .composer-select for its
+   sizing and hover treatment; everything below is the popup the native
+   <select> never let us style. */
+.select {
+  position: relative;
+  display: inline-flex;
+}
+
+.composer-select {
+  justify-content: flex-start;
+  min-width: 168px;
+}
+
+.select-value {
+  overflow: hidden;
+  flex: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-chevron {
+  flex-shrink: 0;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.select-trigger[aria-expanded="true"] .select-chevron {
+  transform: rotate(180deg);
+}
+
+.select-trigger[aria-expanded="true"] {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--panel-hover);
+}
+
+/* Portalled to the body and positioned from the trigger's viewport rect: the
+   composer clips its own overflow, so an absolutely positioned menu inside it
+   gets cut off after the first row. */
+.select-menu {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  overflow-y: auto;
+  align-content: start;
+  gap: 1px;
+  min-width: 100%;
+  max-width: 320px;
+  max-height: 264px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  box-shadow: var(--shadow-lg);
+  list-style: none;
+}
+
+.select-option {
+  display: flex;
+  overflow: hidden;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 9px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.select-option > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.select-option[data-depth="1"] {
+  padding-left: 21px;
+}
+
+.select-option[data-depth="2"] {
+  padding-left: 33px;
+}
+
+.select-option[data-depth="3"] {
+  padding-left: 45px;
+}
+
+.select-option[data-active="true"] {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+
+.select-option[aria-selected="true"] {
+  color: var(--accent-bright);
+  background: var(--accent-soft);
+}
+
 .composer-submit {
   display: grid;
   width: 33px;
   height: 33px;
   place-items: center;
-  color: #24221f;
+  color: #14142a;
   border: 1px solid #c7b68e;
   border-radius: 4px;
   background: var(--accent-bright);
@@ -503,6 +795,10 @@ input[readonly] {
   border-radius: 0;
   background: transparent;
   font-size: 10px;
+}
+
+.source-types span > svg {
+  color: var(--accent-2);
 }
 
 .ingest-privacy {
@@ -619,7 +915,7 @@ input[readonly] {
   color: var(--subtle);
   border: 1px solid var(--border-soft);
   border-radius: 5px;
-  background: #101217;
+  background: var(--panel-deep);
 }
 
 .explorer-search input {
@@ -807,7 +1103,7 @@ input[readonly] {
 
 .canvas-region {
   position: relative;
-  background: #111318 !important;
+  background: var(--bg) !important;
 }
 
 .canvas-tabbar {
@@ -815,7 +1111,7 @@ input[readonly] {
   height: 38px;
   align-items: stretch;
   border-bottom: 1px solid var(--border);
-  background: #121419;
+  background: var(--panel-deep);
 }
 
 .canvas-tabs {
@@ -961,29 +1257,42 @@ input[readonly] {
   background: transparent;
 }
 
+/* Edges stay hidden until a node is pointed at or focused, so the resting
+   graph is a field of dots rather than a web. */
 .graph-edge-layer line {
   pointer-events: none;
-  stroke: #56534d;
+  stroke: var(--accent);
   stroke-width: 1.2;
-  opacity: 0.6;
+  opacity: 0;
   vector-effect: non-scaling-stroke;
 }
 
+.graph-edge-layer line.graph-edge-revealed {
+  opacity: 0.7;
+}
+
 .graph-node circle {
-  fill: #77736b;
-  stroke: #a49e93;
+  fill: #5c6165;
+  stroke: #7f858b;
   stroke-width: 1.2;
 }
 
+/* Degree is carried by size, not hue: every tier rests in gray. */
 .graph-node-linked circle {
-  fill: #bbb6ac;
-  stroke: #e1ddd4;
+  fill: #767c81;
+  stroke: #9aa0a6;
 }
 
 .graph-node-hub circle {
-  fill: #c0ad85;
-  stroke: #e0d3b5;
+  fill: #8b9197;
+  stroke: #b3b9bf;
   stroke-width: 1.5;
+}
+
+.graph-node-focused circle,
+.graph-node:hover circle {
+  fill: var(--accent);
+  stroke: var(--accent-bright);
 }
 
 /* Dragging a node (#13): the whole group is the grab target. */
@@ -1014,23 +1323,28 @@ input[readonly] {
 .graph-node circle,
 .graph-edge-layer line {
   transition:
-    fill var(--motion-base) var(--ease-standard),
-    stroke var(--motion-base) var(--ease-standard);
+    fill var(--motion-fast) var(--ease-standard),
+    stroke var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-base) var(--ease-out);
 }
 
 .legend-dot-hub {
-  background: var(--accent-bright);
+  width: 8px;
+  height: 8px;
+  background: #8b9197;
 }
 
 .legend-dot-linked {
-  background: #bbb6ac;
+  width: 7px;
+  height: 7px;
+  background: #767c81;
 }
 
 .graph-node text {
   pointer-events: none;
   user-select: none;
   opacity: 0;
-  fill: #aaa398;
+  fill: var(--muted);
   font-size: 11px;
   font-family: inherit;
   transform: translateY(2px);
@@ -1041,14 +1355,14 @@ input[readonly] {
 
 .graph-node:hover text,
 .graph-node:focus-visible text,
+.graph-node-focused text,
 .graph-node-dragging text {
   opacity: 1;
   transform: translateY(0);
 }
 
-.graph-node-hub text,
-.graph-node-linked text {
-  fill: #d8d3c9;
+.graph-node-focused text {
+  fill: var(--accent-bright);
 }
 
 .graph-view-controls {
@@ -1064,7 +1378,7 @@ input[readonly] {
   color: var(--muted);
   border: 1px solid var(--border-soft);
   border-radius: 6px;
-  background: #252525;
+  background: var(--panel-raised);
 }
 
 .graph-view-controls .icon-button {
@@ -1102,7 +1416,7 @@ input[readonly] {
   z-index: 1;
   bottom: 51px;
   left: 17px;
-  color: #777169;
+  color: #71767c;
   font-size: 9px;
   pointer-events: none;
 }
@@ -1132,7 +1446,7 @@ input[readonly] {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #8d94a2;
+  background: #7c8188;
 }
 
 .legend-dot-focus {
@@ -1140,7 +1454,7 @@ input[readonly] {
 }
 
 .assistant-region {
-  background: #13151a !important;
+  background: var(--panel-deep) !important;
 }
 
 .assistant-header {
@@ -1309,7 +1623,7 @@ input[readonly] {
   height: 100%;
   min-height: 0;
   grid-template-rows: minmax(0, 1fr) auto;
-  background: #111318;
+  background: var(--bg);
 }
 
 .markdown-editor > div {
@@ -1319,8 +1633,8 @@ input[readonly] {
 
 .markdown-editor .cm-editor {
   height: 100%;
-  color: #dfe2e8;
-  background: #111318;
+  color: var(--text);
+  background: var(--bg);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 13px;
 }
@@ -1328,12 +1642,12 @@ input[readonly] {
 .markdown-editor .cm-gutters {
   color: #545b68;
   border-right: 1px solid var(--border-soft);
-  background: #0f1115;
+  background: var(--panel-deep);
 }
 
 .markdown-editor .cm-activeLine,
 .markdown-editor .cm-activeLineGutter {
-  background: rgb(139 124 246 / 7%);
+  background: var(--accent-soft);
 }
 
 .markdown-editor .cm-content {
@@ -1370,7 +1684,7 @@ input[readonly] {
 
 .settings-layout {
   display: grid;
-  height: calc(100vh - 46px);
+  height: 100%;
   min-height: 0;
   grid-template-columns: 240px minmax(0, 1fr);
   background: var(--bg);
@@ -1394,19 +1708,15 @@ input[readonly] {
 
 .settings-nav-icon {
   display: grid;
-  width: 31px;
-  height: 31px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  overflow: hidden;
-  border: 1px solid var(--border-bright);
-  border-radius: 3px;
-  background: #292929;
 }
 
 .settings-nav-icon img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .settings-nav-heading div {
@@ -1597,19 +1907,19 @@ input[readonly] {
 }
 
 .provider-openai .provider-monogram {
-  background: #31413a;
+  background: var(--panel-raised);
 }
 
 .provider-anthropic .provider-monogram {
-  background: #493c34;
+  background: var(--panel-raised);
 }
 
 .provider-deepseek .provider-monogram {
-  background: #343d49;
+  background: var(--panel-raised);
 }
 
 .provider-groq .provider-monogram {
-  background: #45362a;
+  background: var(--panel-raised);
 }
 
 .provider-card-header h3 {
@@ -1955,14 +2265,10 @@ input[readonly] {
 }
 
 .onboarding-brand h1::before {
-  display: grid;
-  width: 25px;
-  height: 25px;
+  width: 26px;
+  height: 26px;
   content: "";
-  place-items: center;
-  border: 1px solid var(--border-bright);
-  border-radius: 3px;
-  background: #2a2a29 url("/knowledge-os-icon.png") center / cover no-repeat;
+  background: url("/knowledge-os-icon.png") center / contain no-repeat;
 }
 
 .onboarding-brand > span {
@@ -1981,21 +2287,16 @@ input[readonly] {
 
 .story-icon {
   display: grid;
-  width: 51px;
-  height: 51px;
+  width: 56px;
+  height: 56px;
   margin-bottom: 22px;
   place-items: center;
-  overflow: hidden;
-  border: 1px solid var(--border-bright);
-  border-radius: 4px;
-  background: #292929;
-  box-shadow: none;
 }
 
 .story-icon img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .onboarding-story h2 {
@@ -2039,7 +2340,7 @@ input[readonly] {
   color: var(--success);
   border: 1px solid rgb(104 214 160 / 18%);
   border-radius: 3px;
-  background: #2c312c;
+  background: var(--panel-raised);
 }
 
 .onboarding-story li > div {
@@ -2088,7 +2389,7 @@ input[readonly] {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #6f63bd;
+  background: var(--accent-2);
   box-shadow: 0 0 18px rgb(139 124 246 / 55%);
 }
 
@@ -2266,9 +2567,40 @@ input[readonly] {
 
 .vault-location-section {
   display: grid;
-  grid-template-columns: minmax(150px, 0.55fr) minmax(260px, 1fr);
   gap: 10px;
   margin: 16px 0 20px;
+}
+
+/* "Start fresh" is one field plus this line: the destination is already
+   decided, so it reports rather than asks (#37). */
+.vault-destination {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.vault-destination > span {
+  display: flex;
+  overflow: hidden;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.vault-destination strong {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-destination .text-button {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .vault-location-section .field-label + .field-label {
@@ -2557,6 +2889,11 @@ input[readonly] {
   background: var(--panel-raised);
 }
 
+.assistant-citation b {
+  color: var(--accent-2-bright);
+  font-weight: 650;
+}
+
 .assistant-citation span {
   color: var(--subtle);
   font-size: 8px;
@@ -2701,7 +3038,7 @@ input[readonly] {
 }
 
 .composer-submit:hover:not(:disabled) {
-  background: #ded0ae;
+  background: #c6c7ff;
 }
 
 .icon-text-button:hover,
@@ -2797,8 +3134,10 @@ textarea:hover {
   animation: ko-palette-in var(--motion-base) var(--ease-out) both;
 }
 
-.graph-node,
-.graph-edge-layer line {
+/* Edges are deliberately absent from this fade-in: an animation with a `both`
+   fill mode pins them at the keyframe's opacity: 1, which would override the
+   resting opacity: 0 that keeps the graph a field of dots (#32). */
+.graph-node {
   animation: ko-fade-in var(--motion-slow) var(--ease-out) both;
 }
 
@@ -3173,7 +3512,7 @@ textarea:hover {
 
 .reading-wiki-link {
   padding: 0;
-  color: var(--accent-bright);
+  color: var(--accent-2-bright);
   border: 0;
   background: transparent;
   font: inherit;
@@ -3268,22 +3607,22 @@ textarea:hover {
 
 .provider-openai .provider-mark {
   color: #8fd6b4;
-  background: #31413a;
+  background: var(--panel-raised);
 }
 
 .provider-anthropic .provider-mark {
   color: #e0a97e;
-  background: #493c34;
+  background: var(--panel-raised);
 }
 
 .provider-deepseek .provider-mark {
   color: #93b4e0;
-  background: #343d49;
+  background: var(--panel-raised);
 }
 
 .provider-groq .provider-mark {
   color: #e5b170;
-  background: #45362a;
+  background: var(--panel-raised);
 }
 
 .provider-advanced {

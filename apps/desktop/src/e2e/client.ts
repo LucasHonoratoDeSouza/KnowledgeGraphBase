@@ -8,6 +8,7 @@ import type {
   SettingsSnapshot,
 } from "../settings";
 import type { KnowledgeClient, LibrarySnapshot } from "../knowledge";
+import type { WindowChromeClient } from "../app/windowChrome";
 
 const settingsKey = "knowledge-os:e2e:settings";
 const noteKey = "knowledge-os:e2e:welcome-note";
@@ -24,6 +25,7 @@ const initialNotes: Record<string, string> = {
 export const browserE2EFolderPicker: FolderPicker = {
   chooseParentLocation: () => Promise.resolve("/tmp/knowledge-os-e2e"),
   chooseExistingVault: () => Promise.resolve("/tmp/Existing Vault"),
+  defaultParentLocation: () => Promise.resolve("/tmp/knowledge-os-e2e"),
 };
 
 const initialSettings: SettingsSnapshot = {
@@ -516,4 +518,28 @@ export const browserE2EKnowledgeClient: KnowledgeClient = {
       usage: { inputTokens: 10, outputTokens: 8 },
       supported: false,
     }),
+};
+
+const windowChromeKey = "knowledge-os:e2e:window-chrome";
+
+function recordWindowCall(call: string) {
+  const saved = localStorage.getItem(windowChromeKey);
+  const calls = saved ? (JSON.parse(saved) as string[]) : [];
+  calls.push(call);
+  localStorage.setItem(windowChromeKey, JSON.stringify(calls));
+  return Promise.resolve();
+}
+
+/**
+ * The browser has no window of ours to drive, so the E2E build records which
+ * chrome command each control invoked (#33).
+ */
+export const browserE2EWindowChrome: WindowChromeClient = {
+  close: () => recordWindowCall("close"),
+  isMaximized: () => Promise.resolve(false),
+  minimize: () => recordWindowCall("minimize"),
+  onMaximizeChange: () => Promise.resolve(() => undefined),
+  startDragging: () => recordWindowCall("startDragging"),
+  startResize: (edge) => recordWindowCall(`startResize:${edge}`),
+  toggleMaximize: () => recordWindowCall("toggleMaximize"),
 };

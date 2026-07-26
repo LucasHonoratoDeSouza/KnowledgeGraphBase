@@ -3,12 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function createLocalKnowledgeBase(page: Page, name = "teste n1") {
   await page.goto("/");
-  await page.getByRole("button", { name: "Choose location" }).click();
-  await expect(
-    page.getByRole("textbox", { name: "Parent location" }),
-  ).toHaveValue("/tmp/knowledge-os-e2e");
+  // Setup is one field: the location is already resolved for us (#37).
+  await expect(page.getByText("/tmp/knowledge-os-e2e/…")).toBeVisible();
   await page.getByRole("textbox", { name: "Vault name" }).fill(name);
-  await page.getByRole("button", { name: "Continue without account" }).click();
   await page.getByRole("button", { name: "Open workspace" }).click();
   await expect(
     page.getByRole("tablist", { name: "Primary mode" }),
@@ -28,14 +25,14 @@ test("offers explicit accountless local knowledge-base creation", async ({
   await page.goto("/");
 
   await expect(
-    page.getByRole("button", { name: "Continue without account" }),
-  ).toBeVisible();
-  await expect(
     page.getByRole("radio", { name: "Create local knowledge base" }),
   ).toBeChecked();
+  // Nothing in setup may ask for an account, a provider or a key.
+  await expect(page.getByRole("radio")).toHaveCount(2);
+  await expect(page.getByLabel("Provider key")).toHaveCount(0);
   await expect(
-    page.getByRole("textbox", { name: "Parent location" }),
-  ).toHaveAttribute("readonly");
+    page.getByRole("button", { name: "Continue without account" }),
+  ).toHaveCount(0);
   await createLocalKnowledgeBase(page);
   await expect(page.getByRole("tab", { name: "Ingest" })).toHaveAttribute(
     "aria-selected",
@@ -48,7 +45,7 @@ test("opens an existing vault through the injected directory chooser", async ({
 }) => {
   await page.goto("/");
   await page.getByRole("radio", { name: "Open existing vault" }).click();
-  await page.getByRole("button", { name: "Choose existing vault" }).click();
+  await page.getByRole("button", { name: "Choose folder" }).click();
 
   await expect(
     page.getByRole("textbox", { name: "Existing vault path" }),
@@ -66,7 +63,6 @@ test("reports a colliding new-vault target without opening a partial workspace",
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Choose location" }).click();
   await page.getByRole("textbox", { name: "Vault name" }).fill("Existing");
   await page.getByRole("button", { name: "Open workspace" }).click();
 
@@ -98,6 +94,55 @@ test("local setup performs no provider or external network call", async ({
       ),
     )
     .toBeNull();
+});
+
+async function windowChromeCalls(page: Page) {
+  return page.evaluate(() =>
+    JSON.parse(localStorage.getItem("knowledge-os:e2e:window-chrome") ?? "[]"),
+  ) as Promise<string[]>;
+}
+
+test("owns the window chrome with keyboard-reachable controls", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+
+  const controls = page.getByRole("group", { name: "Window controls" });
+  await expect(
+    controls.getByRole("button", { name: "Minimize" }),
+  ).toBeVisible();
+  await expect(
+    controls.getByRole("button", { name: "Maximize" }),
+  ).toBeVisible();
+  await expect(controls.getByRole("button", { name: "Close" })).toBeVisible();
+
+  const minimize = controls.getByRole("button", { name: "Minimize" });
+  await minimize.focus();
+  await expect(minimize).toBeFocused();
+  await minimize.press("Enter");
+  await expect.poll(() => windowChromeCalls(page)).toEqual(["minimize"]);
+
+  await controls.getByRole("button", { name: "Maximize" }).click();
+  await expect
+    .poll(() => windowChromeCalls(page))
+    .toEqual(["minimize", "toggleMaximize"]);
+});
+
+test("drags the window from the header background and maximizes on double click", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  // The header sits inside <main>, so it carries no banner role in a real
+  // browser's accessibility tree — address the drag region itself.
+  const header = page.locator("[data-window-drag-region]");
+
+  await header.click({ position: { x: 8, y: 42 } });
+  await expect.poll(() => windowChromeCalls(page)).toEqual(["startDragging"]);
+
+  await header.dblclick({ position: { x: 8, y: 42 } });
+  await expect
+    .poll(() => windowChromeCalls(page))
+    .toEqual(["startDragging", "startDragging", "toggleMaximize"]);
 });
 
 test("exposes exactly the Ingest and Retrieve primary modes", async ({
@@ -177,7 +222,24 @@ test("uses a flat retro desktop visual system and the teste n1 review vault", as
       elements.map((element) => getComputedStyle(element).backgroundColor),
     );
   expect(new Set(graphSurfaceColors).size).toBe(1);
-  expect(graphSurfaceColors[0]).toBe("rgb(31, 31, 31)");
+  // The graph reads on the deepest surface layer, whatever the palette sets it
+  // to; hardcoding the hex here only re-states the stylesheet.
+  const panelDeep = await page.evaluate(() =>
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--panel-deep")
+      .trim(),
+  );
+  expect(panelDeep).not.toBe("");
+  expect(graphSurfaceColors[0]).toBe(
+    await page.evaluate((color) => {
+      const probe = document.createElement("div");
+      probe.style.backgroundColor = color;
+      document.body.append(probe);
+      const computed = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return computed;
+    }, panelDeep),
+  );
   await expect(page.locator(".graph-node-glow")).toHaveCount(0);
 });
 
@@ -211,6 +273,10 @@ test("keeps graph drag, connected motion, pan and zoom fluid", async ({
   const neighbor = graph.locator('[data-graph-node="document-ai-research"]');
   await expect(dragged).toBeVisible();
   await expect(neighbor).toBeVisible();
+  // The opening view frames the layout plus a margin; reading it here keeps the
+  // reset assertions from re-stating the padding the stylesheet chose.
+  const defaultViewBox = await graph.getAttribute("viewBox");
+  expect(defaultViewBox).toMatch(/^-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+$/);
   await expect(graph.locator(".graph-edge-layer line")).toHaveCount(1);
   await expect(stage).toHaveCSS("user-select", "none");
   await expect(stage).toHaveCSS("touch-action", "none");
@@ -338,18 +404,18 @@ test("keeps graph drag, connected motion, pan and zoom fluid", async ({
     .toBeGreaterThan(scaleBefore);
 
   await page.getByRole("button", { name: "Reset graph view" }).click();
-  await expect(graph).toHaveAttribute("viewBox", "0 0 800 520");
+  await expect(graph).toHaveAttribute("viewBox", defaultViewBox ?? "");
   await page.mouse.move(graphBox.x + 24, graphBox.y + 24);
   await page.mouse.down();
   await page.mouse.move(graphBox.x + 84, graphBox.y + 54, { steps: 5 });
   await page.mouse.up();
-  await expect(graph).not.toHaveAttribute("viewBox", "0 0 800 520");
+  await expect(graph).not.toHaveAttribute("viewBox", defaultViewBox ?? "");
   expect(
     await page.evaluate(() => window.getSelection()?.toString() ?? ""),
   ).toBe("");
 
   await page.getByRole("button", { name: "Reset graph view" }).click();
-  await expect(graph).toHaveAttribute("viewBox", "0 0 800 520");
+  await expect(graph).toHaveAttribute("viewBox", defaultViewBox ?? "");
   const clickTarget = await draggedCircle.boundingBox();
   if (!clickTarget) throw new Error("graph node is not clickable");
   await page.mouse.click(
@@ -463,6 +529,92 @@ test("keeps OpenAI, Anthropic, DeepSeek and Groq provider state independent", as
     await group.getByRole("button", { name: `Connect ${provider}` }).click();
     await expect(group.getByText("Configured ••••••••")).toBeVisible();
   }
+});
+
+test("draws no graph edges until a node is singled out", async ({ page }) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  const edges = page.locator(".graph-edge-layer line");
+  await expect(edges.first()).toBeAttached();
+
+  // Computed opacity, not the class: an animation with a `both` fill mode once
+  // pinned every edge visible even though the rule said otherwise.
+  const snapshot = () =>
+    edges.evaluateAll((elements) => ({
+      total: elements.length,
+      revealed: elements.filter((element) =>
+        element.classList.contains("graph-edge-revealed"),
+      ).length,
+      visible: elements.filter(
+        (element) => getComputedStyle(element).opacity !== "0",
+      ).length,
+    }));
+  const resting = await snapshot();
+  expect(resting.total).toBeGreaterThan(0);
+  expect(resting.visible).toBe(0);
+
+  // Focus rather than hover: the layout is still settling, so a node can drift
+  // out from under a parked cursor mid-assertion.
+  await page.locator("[data-graph-node][tabindex]").first().focus();
+
+  await expect.poll(async () => (await snapshot()).visible).toBeGreaterThan(0);
+  const singled = await snapshot();
+  expect(singled.visible).toBe(singled.revealed);
+});
+
+test("keeps the ambient graph behind Ingest out of every interaction", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("textbox", { name: "Add knowledge" }).fill("a source");
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  await page.getByRole("tab", { name: "Ingest" }).click();
+
+  const ambient = page.locator(".ambient-graph");
+  await expect(ambient).toHaveAttribute("aria-hidden", "true");
+  await expect(ambient).toHaveCSS("pointer-events", "none");
+
+  // A click over the layer reaches the surface underneath it.
+  await page.mouse.click(1200, 200);
+  await expect(
+    page.getByRole("textbox", { name: "Add knowledge" }),
+  ).toBeVisible();
+});
+
+test("saves the open note with Ctrl+S from inside the editor", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  await page.getByRole("tab", { name: "Welcome.md" }).click();
+  const editor = page.getByRole("textbox", { name: "Edit notes/Welcome.md" });
+  await editor.fill("# Saved by keyboard\n");
+
+  await editor.press("Control+s");
+
+  await expect(
+    page.getByRole("status").filter({ hasText: "Saved" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save note" })).toBeDisabled();
+});
+
+test("focuses the Explorer search with Ctrl+F instead of the webview find bar", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+
+  await page.keyboard.press("Control+f");
+
+  const search = page.getByRole("textbox", { name: "Filter knowledge" });
+  await expect(search).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Retrieve" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  await search.fill("knowledge");
+  await search.press("Escape");
+  await expect(search).toHaveValue("");
 });
 
 test("persists an edited Markdown note across an offline restart", async ({

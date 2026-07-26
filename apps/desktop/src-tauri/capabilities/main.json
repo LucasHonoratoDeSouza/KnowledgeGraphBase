@@ -8,6 +8,13 @@
     "allow-search-execute",
     "allow-source-capture",
     "allow-library-get",
+    "allow-folder-create",
+    "allow-entry-rename",
+    "allow-entry-delete",
+    "allow-entry-move",
+    "allow-librarian-reorganize",
+    "allow-librarian-undo",
+    "allow-librarian-suggestions",
     "allow-organization-get",
     "allow-graph-get",
     "allow-assistant-ask",
@@ -24,6 +31,14 @@
     "allow-provider-test",
     "allow-provider-remove",
     "dialog:allow-open",
-    "core:path:default"
+    "core:path:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
   ]
 }

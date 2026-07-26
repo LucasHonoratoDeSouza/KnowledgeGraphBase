@@ -1,15 +1,10 @@
-import { useState, type SyntheticEvent } from "react";
+import { useEffect, useState, type SyntheticEvent } from "react";
 
 import {
   ArrowRight,
   Check,
-  Cloud,
   FolderOpen,
   FolderPlus,
-  HardDrive,
-  KeyRound,
-  LockKeyhole,
-  Network,
   ShieldCheck,
 } from "lucide-react";
 
@@ -17,7 +12,7 @@ import { ProductMark } from "@knowledge-os/ui";
 
 import { DEFAULT_LAYOUT, serializeLayout } from "../workspace/layout";
 import { tauriFolderPicker, type FolderPicker } from "./folderPicker";
-import type { ProviderId, SettingsClient, SettingsSnapshot } from "./types";
+import type { SettingsClient, SettingsSnapshot } from "./types";
 
 interface OnboardingProps {
   client: SettingsClient;
@@ -25,47 +20,63 @@ interface OnboardingProps {
   onComplete: (settings: SettingsSnapshot) => void;
 }
 
-const endpoints: Record<ProviderId, string> = {
-  anthropic: "https://api.anthropic.com/v1",
-  compatible: "http://127.0.0.1:4000/v1",
-  deepseek: "https://api.deepseek.com",
-  groq: "https://api.groq.com/openai/v1",
-  openai: "https://api.openai.com/v1",
-};
-
+/**
+ * Setup is local-only and one step (#37): pick a folder you already use, or
+ * name a new vault and let it land in the default location. There is no
+ * account, no provider and no key here — AI is opt-in later from Settings, so
+ * nothing about starting out depends on the network.
+ */
 export function Onboarding({
   client,
   folderPicker = tauriFolderPicker,
   onComplete,
 }: OnboardingProps) {
-  const [aiEnabled, setAiEnabled] = useState(false);
   const [vaultMode, setVaultMode] = useState<"create" | "open_existing">(
     "create",
   );
   const [parentPath, setParentPath] = useState("");
   const [vaultName, setVaultName] = useState("");
   const [existingVaultPath, setExistingVaultPath] = useState("");
-  const [provider, setProvider] = useState<ProviderId>("openai");
-  const [providerEndpoint, setProviderEndpoint] = useState(endpoints.openai);
-  const [credential, setCredential] = useState("");
-  const [mainModelId, setMainModelId] = useState("");
-  const [dailyBudgetCents, setDailyBudgetCents] = useState(0);
-  const [monthlyBudgetCents, setMonthlyBudgetCents] = useState(0);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Resolving the default up front is what lets "start fresh" be a single
+  // field: the location is already decided by the time the form is readable.
+  useEffect(() => {
+    let cancelled = false;
+    void folderPicker
+      .defaultParentLocation()
+      .then((location) => {
+        if (!cancelled && location) setParentPath(location);
+      })
+      .catch(() => {
+        // Leaves the location empty, so the form asks for one instead.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [folderPicker]);
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    // The location has no field of its own, so nothing else would catch it
+    // when no default resolved.
+    if (vaultMode === "create" && !parentPath) {
+      setError("Choose where the vault should live.");
+      return;
+    }
+    setSaving(true);
     try {
       const settings = await client.completeOnboarding({
-        aiEnabled,
-        credential: aiEnabled ? credential : null,
-        dailyBudgetCents: aiEnabled ? dailyBudgetCents : 0,
-        endpoint: aiEnabled ? providerEndpoint : null,
+        aiEnabled: false,
+        credential: null,
+        dailyBudgetCents: 0,
+        endpoint: null,
         layoutJson: serializeLayout(DEFAULT_LAYOUT),
-        mainModelId: aiEnabled ? mainModelId : null,
-        monthlyBudgetCents: aiEnabled ? monthlyBudgetCents : 0,
-        provider: aiEnabled ? provider : null,
+        mainModelId: null,
+        monthlyBudgetCents: 0,
+        provider: null,
         vault:
           vaultMode === "create"
             ? { kind: "create", parentPath, vaultName }
@@ -75,7 +86,7 @@ export function Onboarding({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      setCredential("");
+      setSaving(false);
     }
   }
 
@@ -119,8 +130,8 @@ export function Onboarding({
                 <Check aria-hidden="true" size={14} />
               </span>
               <div>
-                <strong>AI on your terms</strong>
-                <small>Your providers, models, keys and budgets.</small>
+                <strong>No account needed</strong>
+                <small>Nothing to sign up for, nothing to sync.</small>
               </div>
             </li>
           </ul>
@@ -138,17 +149,10 @@ export function Onboarding({
           void submit(event);
         }}
       >
-        <div className="onboarding-progress">
-          <span>Workspace setup</span>
-          <strong>1 of 2</strong>
-          <div>
-            <i />
-          </div>
-        </div>
         <header>
           <span className="eyebrow">LOCAL WORKSPACE</span>
           <h1>Set up your workspace</h1>
-          <p>Create a new knowledge base or open a folder you already use.</p>
+          <p>Name a new knowledge base, or open a folder you already use.</p>
         </header>
 
         <fieldset className="vault-choice-fieldset">
@@ -169,8 +173,8 @@ export function Onboarding({
               <FolderPlus aria-hidden="true" size={20} />
             </span>
             <span>
-              <strong>Create local knowledge base</strong>
-              <small>Start with a clean, portable vault.</small>
+              <strong>Start fresh</strong>
+              <small>A new, clean vault. Just give it a name.</small>
             </span>
             <i className="choice-indicator" />
           </label>
@@ -190,8 +194,8 @@ export function Onboarding({
               <FolderOpen aria-hidden="true" size={20} />
             </span>
             <span>
-              <strong>Open existing vault</strong>
-              <small>Use an existing folder of notes.</small>
+              <strong>Open a folder</strong>
+              <small>Use a folder of notes you already have.</small>
             </span>
             <i className="choice-indicator" />
           </label>
@@ -203,6 +207,7 @@ export function Onboarding({
               <label className="field-label">
                 Vault name
                 <input
+                  autoFocus
                   name="vault-name"
                   onChange={(event) => {
                     setVaultName(event.currentTarget.value);
@@ -212,32 +217,27 @@ export function Onboarding({
                   value={vaultName}
                 />
               </label>
-              <label className="field-label">
-                Parent location
-                <div className="path-picker">
-                  <HardDrive aria-hidden="true" size={15} />
-                  <input
-                    aria-label="Parent location"
-                    name="parent-path"
-                    placeholder="Choose a folder"
-                    readOnly
-                    required
-                    value={parentPath}
-                  />
-                  <button
-                    onClick={() => {
-                      void folderPicker
-                        .chooseParentLocation()
-                        .then((selected) => {
-                          if (selected !== null) setParentPath(selected);
-                        });
-                    }}
-                    type="button"
-                  >
-                    Choose location
-                  </button>
-                </div>
-              </label>
+              <p className="vault-destination">
+                <span>
+                  Saved in
+                  <strong>
+                    {parentPath ? `${parentPath}/${vaultName || "…"}` : "…"}
+                  </strong>
+                </span>
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    void folderPicker
+                      .chooseParentLocation()
+                      .then((selected) => {
+                        if (selected !== null) setParentPath(selected);
+                      });
+                  }}
+                  type="button"
+                >
+                  Change location
+                </button>
+              </p>
             </>
           ) : (
             <label className="field-label">
@@ -247,7 +247,7 @@ export function Onboarding({
                 <input
                   aria-label="Existing vault path"
                   name="vault-path"
-                  placeholder="Choose an existing vault"
+                  placeholder="Choose an existing folder"
                   readOnly
                   required
                   value={existingVaultPath}
@@ -260,140 +260,12 @@ export function Onboarding({
                   }}
                   type="button"
                 >
-                  Choose existing vault
+                  Choose folder
                 </button>
               </div>
             </label>
           )}
         </section>
-
-        <fieldset className="processing-fieldset">
-          <legend>Intelligence</legend>
-          <p>You can change this later in Settings.</p>
-          <label
-            className={`processing-option ${!aiEnabled ? "is-selected" : ""}`}
-          >
-            <input
-              aria-label="Local only"
-              checked={!aiEnabled}
-              name="processing"
-              onChange={() => {
-                setAiEnabled(false);
-              }}
-              type="radio"
-            />
-            <span className="processing-icon">
-              <LockKeyhole aria-hidden="true" size={18} />
-            </span>
-            <span>
-              <strong>Local only</strong>
-              <small>No account or API key required</small>
-            </span>
-            <b>Recommended</b>
-          </label>
-          <label
-            className={`processing-option ${aiEnabled ? "is-selected" : ""}`}
-          >
-            <input
-              aria-label="AI enabled"
-              checked={aiEnabled}
-              name="processing"
-              onChange={() => {
-                setAiEnabled(true);
-              }}
-              type="radio"
-            />
-            <span className="processing-icon">
-              <Cloud aria-hidden="true" size={18} />
-            </span>
-            <span>
-              <strong>AI enabled</strong>
-              <small>Connect a provider during setup</small>
-            </span>
-          </label>
-        </fieldset>
-
-        {aiEnabled ? (
-          <section aria-label="AI defaults" className="onboarding-ai-fields">
-            <label className="field-label">
-              Provider
-              <select
-                aria-label="Provider"
-                onChange={(event) => {
-                  const selected = event.currentTarget.value as ProviderId;
-                  setProvider(selected);
-                  setProviderEndpoint(endpoints[selected]);
-                }}
-                value={provider}
-              >
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="deepseek">DeepSeek</option>
-                <option value="groq">Groq</option>
-                <option value="compatible">OpenAI-compatible / LiteLLM</option>
-              </select>
-            </label>
-            <label className="field-label">
-              Provider endpoint
-              <input
-                aria-label="Provider endpoint"
-                onChange={(event) => {
-                  setProviderEndpoint(event.currentTarget.value);
-                }}
-                required
-                value={providerEndpoint}
-              />
-            </label>
-            <label className="field-label">
-              Provider key
-              <div className="secret-input">
-                <KeyRound aria-hidden="true" size={15} />
-                <input
-                  autoComplete="off"
-                  onChange={(event) => {
-                    setCredential(event.currentTarget.value);
-                  }}
-                  required
-                  type="password"
-                  value={credential}
-                />
-              </div>
-            </label>
-            <label className="field-label">
-              Main model
-              <input
-                onChange={(event) => {
-                  setMainModelId(event.currentTarget.value);
-                }}
-                placeholder="e.g. gpt-4.1-mini"
-                required
-                value={mainModelId}
-              />
-            </label>
-            <label className="field-label">
-              Daily budget (cents)
-              <input
-                min="0"
-                onChange={(event) => {
-                  setDailyBudgetCents(event.currentTarget.valueAsNumber || 0);
-                }}
-                type="number"
-                value={dailyBudgetCents}
-              />
-            </label>
-            <label className="field-label">
-              Monthly budget (cents)
-              <input
-                min="0"
-                onChange={(event) => {
-                  setMonthlyBudgetCents(event.currentTarget.valueAsNumber || 0);
-                }}
-                type="number"
-                value={monthlyBudgetCents}
-              />
-            </label>
-          </section>
-        ) : null}
 
         {error ? (
           <p className="onboarding-error" role="alert">
@@ -402,22 +274,18 @@ export function Onboarding({
         ) : null}
         <footer className="onboarding-actions">
           <button
-            className="text-button"
-            onClick={() => {
-              setAiEnabled(false);
-            }}
-            type="button"
+            className="primary-button onboarding-submit"
+            disabled={saving}
+            type="submit"
           >
-            Continue without account
-          </button>
-          <button className="primary-button onboarding-submit" type="submit">
             Open workspace
             <ArrowRight aria-hidden="true" size={16} />
           </button>
         </footer>
         <p className="onboarding-footnote">
-          <Network aria-hidden="true" size={13} />
-          Cloud account setup is optional; local mode remains fully available.
+          <ShieldCheck aria-hidden="true" size={13} />
+          Everything stays on this machine. AI is optional and off until you
+          turn it on in Settings.
         </p>
       </form>
     </main>
