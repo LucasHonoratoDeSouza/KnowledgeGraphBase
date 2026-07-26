@@ -38,7 +38,14 @@ const EMPTY_CONCEPTS: GraphView["concepts"] = [];
 const EMPTY_EDGES: GraphView["edges"] = [];
 
 type ActiveGesture =
-  | { kind: "node"; nodeId: string; pointerId: number }
+  | {
+      kind: "node";
+      nodeId: string;
+      pointerId: number;
+      startClientX: number;
+      startClientY: number;
+      maximumTravel: number;
+    }
   | {
       kind: "pan";
       pointerId: number;
@@ -80,7 +87,13 @@ function prefersReducedMotion() {
   );
 }
 
-export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
+export function KnowledgeGraph({
+  graph,
+  onOpenNote,
+}: {
+  graph: GraphView | null;
+  onOpenNote?: (path: string) => void;
+}) {
   const concepts = graph?.concepts ?? EMPTY_CONCEPTS;
   const graphEdges = graph?.edges ?? EMPTY_EDGES;
   const signature = concepts
@@ -281,7 +294,14 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
     if (!point || !dragGraphNode(simulation.current, id, point.x, point.y)) {
       return;
     }
-    gesture.current = { kind: "node", nodeId: id, pointerId: event.pointerId };
+    gesture.current = {
+      kind: "node",
+      nodeId: id,
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      maximumTravel: 0,
+    };
     capturePointer(event.currentTarget, event.pointerId);
     setDraggingNode(id);
     scheduleSimulation();
@@ -298,6 +318,13 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
     }
     event.preventDefault();
     event.stopPropagation();
+    active.maximumTravel = Math.max(
+      active.maximumTravel,
+      Math.hypot(
+        event.clientX - active.startClientX,
+        event.clientY - active.startClientY,
+      ),
+    );
     const point = graphPoint(event.clientX, event.clientY);
     if (!point) return;
     dragGraphNode(simulation.current, id, point.x, point.y);
@@ -306,8 +333,10 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
 
   function endNodeDrag(
     id: string,
+    notePath: string | null,
     event: ReactPointerEvent<SVGGElement>,
     shouldReleaseCapture: boolean,
+    mayActivate: boolean,
   ) {
     const active = gesture.current;
     if (
@@ -319,6 +348,13 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
     }
     event.preventDefault();
     event.stopPropagation();
+    const travel = Math.max(
+      active.maximumTravel,
+      Math.hypot(
+        event.clientX - active.startClientX,
+        event.clientY - active.startClientY,
+      ),
+    );
     gesture.current = null;
     releaseGraphNode(simulation.current, id);
     if (shouldReleaseCapture) {
@@ -326,6 +362,9 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
     }
     setDraggingNode(null);
     scheduleSimulation();
+    if (mayActivate && travel < 5 && notePath) {
+      onOpenNote?.(notePath);
+    }
   }
 
   function beginPan(event: ReactPointerEvent<SVGSVGElement>) {
@@ -449,7 +488,7 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
           }}
           onWheel={wheelZoom}
           ref={stage}
-          role="img"
+          role="group"
           viewBox={serializeViewBox(DEFAULT_GRAPH_VIEWPORT)}
         >
           <g className="graph-edge-layer">
@@ -476,6 +515,7 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
             {concepts.map((concept) => {
               const node = model.simulation.nodes.get(concept.id);
               if (!node) return null;
+              const navigable = Boolean(concept.notePath && onOpenNote);
               const connections = model.degree.get(concept.id) ?? 0;
               const tone =
                 connections >= Math.max(2, model.maxDegree * 0.6)
@@ -485,6 +525,7 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
                     : "isolated";
               return (
                 <g
+                  aria-label={navigable ? concept.displayName : undefined}
                   className={`graph-node graph-node-${tone}${
                     draggingNode === concept.id ? " graph-node-dragging" : ""
                   }`}
@@ -493,10 +534,35 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
                   data-graph-y={node.y}
                   key={concept.id}
                   onLostPointerCapture={(event) => {
-                    endNodeDrag(concept.id, event, false);
+                    endNodeDrag(
+                      concept.id,
+                      concept.notePath,
+                      event,
+                      false,
+                      false,
+                    );
                   }}
                   onPointerCancel={(event) => {
-                    endNodeDrag(concept.id, event, false);
+                    endNodeDrag(
+                      concept.id,
+                      concept.notePath,
+                      event,
+                      false,
+                      false,
+                    );
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      !concept.notePath ||
+                      !onOpenNote ||
+                      event.repeat ||
+                      (event.key !== "Enter" && event.key !== " ")
+                    ) {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOpenNote(concept.notePath);
                   }}
                   onPointerDown={(event) => {
                     beginNodeDrag(concept.id, event);
@@ -505,19 +571,29 @@ export function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
                     moveNode(concept.id, event);
                   }}
                   onPointerUp={(event) => {
-                    endNodeDrag(concept.id, event, true);
+                    endNodeDrag(
+                      concept.id,
+                      concept.notePath,
+                      event,
+                      true,
+                      true,
+                    );
                   }}
                   ref={(element) => {
                     if (element) nodeElements.current.set(concept.id, element);
                     else nodeElements.current.delete(concept.id);
                   }}
+                  role={navigable ? "link" : undefined}
+                  tabIndex={navigable ? 0 : undefined}
                   transform={`translate(${String(node.x)} ${String(node.y)})`}
                 >
-                  <title>{`${concept.displayName} — ${String(connections)} ${
-                    connections === 1 ? "link" : "links"
-                  }`}</title>
                   <circle cx={0} cy={0} r={node.radius} />
-                  <text textAnchor="middle" x={0} y={node.radius + 17}>
+                  <text
+                    aria-hidden="true"
+                    textAnchor="middle"
+                    x={0}
+                    y={node.radius + 17}
+                  >
                     {concept.displayName}
                   </text>
                 </g>

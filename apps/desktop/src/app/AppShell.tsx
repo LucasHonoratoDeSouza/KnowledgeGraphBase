@@ -1615,7 +1615,12 @@ function RetrieveSurface({
           </div>
           {canvasView === "graph" ? (
             <div aria-label="Graph view" id="graph-panel" role="tabpanel">
-              <KnowledgeGraph graph={graph} />
+              <KnowledgeGraph
+                graph={graph}
+                onOpenNote={(path) => {
+                  void openDocument(path);
+                }}
+              />
             </div>
           ) : (
             <div

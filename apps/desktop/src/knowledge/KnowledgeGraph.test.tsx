@@ -6,9 +6,24 @@ import type { GraphView } from "./types";
 
 const connectedGraph: GraphView = {
   concepts: [
-    { id: "a", normalizedName: "alpha", displayName: "Alpha" },
-    { id: "b", normalizedName: "beta", displayName: "Beta" },
-    { id: "c", normalizedName: "gamma", displayName: "Gamma" },
+    {
+      id: "a",
+      normalizedName: "alpha",
+      displayName: "Alpha",
+      notePath: "Concepts/Alpha.md",
+    },
+    {
+      id: "b",
+      normalizedName: "beta",
+      displayName: "Beta",
+      notePath: "Concepts/Beta.md",
+    },
+    {
+      id: "c",
+      normalizedName: "gamma",
+      displayName: "Gamma",
+      notePath: null,
+    },
   ],
   edges: [
     {
@@ -89,7 +104,7 @@ beforeEach(() => {
 describe("fluid knowledge graph", () => {
   it("offers bounded zoom controls and restores the exact default view", () => {
     const { rerender } = render(<KnowledgeGraph graph={connectedGraph} />);
-    const svg = screen.getByRole("img", { name: "Knowledge graph" });
+    const svg = screen.getByRole("group", { name: "Knowledge graph" });
 
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     expect(svg).toHaveAttribute("viewBox", "80 52 640 416");
@@ -124,7 +139,7 @@ describe("fluid knowledge graph", () => {
 
   it("pans the background and clears the gesture on pointer cancel", () => {
     render(<KnowledgeGraph graph={connectedGraph} />);
-    const svg = screen.getByRole("img", { name: "Knowledge graph" });
+    const svg = screen.getByRole("group", { name: "Knowledge graph" });
     expect(svg).toBeInstanceOf(SVGSVGElement);
     if (!(svg instanceof SVGSVGElement)) return;
     vi.spyOn(svg, "getBoundingClientRect").mockReturnValue(graphBounds());
@@ -181,7 +196,7 @@ describe("fluid knowledge graph", () => {
     expect(frames.pending()).toBe(1);
     expect(frames.drain()).toBeLessThan(100);
     expect(frames.pending()).toBe(0);
-    const svg = screen.getByRole("img", { name: "Knowledge graph" });
+    const svg = screen.getByRole("group", { name: "Knowledge graph" });
     expect(svg).toBeInstanceOf(SVGSVGElement);
     if (!(svg instanceof SVGSVGElement)) return;
     vi.spyOn(svg, "getBoundingClientRect").mockReturnValue(graphBounds());
@@ -260,7 +275,7 @@ describe("fluid knowledge graph", () => {
     );
 
     const { container } = render(<KnowledgeGraph graph={connectedGraph} />);
-    const svg = screen.getByRole("img", { name: "Knowledge graph" });
+    const svg = screen.getByRole("group", { name: "Knowledge graph" });
     expect(svg).toBeInstanceOf(SVGSVGElement);
     if (!(svg instanceof SVGSVGElement)) return;
     vi.spyOn(svg, "getBoundingClientRect").mockReturnValue(graphBounds());
@@ -290,6 +305,105 @@ describe("fluid knowledge graph", () => {
     expect(requestAnimationFrame).not.toHaveBeenCalled();
     expect(Number(dragged.dataset.graphX)).toBeGreaterThan(startX);
     expect(svg).toBeVisible();
+  });
+
+  it("opens a Markdown path only for intentional click or keyboard activation", () => {
+    const onOpenNote = vi.fn();
+    const { container } = render(
+      <KnowledgeGraph graph={connectedGraph} onOpenNote={onOpenNote} />,
+    );
+    const svg = screen.getByRole("group", { name: "Knowledge graph" });
+    expect(svg).toBeInstanceOf(SVGSVGElement);
+    if (!(svg instanceof SVGSVGElement)) return;
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue(graphBounds());
+    const alpha = screen.getByRole("link", { name: "Alpha" });
+    const gamma = container.querySelector<SVGGElement>('[data-graph-node="c"]');
+    expect(alpha).toBeInstanceOf(SVGGElement);
+    expect(gamma).not.toBeNull();
+    if (!(alpha instanceof SVGGElement) || !gamma) return;
+    const startX = Number(alpha.dataset.graphX);
+    const startY = Number(alpha.dataset.graphY);
+
+    fireEvent.pointerDown(alpha, {
+      button: 0,
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId: 21,
+    });
+    fireEvent.pointerUp(alpha, {
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId: 21,
+    });
+    expect(onOpenNote).toHaveBeenCalledExactlyOnceWith("Concepts/Alpha.md");
+
+    fireEvent.pointerDown(alpha, {
+      button: 0,
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId: 22,
+    });
+    fireEvent.pointerMove(alpha, {
+      clientX: startX + 5,
+      clientY: startY,
+      isPrimary: true,
+      pointerId: 22,
+    });
+    fireEvent.pointerUp(alpha, {
+      clientX: startX + 5,
+      clientY: startY,
+      isPrimary: true,
+      pointerId: 22,
+    });
+    fireEvent.pointerDown(alpha, {
+      button: 0,
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId: 23,
+    });
+    fireEvent.pointerCancel(alpha, {
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId: 23,
+    });
+    fireEvent.pointerDown(alpha, {
+      button: 0,
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId: 24,
+    });
+    fireEvent.lostPointerCapture(alpha, {
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId: 24,
+    });
+    expect(onOpenNote).toHaveBeenCalledTimes(1);
+
+    const enter = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+    });
+    fireEvent(alpha, enter);
+    const space = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: " ",
+    });
+    fireEvent(alpha, space);
+    expect(enter.defaultPrevented).toBe(true);
+    expect(space.defaultPrevented).toBe(true);
+    expect(onOpenNote).toHaveBeenNthCalledWith(2, "Concepts/Alpha.md");
+    expect(onOpenNote).toHaveBeenNthCalledWith(3, "Concepts/Alpha.md");
+    expect(gamma).not.toHaveAttribute("role");
+    expect(gamma).not.toHaveAttribute("tabindex");
   });
 
   it("keeps the existing empty state", () => {
