@@ -15,8 +15,8 @@ through pointer drags, which produces Ubuntu's orange selection highlight.
   one-action viewport reset.
 - Keep the canvas quiet by revealing a concept label only on hover or keyboard
   focus, and open that concept's Markdown note on an intentional click.
-- Give the whole graph an upright triangular tendency instead of the previous
-  circular/elliptical envelope.
+- Let the graph settle organically without pulling the whole node set toward a
+  circle, triangle or other fixed silhouette.
 - Keep the interaction frame-driven and responsive up to the backend's 500-node
   graph ceiling without adding a runtime dependency.
 - Prevent native selection/touch gestures from competing with graph interaction.
@@ -30,7 +30,7 @@ through pointer drags, which produces Ubuntu's orange selection highlight.
 | Position lifetime | Current mounted graph only | Persistence was not requested and would add a storage/state contract |
 | Rendering | Existing SVG with imperative frame paints | Avoids React rerenders per tick and honors AD-012 (no new runtime dependencies) |
 | Dense graph geometry | Scale visible node radii and collision clearance as node count grows | Keeps the 800×520 simulation physically feasible at the 500-node ceiling while retaining larger hubs |
-| Macro layout | Deterministic per-node home targets inside an upright triangle | A weak home force preserves the requested silhouette while springs, repulsion and direct manipulation stay fluid |
+| Macro layout | Deterministic shape-free scatter, then force-only movement | Bounds keep nodes visible; springs, local repulsion, collisions and direct manipulation determine the organic resting layout without a geometric home force |
 | Node activation | Primary click under `5px`, plus `Enter`/`Space` | Separates opening a note from dragging and keeps the same action keyboard-accessible |
 | Reduced motion | Settle before paint, without an animated loop | Preserves the final readable layout while avoiding visible motion |
 
@@ -107,16 +107,17 @@ concurrency.
    open a note.
 3. WHEN a focusable node with a `notePath` receives `Enter` or `Space` THEN it
    SHALL request the same Markdown note and prevent the default key action.
-4. WHEN a graph is seeded THEN every node SHALL receive a deterministic home
-   point inside the upright triangular envelope, and WHEN a displaced simulation
-   is reheated THEN its home force SHALL reduce aggregate distance to those home
-   points while retaining collision separation and stage bounds.
+4. WHEN a graph is seeded THEN nodes SHALL be deterministically scattered across
+   the available stage without a circular, triangular or other geometric home
+   target, and subsequent movement SHALL be produced only by graph springs,
+   local repulsion, collision resolution and direct manipulation.
 
 ## Out of Scope
 
 - Persisting manual positions or camera state across graph refreshes/restarts.
 - Pinch-to-zoom, node multi-selection and search/filter implementation.
 - Canvas/WebGL migration.
+- User-selectable global layout silhouettes.
 
 ## Verification
 
