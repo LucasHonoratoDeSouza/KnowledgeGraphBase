@@ -53,6 +53,15 @@ describe("interactive force simulation", () => {
       expect(node.y).toBeGreaterThanOrEqual(node.radius);
       expect(node.y).toBeLessThanOrEqual(first.height - node.radius);
     }
+    const quadrants = new Set(
+      [...first.nodes.values()].map(
+        (node) =>
+          `${node.x < 400 ? "left" : "right"}-${node.y < 260 ? "top" : "bottom"}`,
+      ),
+    );
+    expect(quadrants).toEqual(
+      new Set(["left-top", "right-top", "left-bottom", "right-bottom"]),
+    );
   });
 
   it("gives a dragged node weight and pulls its connected neighbor", () => {
