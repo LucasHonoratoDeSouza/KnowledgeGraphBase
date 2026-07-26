@@ -146,6 +146,9 @@ export function KnowledgeGraph({
   const viewportFrame = useRef<number | null>(null);
   const gesture = useRef<ActiveGesture | null>(null);
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
+  // The graph rests as plain gray dots; pointing at one is what reveals its
+  // relationships, so the canvas reads as texture until you ask a question.
+  const [focusedNode, setFocusedNode] = useState<string | null>(null);
   const [panning, setPanning] = useState(false);
 
   const paintSimulation = useCallback(() => {
@@ -496,8 +499,12 @@ export function KnowledgeGraph({
               const source = model.simulation.nodes.get(edge.sourceConceptId);
               const target = model.simulation.nodes.get(edge.targetConceptId);
               if (!source || !target) return null;
+              const revealed =
+                focusedNode === edge.sourceConceptId ||
+                focusedNode === edge.targetConceptId;
               return (
                 <line
+                  className={revealed ? "graph-edge-revealed" : undefined}
                   key={edge.id}
                   ref={(element) => {
                     if (element) edgeElements.current.set(edge.id, element);
@@ -528,7 +535,7 @@ export function KnowledgeGraph({
                   aria-label={navigable ? concept.displayName : undefined}
                   className={`graph-node graph-node-${tone}${
                     draggingNode === concept.id ? " graph-node-dragging" : ""
-                  }`}
+                  }${focusedNode === concept.id ? " graph-node-focused" : ""}`}
                   data-graph-node={concept.id}
                   data-graph-x={node.x}
                   data-graph-y={node.y}
@@ -564,8 +571,24 @@ export function KnowledgeGraph({
                     event.stopPropagation();
                     onOpenNote(concept.notePath);
                   }}
+                  onBlur={() => {
+                    setFocusedNode((current) =>
+                      current === concept.id ? null : current,
+                    );
+                  }}
+                  onFocus={() => {
+                    setFocusedNode(concept.id);
+                  }}
                   onPointerDown={(event) => {
                     beginNodeDrag(concept.id, event);
+                  }}
+                  onPointerEnter={() => {
+                    setFocusedNode(concept.id);
+                  }}
+                  onPointerLeave={() => {
+                    setFocusedNode((current) =>
+                      current === concept.id ? null : current,
+                    );
                   }}
                   onPointerMove={(event) => {
                     moveNode(concept.id, event);
