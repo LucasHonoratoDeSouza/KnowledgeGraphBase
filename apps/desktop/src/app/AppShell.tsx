@@ -67,6 +67,7 @@ import {
   togglePane,
   type WorkspaceLayout,
 } from "../workspace/layout";
+import { useShortcuts } from "../shortcuts";
 import { WindowControls, WindowResizeHandles } from "./WindowControls";
 import {
   beginWindowDrag,
@@ -342,6 +343,7 @@ interface RetrieveSurfaceProps {
   layout: WorkspaceLayout;
   models: ModelProfile[];
   onLayoutChange: (layout: WorkspaceLayout) => void;
+  searchFocusRequest: number;
   vaultName: string;
 }
 
@@ -744,6 +746,7 @@ interface ExplorerPaneProps {
   onReorganize: (folder: string) => Promise<void>;
   onSearch: (query: string) => void;
   openNotePath: string;
+  searchFocusRequest: number;
   searchResult: RetrievalResult | null;
   vaultName: string;
 }
@@ -766,6 +769,7 @@ function ExplorerPane({
   onReorganize,
   onSearch,
   openNotePath,
+  searchFocusRequest,
   searchResult,
   vaultName,
 }: ExplorerPaneProps) {
@@ -782,6 +786,9 @@ function ExplorerPane({
   const [dragged, setDragged] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const searchInput = useRef<HTMLInputElement | null>(null);
+  // Where focus came from, so Escape in the field can hand it back (#34).
+  const focusOrigin = useRef<HTMLElement | null>(null);
   const defaultEntries: LibraryEntry[] = ["Inbox", "Projects", "Research"].map(
     (name) => ({
       name,
@@ -811,6 +818,19 @@ function ExplorerPane({
       clearTimeout(timer);
     };
   }, [query]);
+
+  // Cmd/Ctrl+F asks for this field; selecting the existing query means the
+  // next keystroke replaces a stale search instead of appending to it.
+  useEffect(() => {
+    if (searchFocusRequest === 0) return;
+    focusOrigin.current =
+      document.activeElement instanceof HTMLElement &&
+      document.activeElement !== searchInput.current
+        ? document.activeElement
+        : null;
+    searchInput.current?.focus();
+    searchInput.current?.select();
+  }, [searchFocusRequest]);
 
   function toggleFolder(path: string) {
     setCollapsed((current) => {
@@ -914,9 +934,14 @@ function ExplorerPane({
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && query.trim()) onSearch(query.trim());
-            if (event.key === "Escape") setQuery("");
+            if (event.key === "Escape") {
+              setQuery("");
+              focusOrigin.current?.focus();
+              focusOrigin.current = null;
+            }
           }}
           placeholder="Search knowledge"
+          ref={searchInput}
           value={query}
         />
         {searching ? (
@@ -1295,6 +1320,7 @@ function RetrieveSurface({
   layout,
   models,
   onLayoutChange,
+  searchFocusRequest,
   vaultName,
 }: RetrieveSurfaceProps) {
   const explorer = layout.panes.explorer;
@@ -1348,6 +1374,14 @@ function RetrieveSurface({
       cancelled = true;
     };
   }, [knowledgeClient]);
+
+  useEffect(() => {
+    if (searchFocusRequest === 0 || !explorer.collapsed) return;
+    onLayoutChange(togglePane(layout, "explorer"));
+    // The layout is read once per request; re-running on every layout change
+    // would fight a deliberate collapse right after the shortcut.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchFocusRequest]);
 
   async function openDocument(path: string) {
     try {
@@ -1522,6 +1556,7 @@ function RetrieveSurface({
                 });
             }}
             openNotePath={canvasView === "note" ? document.path : ""}
+            searchFocusRequest={searchFocusRequest}
             searchResult={searchResult}
             vaultName={vaultName}
           />
@@ -1709,16 +1744,45 @@ export function AppShell({
     Retrieve: null,
   });
   const maximized = useWindowMaximized(windowChrome);
+  // Cmd/Ctrl+F runs the Search Knowledge command, which lands in Retrieve and
+  // asks the Explorer for focus; the surface itself opens a collapsed pane.
+  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
   const commands = useMemo(
     () =>
       new CommandRegistry(
         createDefaultCommands((id) => {
           setSettingsOpen(false);
+          if (id === "search-knowledge") {
+            setMode("Retrieve");
+            setSearchFocusRequest((current) => current + 1);
+            return;
+          }
           setMode(id === "add-source" ? "Ingest" : "Retrieve");
         }),
       ),
     [],
   );
+  // Every chord a command declares becomes a live binding (#34), so adding
+  // one later is a single entry in the registry.
+  const commandBindings = useMemo(
+    () =>
+      Object.fromEntries(
+        commands.all().flatMap((command) =>
+          command.shortcut
+            ? [
+                [
+                  command.shortcut,
+                  () => {
+                    commands.execute(command.id);
+                  },
+                ] as const,
+              ]
+            : [],
+        ),
+      ),
+    [commands],
+  );
+  useShortcuts(commandBindings);
 
   useEffect(() => {
     if (setupComplete !== undefined || initialSettings !== undefined)
@@ -1949,6 +2013,7 @@ export function AppShell({
                     ),
                 )}
                 onLayoutChange={updateLayout}
+                searchFocusRequest={searchFocusRequest}
                 vaultName={vaultName}
               />
             )}

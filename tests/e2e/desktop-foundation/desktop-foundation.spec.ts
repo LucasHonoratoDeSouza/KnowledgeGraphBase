@@ -102,9 +102,7 @@ test("local setup performs no provider or external network call", async ({
 
 async function windowChromeCalls(page: Page) {
   return page.evaluate(() =>
-    JSON.parse(
-      localStorage.getItem("knowledge-os:e2e:window-chrome") ?? "[]",
-    ),
+    JSON.parse(localStorage.getItem("knowledge-os:e2e:window-chrome") ?? "[]"),
   ) as Promise<string[]>;
 }
 
@@ -114,8 +112,12 @@ test("owns the window chrome with keyboard-reachable controls", async ({
   await createLocalKnowledgeBase(page);
 
   const controls = page.getByRole("group", { name: "Window controls" });
-  await expect(controls.getByRole("button", { name: "Minimize" })).toBeVisible();
-  await expect(controls.getByRole("button", { name: "Maximize" })).toBeVisible();
+  await expect(
+    controls.getByRole("button", { name: "Minimize" }),
+  ).toBeVisible();
+  await expect(
+    controls.getByRole("button", { name: "Maximize" }),
+  ).toBeVisible();
   await expect(controls.getByRole("button", { name: "Close" })).toBeVisible();
 
   const minimize = controls.getByRole("button", { name: "Minimize" });
@@ -508,6 +510,42 @@ test("keeps OpenAI, Anthropic, DeepSeek and Groq provider state independent", as
     await group.getByRole("button", { name: `Connect ${provider}` }).click();
     await expect(group.getByText("Configured ••••••••")).toBeVisible();
   }
+});
+
+test("saves the open note with Ctrl+S from inside the editor", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  await page.getByRole("tab", { name: "Welcome.md" }).click();
+  const editor = page.getByRole("textbox", { name: "Edit notes/Welcome.md" });
+  await editor.fill("# Saved by keyboard\n");
+
+  await editor.press("Control+s");
+
+  await expect(
+    page.getByRole("status").filter({ hasText: "Saved" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save note" })).toBeDisabled();
+});
+
+test("focuses the Explorer search with Ctrl+F instead of the webview find bar", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+
+  await page.keyboard.press("Control+f");
+
+  const search = page.getByRole("textbox", { name: "Filter knowledge" });
+  await expect(search).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Retrieve" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  await search.fill("knowledge");
+  await search.press("Escape");
+  await expect(search).toHaveValue("");
 });
 
 test("persists an edited Markdown note across an offline restart", async ({

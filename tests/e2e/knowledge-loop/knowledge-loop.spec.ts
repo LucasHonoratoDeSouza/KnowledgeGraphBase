@@ -26,9 +26,7 @@ test("captures a source and finds it again through search", async ({
   await page
     .getByRole("textbox", { name: "Filter knowledge" })
     .fill("retrieval-augmented");
-  await page
-    .getByRole("textbox", { name: "Filter knowledge" })
-    .press("Enter");
+  await page.getByRole("textbox", { name: "Filter knowledge" }).press("Enter");
 
   await expect(
     page

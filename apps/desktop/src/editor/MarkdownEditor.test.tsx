@@ -142,6 +142,37 @@ describe("CodeMirror Markdown editor boundary", () => {
     expect(screen.getByRole("button", { name: "Save note" })).toBeDisabled();
   });
 
+  it("saves a dirty note with Cmd/Ctrl+S from inside the editor", async () => {
+    const { getView, onSave } = renderEditor();
+    const edited = `${note.content}Saved by keyboard\n`;
+    act(() => {
+      getView()?.dispatch({
+        changes: { from: 0, to: note.content.length, insert: edited },
+      });
+    });
+
+    // The editor swallows keys through its own handlers, so the shared layer
+    // has to see the chord first (#34).
+    fireEvent.keyDown(getView()?.contentDOM ?? document, {
+      key: "s",
+      ctrlKey: true,
+    });
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(edited);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Saved");
+  });
+
+  it("does nothing when Cmd/Ctrl+S is pressed on a clean note", () => {
+    const { onSave } = renderEditor();
+
+    fireEvent.keyDown(document, { key: "s", ctrlKey: true });
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("No unsaved changes");
+  });
+
   it("shows typed metadata diagnostics without hiding the content", () => {
     const malformed: NoteDocument = {
       path: "broken.md",
