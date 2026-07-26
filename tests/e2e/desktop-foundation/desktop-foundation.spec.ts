@@ -199,6 +199,117 @@ test("renders the durable three-pane Retrieve workspace", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("keeps graph drag, connected motion, pan and zoom fluid", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+
+  const graph = page.getByRole("img", { name: "Knowledge graph" });
+  const stage = page.locator(".graph-stage");
+  const dragged = graph.locator('[data-graph-node="document-knowledge-os"]');
+  const neighbor = graph.locator('[data-graph-node="document-ai-research"]');
+  await expect(dragged).toBeVisible();
+  await expect(neighbor).toBeVisible();
+  await expect(graph.locator(".graph-edge-layer line")).toHaveCount(1);
+  await expect(stage).toHaveCSS("user-select", "none");
+  await expect(stage).toHaveCSS("touch-action", "none");
+
+  await expect
+    .poll(async () => {
+      const first = await neighbor.evaluate((element) => ({
+        x: Number((element as SVGGElement).dataset.graphX),
+        y: Number((element as SVGGElement).dataset.graphY),
+      }));
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                resolve();
+              });
+            });
+          }),
+      );
+      const second = await neighbor.evaluate((element) => ({
+        x: Number((element as SVGGElement).dataset.graphX),
+        y: Number((element as SVGGElement).dataset.graphY),
+      }));
+      return Math.hypot(second.x - first.x, second.y - first.y);
+    })
+    .toBeLessThan(0.05);
+  const draggedBefore = await dragged.evaluate((element) => ({
+    x: Number((element as SVGGElement).dataset.graphX),
+    y: Number((element as SVGGElement).dataset.graphY),
+  }));
+  const before = await neighbor.evaluate((element) => ({
+    x: Number((element as SVGGElement).dataset.graphX),
+    y: Number((element as SVGGElement).dataset.graphY),
+  }));
+  const circle = await dragged.locator("circle").boundingBox();
+  const graphBox = await graph.boundingBox();
+  if (!circle || !graphBox) throw new Error("graph node has no bounding box");
+  const start = {
+    x: circle.x + circle.width / 2,
+    y: circle.y + circle.height / 2,
+  };
+  const horizontalMove = start.x < graphBox.x + graphBox.width / 2 ? 150 : -150;
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + horizontalMove, start.y + 24, { steps: 10 });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
+  const during = await neighbor.evaluate((element) => ({
+    x: Number((element as SVGGElement).dataset.graphX),
+    y: Number((element as SVGGElement).dataset.graphY),
+  }));
+  const draggedDuring = await dragged.evaluate((element) => ({
+    x: Number((element as SVGGElement).dataset.graphX),
+    y: Number((element as SVGGElement).dataset.graphY),
+  }));
+  await page.mouse.up();
+
+  expect(
+    Math.hypot(
+      draggedDuring.x - draggedBefore.x,
+      draggedDuring.y - draggedBefore.y,
+    ),
+  ).toBeGreaterThan(50);
+  expect(Math.hypot(during.x - before.x, during.y - before.y)).toBeGreaterThan(
+    0.25,
+  );
+  expect(
+    await page.evaluate(() => window.getSelection()?.toString() ?? ""),
+  ).toBe("");
+
+  const scaleBefore = Number(await graph.getAttribute("data-graph-scale"));
+  await page.mouse.move(graphBox.x + graphBox.width * 0.3, graphBox.y + 80);
+  await page.mouse.wheel(0, -360);
+  await expect
+    .poll(async () => Number(await graph.getAttribute("data-graph-scale")))
+    .toBeGreaterThan(scaleBefore);
+
+  await page.getByRole("button", { name: "Reset graph view" }).click();
+  await expect(graph).toHaveAttribute("viewBox", "0 0 800 520");
+  await page.mouse.move(graphBox.x + 24, graphBox.y + 24);
+  await page.mouse.down();
+  await page.mouse.move(graphBox.x + 84, graphBox.y + 54, { steps: 5 });
+  await page.mouse.up();
+  await expect(graph).not.toHaveAttribute("viewBox", "0 0 800 520");
+  expect(
+    await page.evaluate(() => window.getSelection()?.toString() ?? ""),
+  ).toBe("");
+});
+
 test("restores a collapsed Explorer and active mode after restart", async ({
   page,
 }) => {
@@ -453,7 +564,10 @@ test("resizes the Explorer by dragging its divider and keeps it after restart", 
   // predictable — what matters is that it grew past the 240px default and that
   // the same width comes back after a restart.
   const workspace = page.locator(".retrieve-workspace");
-  await expect(workspace).toHaveCSS("grid-template-columns", /^3\d\d(\.\d+)?px /);
+  await expect(workspace).toHaveCSS(
+    "grid-template-columns",
+    /^3\d\d(\.\d+)?px /,
+  );
   const resized = await workspace.evaluate(
     (element) => getComputedStyle(element).gridTemplateColumns,
   );
