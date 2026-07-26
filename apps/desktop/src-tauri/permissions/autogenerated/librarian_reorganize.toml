@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-librarian-reorganize"
+description = "Enables the librarian_reorganize command without any pre-configured scope."
+commands.allow = ["librarian_reorganize"]
+
+[[permission]]
+identifier = "deny-librarian-reorganize"
+description = "Denies the librarian_reorganize command without any pre-configured scope."
+commands.deny = ["librarian_reorganize"]
