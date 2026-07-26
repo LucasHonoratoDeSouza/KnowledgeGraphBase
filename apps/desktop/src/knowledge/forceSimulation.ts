@@ -68,9 +68,179 @@ function deterministicUnit(value: string, salt: number) {
   return (hash + 0.5) / 4_294_967_296;
 }
 
+type SeedNode = LayoutInput["nodes"][number] & { radius: number };
+
+interface SeedPosition {
+  x: number;
+  y: number;
+}
+
+function scatterPosition(
+  node: SeedNode,
+  bounds: { width: number; height: number },
+) {
+  const padding = node.radius + 8;
+  return {
+    x: clamp(
+      padding +
+        deterministicUnit(node.id, 0x9e37_79b9) *
+          Math.max(0, bounds.width - padding * 2),
+      node.radius,
+      bounds.width - node.radius,
+    ),
+    y: clamp(
+      padding +
+        deterministicUnit(node.id, 0x85eb_ca6b) *
+          Math.max(0, bounds.height - padding * 2),
+      node.radius,
+      bounds.height - node.radius,
+    ),
+  };
+}
+
+function seedGraphPositions(
+  ordered: SeedNode[],
+  edges: LayoutInput["edges"],
+  bounds: { width: number; height: number },
+) {
+  const positions = new Map<string, SeedPosition>();
+  if (ordered.length > 80) {
+    for (const node of ordered)
+      positions.set(node.id, scatterPosition(node, bounds));
+    return positions;
+  }
+
+  const nodeById = new Map(ordered.map((node) => [node.id, node]));
+  const adjacency = new Map(
+    ordered.map((node) => [node.id, new Set<string>()]),
+  );
+  for (const edge of edges) {
+    if (edge.source === edge.target) continue;
+    if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
+    adjacency.get(edge.source)?.add(edge.target);
+    adjacency.get(edge.target)?.add(edge.source);
+  }
+
+  const visited = new Set<string>();
+  const components: SeedNode[][] = [];
+  for (const candidate of ordered) {
+    if (visited.has(candidate.id)) continue;
+    const component: SeedNode[] = [];
+    const stack = [candidate.id];
+    visited.add(candidate.id);
+    while (stack.length > 0) {
+      const id = stack.pop();
+      if (!id) continue;
+      const node = nodeById.get(id);
+      if (node) component.push(node);
+      for (const neighbor of adjacency.get(id) ?? []) {
+        if (visited.has(neighbor)) continue;
+        visited.add(neighbor);
+        stack.push(neighbor);
+      }
+    }
+    component.sort(
+      (left, right) =>
+        right.degree - left.degree || left.id.localeCompare(right.id),
+    );
+    components.push(component);
+  }
+  components.sort(
+    (left, right) =>
+      right.length - left.length ||
+      (left[0]?.id ?? "").localeCompare(right[0]?.id ?? ""),
+  );
+
+  const componentCount = Math.max(1, components.length);
+  const columns = Math.max(
+    1,
+    Math.ceil(Math.sqrt((componentCount * bounds.width) / bounds.height)),
+  );
+  const rows = Math.ceil(componentCount / columns);
+  const cellWidth = bounds.width / columns;
+  const cellHeight = bounds.height / rows;
+
+  components.forEach((component, componentIndex) => {
+    const root = component[0];
+    if (!root) return;
+    const column = componentIndex % columns;
+    const row = Math.floor(componentIndex / columns);
+    const jitterX =
+      (deterministicUnit(root.id, 0xc2b2_ae35) - 0.5) * cellWidth * 0.1;
+    const jitterY =
+      (deterministicUnit(root.id, 0x27d4_eb2f) - 0.5) * cellHeight * 0.1;
+    const centerX = cellWidth * (column + 0.5) + jitterX;
+    const centerY = cellHeight * (row + 0.5) + jitterY;
+
+    const depth = new Map<string, number>([[root.id, 0]]);
+    const queue = [root.id];
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const id = queue[cursor];
+      if (!id) continue;
+      const nextDepth = (depth.get(id) ?? 0) + 1;
+      const neighbors = [...(adjacency.get(id) ?? [])].sort((left, right) => {
+        const leftNode = nodeById.get(left);
+        const rightNode = nodeById.get(right);
+        return (
+          (rightNode?.degree ?? 0) - (leftNode?.degree ?? 0) ||
+          left.localeCompare(right)
+        );
+      });
+      for (const neighbor of neighbors) {
+        if (depth.has(neighbor)) continue;
+        depth.set(neighbor, nextDepth);
+        queue.push(neighbor);
+      }
+    }
+
+    const layers = new Map<number, SeedNode[]>();
+    for (const node of component) {
+      const nodeDepth = depth.get(node.id) ?? 0;
+      const layer = layers.get(nodeDepth);
+      if (layer) layer.push(node);
+      else layers.set(nodeDepth, [node]);
+    }
+    const maximumDepth = Math.max(0, ...layers.keys());
+    const maximumRadius = Math.max(...component.map((node) => node.radius));
+    const jitterAllowance = Math.min(cellWidth, cellHeight) * 0.05;
+    const localRadius = Math.max(
+      0,
+      Math.min(cellWidth, cellHeight) / 2 - maximumRadius - jitterAllowance - 8,
+    );
+    const phase = deterministicUnit(root.id, 0x1656_67b1) * Math.PI * 2;
+
+    for (const [nodeDepth, layer] of layers) {
+      layer.sort(
+        (left, right) =>
+          right.degree - left.degree || left.id.localeCompare(right.id),
+      );
+      const radius =
+        maximumDepth === 0
+          ? 0
+          : localRadius * Math.sqrt(nodeDepth / maximumDepth);
+      layer.forEach((node, layerIndex) => {
+        const angle = phase + (Math.PI * 2 * layerIndex) / layer.length;
+        positions.set(node.id, {
+          x: clamp(
+            centerX + Math.cos(angle) * radius,
+            node.radius,
+            bounds.width - node.radius,
+          ),
+          y: clamp(
+            centerY + Math.sin(angle) * radius,
+            node.radius,
+            bounds.height - node.radius,
+          ),
+        });
+      });
+    }
+  });
+  return positions;
+}
+
 /**
- * Seeds a stable shape-free scatter in O(n). The initial frame is useful
- * immediately, while graph forces refine it across animation frames.
+ * Seeds small graphs as separated structural clusters and uses a bounded
+ * shape-free scatter at the 500-node ceiling. Live forces refine either seed.
  */
 export function createGraphSimulation(
   input: LayoutInput,
@@ -85,30 +255,20 @@ export function createGraphSimulation(
   );
   const nodes = new Map<string, SimulationNode>();
   const geometryScale = densityScale(ordered.length);
+  const seeded = ordered.map((item) => ({
+    ...item,
+    radius: Math.max(3, radiusFor(item.degree) * geometryScale),
+  }));
+  const positions = seedGraphPositions(seeded, input.edges, bounds);
 
-  ordered.forEach((item) => {
-    const radius = Math.max(3, radiusFor(item.degree) * geometryScale);
-    const padding = radius + 8;
-    const x = clamp(
-      padding +
-        deterministicUnit(item.id, 0x9e37_79b9) *
-          Math.max(0, bounds.width - padding * 2),
-      radius,
-      bounds.width - radius,
-    );
-    const y = clamp(
-      padding +
-        deterministicUnit(item.id, 0x85eb_ca6b) *
-          Math.max(0, bounds.height - padding * 2),
-      radius,
-      bounds.height - radius,
-    );
+  seeded.forEach((item) => {
+    const position = positions.get(item.id) ?? scatterPosition(item, bounds);
     nodes.set(item.id, {
       id: item.id,
       degree: item.degree,
-      radius,
-      x,
-      y,
+      radius: item.radius,
+      x: position.x,
+      y: position.y,
       vx: 0,
       vy: 0,
       fixed: false,

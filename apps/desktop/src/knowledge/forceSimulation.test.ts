@@ -11,6 +11,10 @@ import {
 
 function expectBoundedAndSeparated(simulation: GraphSimulation) {
   const nodes = [...simulation.nodes.values()];
+  expect(simulation.alpha).toBeLessThanOrEqual(0.002);
+  expect(
+    Math.max(...nodes.map((node) => Math.hypot(node.vx, node.vy))),
+  ).toBeLessThan(0.025);
   let minimumClearance = Number.POSITIVE_INFINITY;
   for (const [index, node] of nodes.entries()) {
     expect(Number.isFinite(node.x)).toBe(true);
@@ -99,6 +103,46 @@ describe("interactive force simulation", () => {
     ).toBeGreaterThan(20);
   });
 
+  it("opens small graphs as separated components with hubs and depth layers", () => {
+    const simulation = createGraphSimulation({
+      nodes: [
+        { id: "a-hub", degree: 2 },
+        { id: "a-near", degree: 2 },
+        { id: "a-leaf", degree: 1 },
+        { id: "a-deep", degree: 1 },
+        { id: "b-hub", degree: 2 },
+        { id: "b-left", degree: 1 },
+        { id: "b-right", degree: 1 },
+      ],
+      edges: [
+        { source: "a-hub", target: "a-near" },
+        { source: "a-hub", target: "a-leaf" },
+        { source: "a-near", target: "a-deep" },
+        { source: "b-hub", target: "b-left" },
+        { source: "b-hub", target: "b-right" },
+      ],
+    });
+    const node = (id: string) => {
+      const found = simulation.nodes.get(id);
+      expect(found).toBeDefined();
+      if (!found) throw new Error(`missing seed node ${id}`);
+      return found;
+    };
+    const aNodes = ["a-hub", "a-near", "a-leaf", "a-deep"].map(node);
+    const bNodes = ["b-hub", "b-left", "b-right"].map(node);
+    const aHub = node("a-hub");
+    const near = node("a-near");
+    const deep = node("a-deep");
+
+    expect(Math.max(...aNodes.map((item) => item.x))).toBeLessThan(
+      Math.min(...bNodes.map((item) => item.x)),
+    );
+    expect(Math.hypot(near.x - aHub.x, near.y - aHub.y)).toBeGreaterThan(40);
+    expect(Math.hypot(deep.x - aHub.x, deep.y - aHub.y)).toBeGreaterThan(
+      Math.hypot(near.x - aHub.x, near.y - aHub.y),
+    );
+  });
+
   it("smoothly clears an unconnected node from a dragged path", () => {
     const simulation = createGraphSimulation({
       nodes: [
@@ -182,6 +226,22 @@ describe("interactive force simulation", () => {
           target: `node-${String((index + 1) % nodeCount).padStart(3, "0")}`,
         })),
       });
+      const draggedId = "node-000";
+      const dragged = simulation.nodes.get(draggedId);
+      expect(dragged).toBeDefined();
+      if (!dragged) return;
+      expect(
+        dragGraphNode(
+          simulation,
+          draggedId,
+          simulation.width - dragged.radius,
+          simulation.height / 2,
+        ),
+      ).toBe(true);
+      for (let tick = 0; tick < 8; tick += 1) {
+        tickGraphSimulation(simulation);
+      }
+      expect(releaseGraphNode(simulation, draggedId)).toBe(true);
 
       const result = settleGraphSimulation(simulation);
 
