@@ -1003,6 +1003,83 @@ describe("application shell", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("focuses the Explorer search from Ingest with Cmd/Ctrl+F", async () => {
+    render(<App setupComplete />);
+    expect(screen.getByRole("tab", { name: "Ingest" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("textbox", { name: "Filter knowledge" }),
+      ).toHaveFocus();
+    });
+    expect(screen.getByRole("tab", { name: "Retrieve" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("selects the standing query so Cmd/Ctrl+F replaces it", async () => {
+    render(<App setupComplete initialMode="Retrieve" />);
+    const search = screen.getByRole("textbox", { name: "Filter knowledge" });
+    fireEvent.change(search, { target: { value: "agents" } });
+
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
+
+    await waitFor(() => {
+      expect(search).toHaveFocus();
+    });
+    expect((search as HTMLInputElement).selectionStart).toBe(0);
+    expect((search as HTMLInputElement).selectionEnd).toBe("agents".length);
+  });
+
+  it("clears the query and returns focus when Escape leaves the search", async () => {
+    render(<App setupComplete initialMode="Retrieve" />);
+    const retrieve = screen.getByRole("tab", { name: "Retrieve" });
+    retrieve.focus();
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
+    const search = screen.getByRole("textbox", { name: "Filter knowledge" });
+    await waitFor(() => {
+      expect(search).toHaveFocus();
+    });
+    fireEvent.change(search, { target: { value: "agents" } });
+
+    fireEvent.keyDown(search, { key: "Escape" });
+
+    expect(search).toHaveValue("");
+    expect(retrieve).toHaveFocus();
+  });
+
+  it("ignores shortcuts while a modal owns the screen", () => {
+    render(<App setupComplete />);
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    expect(
+      screen.getByRole("dialog", { name: "Command palette" }),
+    ).toBeVisible();
+
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
+
+    expect(screen.getByRole("tab", { name: "Ingest" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("lists a command's shortcut next to it in the palette", () => {
+    render(<App setupComplete />);
+
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+
+    const command = screen
+      .getAllByRole("option")
+      .find((option) => option.textContent.startsWith("Search Knowledge"));
+    expect(command?.textContent).toContain("Ctrl+F");
+  });
+
   it("has no detectable accessibility violations in either mode", async () => {
     const { container, rerender } = render(<App setupComplete />);
     expect((await axe.run(container)).violations).toEqual([]);
