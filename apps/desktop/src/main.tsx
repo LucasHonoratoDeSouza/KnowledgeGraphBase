@@ -7,6 +7,7 @@ import {
   browserE2EFolderPicker,
   browserE2EKnowledgeClient,
   browserE2ESettingsClient,
+  browserE2EWindowChrome,
 } from "./e2e/client";
 import "./styles.css";
 
@@ -19,6 +20,7 @@ const e2eClients = import.meta.env.VITE_E2E
       knowledgeClient: browserE2EKnowledgeClient,
       online: localStorage.getItem("knowledge-os:e2e:offline") !== "true",
       settingsClient: browserE2ESettingsClient,
+      windowChrome: browserE2EWindowChrome,
     }
   : {};
 
