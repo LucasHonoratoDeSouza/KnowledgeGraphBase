@@ -1080,6 +1080,40 @@ describe("application shell", () => {
     expect(command?.textContent).toContain("Ctrl+F");
   });
 
+  it("renders the ambient graph behind Ingest as inert decoration", async () => {
+    const { container } = render(
+      <App knowledgeClient={createKnowledgeClient()} setupComplete />,
+    );
+
+    const ambient = await waitFor(() => {
+      const found = container.querySelector(".ambient-graph");
+      if (!found) throw new Error("ambient layer not rendered");
+      return found;
+    });
+    expect(ambient).toHaveAttribute("aria-hidden", "true");
+    expect(ambient.querySelector("[tabindex]")).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Add knowledge" }),
+    ).toBeVisible();
+  });
+
+  it("leaves the Ingest surface untouched when the index is empty", async () => {
+    const client = createKnowledgeClient();
+    const empty = {
+      ...client,
+      getGraph: () =>
+        Promise.resolve({ concepts: [], edges: [], truncated: false }),
+    };
+    const { container } = render(<App knowledgeClient={empty} setupComplete />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Capture a source" }),
+      ).toBeVisible();
+    });
+    expect(container.querySelector(".ambient-graph")).toBeNull();
+  });
+
   it("has no detectable accessibility violations in either mode", async () => {
     const { container, rerender } = render(<App setupComplete />);
     expect((await axe.run(container)).violations).toEqual([]);

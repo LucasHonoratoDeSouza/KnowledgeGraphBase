@@ -136,7 +136,9 @@ test("drags the window from the header background and maximizes on double click"
   page,
 }) => {
   await createLocalKnowledgeBase(page);
-  const header = page.getByRole("banner");
+  // The header sits inside <main>, so it carries no banner role in a real
+  // browser's accessibility tree — address the drag region itself.
+  const header = page.locator("[data-window-drag-region]");
 
   await header.click({ position: { x: 8, y: 42 } });
   await expect.poll(() => windowChromeCalls(page)).toEqual(["startDragging"]);
@@ -224,7 +226,24 @@ test("uses a flat retro desktop visual system and the teste n1 review vault", as
       elements.map((element) => getComputedStyle(element).backgroundColor),
     );
   expect(new Set(graphSurfaceColors).size).toBe(1);
-  expect(graphSurfaceColors[0]).toBe("rgb(31, 31, 31)");
+  // The graph reads on the deepest surface layer, whatever the palette sets it
+  // to; hardcoding the hex here only re-states the stylesheet.
+  const panelDeep = await page.evaluate(() =>
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--panel-deep")
+      .trim(),
+  );
+  expect(panelDeep).not.toBe("");
+  expect(graphSurfaceColors[0]).toBe(
+    await page.evaluate((color) => {
+      const probe = document.createElement("div");
+      probe.style.backgroundColor = color;
+      document.body.append(probe);
+      const computed = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return computed;
+    }, panelDeep),
+  );
   await expect(page.locator(".graph-node-glow")).toHaveCount(0);
 });
 
@@ -510,6 +529,25 @@ test("keeps OpenAI, Anthropic, DeepSeek and Groq provider state independent", as
     await group.getByRole("button", { name: `Connect ${provider}` }).click();
     await expect(group.getByText("Configured ••••••••")).toBeVisible();
   }
+});
+
+test("keeps the ambient graph behind Ingest out of every interaction", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("textbox", { name: "Add knowledge" }).fill("a source");
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  await page.getByRole("tab", { name: "Ingest" }).click();
+
+  const ambient = page.locator(".ambient-graph");
+  await expect(ambient).toHaveAttribute("aria-hidden", "true");
+  await expect(ambient).toHaveCSS("pointer-events", "none");
+
+  // A click over the layer reaches the surface underneath it.
+  await page.mouse.click(1200, 200);
+  await expect(
+    page.getByRole("textbox", { name: "Add knowledge" }),
+  ).toBeVisible();
 });
 
 test("saves the open note with Ctrl+S from inside the editor", async ({

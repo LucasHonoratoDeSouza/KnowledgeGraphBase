@@ -76,6 +76,7 @@ import {
   type WindowChromeClient,
 } from "./windowChrome";
 import {
+  AmbientGraph,
   KnowledgeGraph,
   ipcKnowledgeClient,
   type AssistantAnswer,
@@ -124,6 +125,7 @@ const emptySettings: SettingsSnapshot = {
 };
 
 interface IngestSurfaceProps {
+  ambientGraph: GraphView | null;
   client: KnowledgeClient;
   folders: string[];
   onCaptured: () => void;
@@ -131,6 +133,7 @@ interface IngestSurfaceProps {
 }
 
 function IngestSurface({
+  ambientGraph,
   client,
   folders,
   onCaptured,
@@ -191,6 +194,7 @@ function IngestSurface({
 
   return (
     <section aria-labelledby="ingest-heading" className="ingest-surface">
+      <AmbientGraph graph={ambientGraph} />
       <div className="ingest-content">
         <div className="ingest-kicker">
           <span>NEW SOURCE</span>
@@ -1734,6 +1738,7 @@ export function AppShell({
   const [settings, setSettings] = useState(initialSettings ?? emptySettings);
   const [knowledgeRevision, setKnowledgeRevision] = useState(0);
   const [captureFolders, setCaptureFolders] = useState<string[]>([]);
+  const [ambientGraph, setAmbientGraph] = useState<GraphView | null>(null);
   const [layout, setLayout] = useState(() =>
     restoreLayout(
       initialSettings?.layoutJson ?? serializeLayout(DEFAULT_LAYOUT),
@@ -1823,6 +1828,24 @@ export function AppShell({
       cancelled = true;
     };
   }, [knowledgeClient, knowledgeRevision, setupDone]);
+
+  // The ambient layer only loads for the surface that shows it (#35), so
+  // opening straight into Retrieve costs nothing extra.
+  useEffect(() => {
+    if (!setupDone || mode !== "Ingest") return undefined;
+    let cancelled = false;
+    void knowledgeClient
+      .getGraph()
+      .then((graph) => {
+        if (!cancelled) setAmbientGraph(graph);
+      })
+      .catch(() => {
+        // A still-building index simply leaves the surface as it was.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [knowledgeClient, knowledgeRevision, mode, setupDone]);
 
   function persistWorkspace(
     nextMode: PrimaryMode,
@@ -1990,6 +2013,7 @@ export function AppShell({
           >
             {mode === "Ingest" ? (
               <IngestSurface
+                ambientGraph={ambientGraph}
                 client={knowledgeClient}
                 folders={captureFolders}
                 onCaptured={() => {
