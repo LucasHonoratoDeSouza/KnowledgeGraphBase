@@ -248,6 +248,11 @@ pub struct ConceptDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct StructuredKnowledge {
     pub title: String,
+    /// One machine-oriented line describing the note, written into its
+    /// `context:` frontmatter field. Optional: a model that omits it falls
+    /// back to a deterministic line built from the body.
+    #[serde(default)]
+    pub context: String,
     pub summary: String,
     pub concepts: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_lenient_vec")]

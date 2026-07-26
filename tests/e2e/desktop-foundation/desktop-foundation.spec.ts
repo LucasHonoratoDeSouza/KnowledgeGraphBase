@@ -199,6 +199,168 @@ test("renders the durable three-pane Retrieve workspace", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("keeps graph drag, connected motion, pan and zoom fluid", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+
+  const graph = page.getByRole("group", { name: "Knowledge graph" });
+  const stage = page.locator(".graph-stage");
+  const dragged = graph.locator('[data-graph-node="document-knowledge-os"]');
+  const neighbor = graph.locator('[data-graph-node="document-ai-research"]');
+  await expect(dragged).toBeVisible();
+  await expect(neighbor).toBeVisible();
+  await expect(graph.locator(".graph-edge-layer line")).toHaveCount(1);
+  await expect(stage).toHaveCSS("user-select", "none");
+  await expect(stage).toHaveCSS("touch-action", "none");
+  const controlIconsFit = await page
+    .getByLabel("Graph view controls")
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const icon = button.querySelector("svg");
+        if (!icon) return false;
+        const buttonBounds = button.getBoundingClientRect();
+        const iconBounds = icon.getBoundingClientRect();
+        return (
+          iconBounds.width <= buttonBounds.width &&
+          iconBounds.height <= buttonBounds.height &&
+          iconBounds.left >= buttonBounds.left &&
+          iconBounds.right <= buttonBounds.right
+        );
+      }),
+    );
+  expect(controlIconsFit).toEqual([true, true, true]);
+
+  await expect
+    .poll(async () => {
+      const first = await neighbor.evaluate((element) => ({
+        x: Number((element as SVGGElement).dataset.graphX),
+        y: Number((element as SVGGElement).dataset.graphY),
+      }));
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                resolve();
+              });
+            });
+          }),
+      );
+      const second = await neighbor.evaluate((element) => ({
+        x: Number((element as SVGGElement).dataset.graphX),
+        y: Number((element as SVGGElement).dataset.graphY),
+      }));
+      return Math.hypot(second.x - first.x, second.y - first.y);
+    })
+    .toBeLessThan(0.05);
+  const draggedBefore = await dragged.evaluate((element) => ({
+    x: Number((element as SVGGElement).dataset.graphX),
+    y: Number((element as SVGGElement).dataset.graphY),
+  }));
+  const before = await neighbor.evaluate((element) => ({
+    x: Number((element as SVGGElement).dataset.graphX),
+    y: Number((element as SVGGElement).dataset.graphY),
+  }));
+  const draggedCircle = dragged.locator("circle");
+  const draggedLabel = dragged.locator("text");
+  const circle = await draggedCircle.boundingBox();
+  const graphBox = await graph.boundingBox();
+  if (!circle || !graphBox) throw new Error("graph node has no bounding box");
+  await expect(draggedLabel).toHaveCSS("opacity", "0");
+  await draggedCircle.hover();
+  await expect(draggedLabel).toHaveCSS("opacity", "1");
+  await page.locator(".graph-heading").hover();
+  await expect(draggedLabel).toHaveCSS("opacity", "0");
+  const start = {
+    x: circle.x + circle.width / 2,
+    y: circle.y + circle.height / 2,
+  };
+  const horizontalMove = start.x < graphBox.x + graphBox.width / 2 ? 150 : -150;
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + horizontalMove, start.y + 24, { steps: 10 });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
+  const during = await neighbor.evaluate((element) => ({
+    x: Number((element as SVGGElement).dataset.graphX),
+    y: Number((element as SVGGElement).dataset.graphY),
+  }));
+  const draggedDuring = await dragged.evaluate((element) => ({
+    x: Number((element as SVGGElement).dataset.graphX),
+    y: Number((element as SVGGElement).dataset.graphY),
+  }));
+  await page.mouse.up();
+
+  expect(
+    Math.hypot(
+      draggedDuring.x - draggedBefore.x,
+      draggedDuring.y - draggedBefore.y,
+    ),
+  ).toBeGreaterThan(50);
+  expect(Math.hypot(during.x - before.x, during.y - before.y)).toBeGreaterThan(
+    0.25,
+  );
+  expect(
+    await page.evaluate(() => window.getSelection()?.toString() ?? ""),
+  ).toBe("");
+
+  const labelBox = await dragged.locator("text").boundingBox();
+  if (!labelBox) throw new Error("graph label has no bounding box");
+  await page.mouse.move(labelBox.x + 2, labelBox.y + labelBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    labelBox.x + Math.max(12, labelBox.width - 2),
+    labelBox.y + labelBox.height / 2,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  expect(
+    await page.evaluate(() => window.getSelection()?.toString() ?? ""),
+  ).toBe("");
+
+  const scaleBefore = Number(await graph.getAttribute("data-graph-scale"));
+  await page.mouse.move(graphBox.x + graphBox.width * 0.3, graphBox.y + 80);
+  await page.mouse.wheel(0, -360);
+  await expect
+    .poll(async () => Number(await graph.getAttribute("data-graph-scale")))
+    .toBeGreaterThan(scaleBefore);
+
+  await page.getByRole("button", { name: "Reset graph view" }).click();
+  await expect(graph).toHaveAttribute("viewBox", "0 0 800 520");
+  await page.mouse.move(graphBox.x + 24, graphBox.y + 24);
+  await page.mouse.down();
+  await page.mouse.move(graphBox.x + 84, graphBox.y + 54, { steps: 5 });
+  await page.mouse.up();
+  await expect(graph).not.toHaveAttribute("viewBox", "0 0 800 520");
+  expect(
+    await page.evaluate(() => window.getSelection()?.toString() ?? ""),
+  ).toBe("");
+
+  await page.getByRole("button", { name: "Reset graph view" }).click();
+  await expect(graph).toHaveAttribute("viewBox", "0 0 800 520");
+  const clickTarget = await draggedCircle.boundingBox();
+  if (!clickTarget) throw new Error("graph node is not clickable");
+  await page.mouse.click(
+    clickTarget.x + clickTarget.width / 2,
+    clickTarget.y + clickTarget.height / 2,
+  );
+  await expect(
+    page.getByRole("tab", { name: /Knowledge OS\.md/ }),
+  ).toHaveAttribute("aria-selected", "true");
+});
+
 test("restores a collapsed Explorer and active mode after restart", async ({
   page,
 }) => {
@@ -386,6 +548,84 @@ test("collapses an Explorer folder and keeps it collapsed after restart", async 
   await expect(
     explorer.getByRole("button", { name: "Knowledge OS" }),
   ).toBeVisible();
+});
+
+test("renames a note from the Explorer context menu", async ({ page }) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  const explorer = page.getByRole("region", { name: "Explorer" });
+
+  await explorer.getByRole("button", { name: "Knowledge OS" }).click({
+    button: "right",
+  });
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const name = explorer.getByRole("textbox", { name: "New name" });
+  await expect(name).toHaveValue("Knowledge OS");
+  await name.fill("Knowledge OS rewritten");
+  await name.press("Enter");
+
+  await expect(
+    explorer.getByRole("button", { name: "Knowledge OS rewritten" }),
+  ).toBeVisible();
+  await expect(
+    explorer.getByRole("button", { name: "Knowledge OS", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("switches a note between source and reading views", async ({ page }) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  await page.getByRole("tab", { name: "Welcome.md" }).click();
+  await page
+    .getByRole("textbox", { name: "Edit notes/Welcome.md" })
+    .fill("# Reading check\n\nSome **bold** copy.\n");
+
+  await page.getByRole("button", { name: "Reading" }).click();
+
+  const rendered = page.getByRole("article", { name: "Rendered note" });
+  await expect(
+    rendered.getByRole("heading", { name: "Reading check" }),
+  ).toBeVisible();
+  await expect(rendered.getByText("bold")).toBeVisible();
+
+  await page
+    .getByRole("group", { name: "View mode" })
+    .getByRole("button", { name: "Source" })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Edit notes/Welcome.md" }),
+  ).toContainText("Some **bold** copy.");
+});
+
+test("resizes the Explorer by dragging its divider and keeps it after restart", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  const divider = page.getByRole("separator", { name: "Resize Explorer" });
+  const box = await divider.boundingBox();
+  if (!box) throw new Error("divider has no box");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 70, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+
+  // The pointer lands on a sub-pixel boundary, so the exact width is not
+  // predictable — what matters is that it grew past the 240px default and that
+  // the same width comes back after a restart.
+  const workspace = page.locator(".retrieve-workspace");
+  await expect(workspace).toHaveCSS(
+    "grid-template-columns",
+    /^3\d\d(\.\d+)?px /,
+  );
+  const resized = await workspace.evaluate(
+    (element) => getComputedStyle(element).gridTemplateColumns,
+  );
+
+  await page.reload();
+
+  await expect(workspace).toHaveCSS("grid-template-columns", resized);
 });
 
 test("assistant surface stays read-only with no action or research tools", async ({

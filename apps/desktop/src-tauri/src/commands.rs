@@ -22,8 +22,13 @@ use crate::{
     enrichment::MainModelEnricher,
     knowledge::{
         CaptureCommandRequest, CaptureCommandResponse, LibrarySnapshot, OrganizationSnapshot,
-        ask_in_vault, capture_in_vault_with_services, create_folder_in_vault, graph_in_vault,
-        library_in_vault, organization_in_vault, search_in_vault,
+        ask_in_vault, capture_in_vault_with_services, create_folder_in_vault,
+        delete_entry_in_vault, graph_in_vault, library_in_vault, move_entry_in_vault,
+        organization_in_vault, rename_entry_in_vault, search_in_vault,
+    },
+    librarian::{
+        LibrarianOutcome, SUGGESTION_THRESHOLD, crowded_folders, reorganize_folder,
+        undo_last_reorganization,
     },
     settings::{
         AiConfiguration, BudgetSettings, HealthStatus, ModelProfile, OnboardingInput,
@@ -244,6 +249,111 @@ pub fn folder_create(
 }
 
 #[tauri::command]
+pub fn entry_rename(
+    path: String,
+    name: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<LibrarySnapshot, String> {
+    rename_entry_in_vault(&workspace_root(&state)?, &path, &name)
+}
+
+#[tauri::command]
+pub fn entry_delete(
+    path: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<LibrarySnapshot, String> {
+    delete_entry_in_vault(&workspace_root(&state)?, &path)
+}
+
+#[tauri::command]
+pub fn entry_move(
+    path: String,
+    destination: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<LibrarySnapshot, String> {
+    move_entry_in_vault(&workspace_root(&state)?, &path, &destination)
+}
+
+/// One scoped reorganization run. Uses the Librarian model when the user
+/// picked one, else the Main model; fails closed when neither is configured,
+/// because a silent no-op here looks identical to "the model reorganized
+/// nothing" (AD-006).
+#[tauri::command]
+pub fn librarian_reorganize(
+    folder: String,
+    state: State<'_, SettingsCommandState>,
+) -> Result<LibrarianOutcome, String> {
+    let (root, provider, endpoint, model_id, remote_model, secret) = {
+        let service = lock_settings(&state)?;
+        let root = service
+            .workspace_root()
+            .map_err(command_error)?
+            .ok_or_else(|| "complete local vault setup first".to_owned())?;
+        let snapshot = service.public_snapshot().map_err(command_error)?;
+        if !snapshot.ai_enabled {
+            return Err("enable AI processing to reorganize a folder".to_owned());
+        }
+        let routing = &snapshot.ai.routing;
+        let chosen = routing
+            .librarian_model_id
+            .as_deref()
+            .or(routing.main_model_id.as_deref())
+            .ok_or_else(|| "configure a Main or Librarian model first".to_owned())?;
+        let model = snapshot
+            .ai
+            .models
+            .iter()
+            .find(|model| model.id == chosen && model.enabled)
+            .ok_or_else(|| "configure a Main or Librarian model first".to_owned())?;
+        let connection = snapshot
+            .providers
+            .iter()
+            .find(|connection| connection.provider == model.provider)
+            .ok_or_else(|| "the reorganization provider is not connected".to_owned())?;
+        if connection.health != HealthStatus::Healthy {
+            return Err("test this provider connection before reorganizing".to_owned());
+        }
+        let (endpoint, secret) = service
+            .native_provider(model.provider)
+            .map_err(command_error)?;
+        (
+            root,
+            ai_provider(model.provider),
+            endpoint,
+            model.id.clone(),
+            model.id.clone(),
+            secret,
+        )
+    };
+    let resolver = OneSecretResolver { provider, secret };
+    let connections = HashMap::from([(
+        model_id.clone(),
+        ProviderConnection {
+            provider,
+            endpoint,
+            model: remote_model,
+        },
+    )]);
+    let ai = NativeHttpAiPort::new(resolver, connections).map_err(command_error)?;
+    reorganize_folder(&root, &folder, &ai, &model_id)
+}
+
+#[tauri::command]
+pub fn librarian_undo(state: State<'_, SettingsCommandState>) -> Result<LibrarianOutcome, String> {
+    undo_last_reorganization(&workspace_root(&state)?)
+}
+
+#[tauri::command]
+pub fn librarian_suggestions(
+    state: State<'_, SettingsCommandState>,
+) -> Result<Vec<String>, String> {
+    Ok(crowded_folders(
+        &workspace_root(&state)?,
+        SUGGESTION_THRESHOLD,
+    ))
+}
+
+#[tauri::command]
 pub fn organization_get(
     state: State<'_, SettingsCommandState>,
 ) -> Result<OrganizationSnapshot, String> {
@@ -416,6 +526,7 @@ pub fn settings_complete_onboarding(
                 main_model_id: Some(model_id.clone()),
                 assistant_default_model_id: Some(model_id),
                 explicit_fallback_model_id: None,
+                librarian_model_id: None,
             },
             budgets: BudgetSettings {
                 daily_cents: request.daily_budget_cents,

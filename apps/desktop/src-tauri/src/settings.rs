@@ -388,6 +388,11 @@ pub struct RoutingSettings {
     pub main_model_id: Option<String>,
     pub assistant_default_model_id: Option<String>,
     pub explicit_fallback_model_id: Option<String>,
+    /// Optional stronger model for the occasional Librarian pass (#18).
+    /// Unset means the Librarian reuses the Main model, so a pricier model is
+    /// only ever used when the user explicitly picked one (AD-004/AD-006).
+    #[serde(default)]
+    pub librarian_model_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]

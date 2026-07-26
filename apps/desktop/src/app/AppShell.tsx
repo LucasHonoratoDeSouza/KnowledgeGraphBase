@@ -4,7 +4,9 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 import {
@@ -29,7 +31,6 @@ import {
   Plus,
   Search,
   Settings2,
-  SlidersHorizontal,
   Sparkles,
   Video,
   X,
@@ -59,6 +60,7 @@ import {
 } from "../settings";
 import {
   DEFAULT_LAYOUT,
+  PANE_BOUNDS,
   resizePane,
   restoreLayout,
   serializeLayout,
@@ -66,11 +68,14 @@ import {
   type WorkspaceLayout,
 } from "../workspace/layout";
 import {
+  KnowledgeGraph,
   ipcKnowledgeClient,
   type AssistantAnswer,
   type GraphView,
   type KnowledgeClient,
+  type LibrarianOutcome,
   type LibraryEntry,
+  type OrganizeMode,
   type LibrarySnapshot,
   type RetrievalResult,
 } from "../knowledge";
@@ -111,11 +116,17 @@ const emptySettings: SettingsSnapshot = {
 
 interface IngestSurfaceProps {
   client: KnowledgeClient;
+  folders: string[];
   onCaptured: () => void;
   vaultName: string;
 }
 
-function IngestSurface({ client, onCaptured, vaultName }: IngestSurfaceProps) {
+function IngestSurface({
+  client,
+  folders,
+  onCaptured,
+  vaultName,
+}: IngestSurfaceProps) {
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<
@@ -124,6 +135,8 @@ function IngestSurface({ client, onCaptured, vaultName }: IngestSurfaceProps) {
     | { kind: "success"; message: string }
     | { kind: "error"; message: string }
   >({ kind: "idle" });
+  const [organize, setOrganize] = useState<OrganizeMode>("auto");
+  const [organizeFolder, setOrganizeFolder] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function submit() {
@@ -141,6 +154,8 @@ function IngestSurface({ client, onCaptured, vaultName }: IngestSurfaceProps) {
         content: sourceContent,
         fileName: file?.name ?? "",
         bytes,
+        organize,
+        organizeFolder: organize === "folder" ? organizeFolder : "",
       });
       setStatus({
         kind: "success",
@@ -236,11 +251,33 @@ function IngestSurface({ client, onCaptured, vaultName }: IngestSurfaceProps) {
                 ref={fileInput}
                 type="file"
               />
-              <button className="composer-select" type="button">
+              <label className="composer-select">
                 <Sparkles aria-hidden="true" size={15} />
-                <span>Auto organize</span>
+                <span className="visually-hidden">Organize this capture</span>
+                <select
+                  aria-label="Organize this capture"
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    if (value === "auto" || value === "none") {
+                      setOrganize(value);
+                      setOrganizeFolder("");
+                      return;
+                    }
+                    setOrganize("folder");
+                    setOrganizeFolder(value);
+                  }}
+                  value={organize === "folder" ? organizeFolder : organize}
+                >
+                  <option value="auto">Auto organize</option>
+                  {folders.map((folder) => (
+                    <option key={folder} value={folder}>
+                      File in {folder}
+                    </option>
+                  ))}
+                  <option value="none">Don&apos;t organize</option>
+                </select>
                 <ChevronDown aria-hidden="true" size={13} />
-              </button>
+              </label>
             </div>
             <button
               aria-label="Process source"
@@ -300,6 +337,66 @@ interface RetrieveSurfaceProps {
   vaultName: string;
 }
 
+/**
+ * A draggable splitter between two panes (#12). Pointer moves resize live and
+ * every change flows through the same persisted layout path as the existing
+ * step buttons, so a dragged width survives a restart too.
+ */
+function PaneDivider({
+  collapsed,
+  label,
+  onResize,
+  pane,
+  width,
+}: {
+  collapsed: boolean;
+  label: string;
+  onResize: (delta: number) => void;
+  pane: "explorer" | "assistant";
+  width: number;
+}) {
+  const last = useRef<number | null>(null);
+  if (collapsed) return null;
+  return (
+    <div
+      aria-label={label}
+      aria-orientation="vertical"
+      aria-valuemax={PANE_BOUNDS[pane].max}
+      aria-valuemin={PANE_BOUNDS[pane].min}
+      aria-valuenow={width}
+      className="pane-divider"
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          onResize(-16);
+        }
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          onResize(16);
+        }
+      }}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        last.current = event.clientX;
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        if (last.current === null) return;
+        const delta = event.clientX - last.current;
+        if (delta === 0) return;
+        last.current = event.clientX;
+        onResize(delta);
+      }}
+      onPointerUp={(event) => {
+        last.current = null;
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      role="separator"
+      tabIndex={0}
+    />
+  );
+}
+
 const welcomeNote: NoteDocument = {
   path: "notes/Welcome.md",
   content:
@@ -307,141 +404,39 @@ const welcomeNote: NoteDocument = {
   diagnostics: [],
 };
 
-function KnowledgeGraph({ graph }: { graph: GraphView | null }) {
-  const concepts = graph?.concepts ?? [];
-  const graphEdges = graph?.edges ?? [];
-  const degree = new Map<string, number>();
-  for (const edge of graphEdges) {
-    degree.set(
-      edge.sourceConceptId,
-      (degree.get(edge.sourceConceptId) ?? 0) + 1,
-    );
-    degree.set(
-      edge.targetConceptId,
-      (degree.get(edge.targetConceptId) ?? 0) + 1,
-    );
-  }
-  const ordered = [...concepts].sort(
-    (left, right) =>
-      (degree.get(right.id) ?? 0) - (degree.get(left.id) ?? 0) ||
-      left.displayName.localeCompare(right.displayName),
-  );
-  const graphNodes = ordered.map((concept, index) => {
-    if (index === 0) {
-      return {
-        id: concept.id,
-        x: 400,
-        y: 260,
-        r: 18,
-        label: concept.displayName,
-        tone: "accent",
-      };
-    }
-    const angle =
-      ((index - 1) / Math.max(ordered.length - 1, 1)) * Math.PI * 2 -
-      Math.PI / 2;
-    const radius = 145 + ((index - 1) % 3) * 34;
-    return {
-      id: concept.id,
-      x: 400 + Math.cos(angle) * radius,
-      y: 260 + Math.sin(angle) * Math.min(radius, 190),
-      r: Math.min(13, 7 + (degree.get(concept.id) ?? 0)),
-      label: concept.displayName,
-      tone: (degree.get(concept.id) ?? 0) > 1 ? "bright" : "muted",
-    };
-  });
-  const byId = new Map(graphNodes.map((node) => [node.id, node]));
-  return (
-    <div className="graph-view">
-      <div className="graph-heading">
-        <div>
-          <span className="eyebrow">LOCAL GRAPH</span>
-          <h2>Your knowledge, connected</h2>
-          <p>
-            {concepts.length} concepts · {graphEdges.length} relationships ·
-            local index
-          </p>
-        </div>
-        <div className="graph-actions">
-          <button
-            aria-label="Search graph"
-            className="icon-button"
-            type="button"
-          >
-            <Search aria-hidden="true" size={15} />
-          </button>
-          <button
-            aria-label="Filter graph"
-            className="icon-button"
-            type="button"
-          >
-            <SlidersHorizontal aria-hidden="true" size={15} />
-          </button>
-          <button
-            aria-label="More graph actions"
-            className="icon-button"
-            type="button"
-          >
-            <MoreHorizontal aria-hidden="true" size={16} />
-          </button>
-        </div>
-      </div>
-      <div className="graph-stage">
-        <svg aria-label="Knowledge graph" role="img" viewBox="0 0 800 520">
-          <g className="graph-edge-layer">
-            {graphEdges.map((edge) => {
-              const source = byId.get(edge.sourceConceptId);
-              const target = byId.get(edge.targetConceptId);
-              if (!source || !target) return null;
-              return (
-                <line
-                  key={edge.id}
-                  x1={source.x}
-                  x2={target.x}
-                  y1={source.y}
-                  y2={target.y}
-                />
-              );
-            })}
-          </g>
-          <g className="graph-node-layer">
-            {graphNodes.map((node) => (
-              <g className={`graph-node graph-node-${node.tone}`} key={node.id}>
-                <circle cx={node.x} cy={node.y} r={node.r} />
-                <text textAnchor="middle" x={node.x} y={node.y + node.r + 21}>
-                  {node.label}
-                </text>
-              </g>
-            ))}
-          </g>
-        </svg>
-        {concepts.length === 0 ? (
-          <div className="graph-empty">
-            Capture a source to grow your local graph.
-          </div>
-        ) : null}
-        <div className="graph-legend">
-          <span>
-            <i className="legend-dot legend-dot-focus" />
-            Current focus
-          </span>
-          <span>
-            <i className="legend-dot" />
-            Concept
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 interface TreeState {
   activeFolder: string;
   collapsed: ReadonlySet<string>;
+  dropTarget: string | null;
+  onContextMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    entry: LibraryEntry,
+  ) => void;
+  onDropInto: (destination: string) => void;
+  onDragEnterFolder: (path: string | null) => void;
+  onDragStartEntry: (path: string) => void;
   onOpen: (path: string) => void;
   onSelectFolder: (path: string) => void;
   onToggleFolder: (path: string) => void;
   openNotePath: string;
+}
+
+/** Shared drag/menu wiring for one row, so every row kind behaves the same. */
+function rowHandlers(entry: LibraryEntry, tree: TreeState) {
+  return {
+    draggable: true,
+    onContextMenu: (event: ReactMouseEvent<HTMLElement>) => {
+      tree.onContextMenu(event, entry);
+    },
+    onDragStart: (event: ReactDragEvent<HTMLElement>) => {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", entry.path);
+      tree.onDragStartEntry(entry.path);
+    },
+    onDragEnd: () => {
+      tree.onDragEnterFolder(null);
+    },
+  };
 }
 
 function LibraryRows({
@@ -469,6 +464,7 @@ function LibraryRows({
                   tree.onOpen(entry.path);
                 }}
                 type="button"
+                {...rowHandlers(entry, tree)}
               >
                 <FileText
                   aria-hidden="true"
@@ -483,7 +479,7 @@ function LibraryRows({
         if (entry.kind === "attachment") {
           return (
             <li key={entry.path} role="treeitem">
-              <span className="tree-row">
+              <span className="tree-row" {...rowHandlers(entry, tree)}>
                 <File
                   aria-hidden="true"
                   className="tree-icon tree-icon-attachment"
@@ -499,12 +495,23 @@ function LibraryRows({
             <button
               className={`tree-row tree-folder-button${
                 entry.path === tree.activeFolder ? " tree-row-target" : ""
-              }`}
+              }${entry.path === tree.dropTarget ? " tree-row-drop" : ""}`}
               onClick={() => {
                 tree.onToggleFolder(entry.path);
                 tree.onSelectFolder(entry.path);
               }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                tree.onDragEnterFolder(entry.path);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                tree.onDropInto(entry.path);
+              }}
               type="button"
+              {...rowHandlers(entry, tree)}
             >
               {expanded ? (
                 <ChevronDown
@@ -558,6 +565,32 @@ function documentHits(result: RetrievalResult) {
   return [...best.values()];
 }
 
+/** Resolves a `[[Wiki Link]]` target to a note path in the vault, if any. */
+function findNoteByName(
+  entries: LibraryEntry[],
+  target: string,
+): string | undefined {
+  const wanted = target.trim().toLowerCase();
+  for (const entry of entries) {
+    if (
+      entry.kind === "markdown" &&
+      entry.name.replace(/\.md$/i, "").toLowerCase() === wanted
+    ) {
+      return entry.path;
+    }
+    const nested = findNoteByName(entry.children, target);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+/** Every folder in the tree, deepest paths included, for placement pickers. */
+function folderPaths(entries: LibraryEntry[]): string[] {
+  return entries.flatMap((entry) =>
+    entry.kind === "folder" ? [entry.path, ...folderPaths(entry.children)] : [],
+  );
+}
+
 function collapsedStorageKey(vaultName: string) {
   return `knowledge-os:explorer:collapsed:${vaultName}`;
 }
@@ -571,22 +604,158 @@ function restoreCollapsed(vaultName: string): Set<string> {
   }
 }
 
+/**
+ * Right-click menu for one tree row. Keyboard reachable through the row's own
+ * context-menu key, dismissed with Escape or any outside click.
+ */
+function ExplorerContextMenu({
+  entry,
+  onClose,
+  onDelete,
+  onNewFolder,
+  onNewNote,
+  onOpen,
+  onRename,
+  onReorganize,
+  x,
+  y,
+}: {
+  entry: LibraryEntry;
+  onClose: () => void;
+  onDelete: (entry: LibraryEntry) => void;
+  onNewFolder: (entry: LibraryEntry) => void;
+  onNewNote: (entry: LibraryEntry) => void;
+  onOpen: (path: string) => void;
+  onRename: (entry: LibraryEntry) => void;
+  onReorganize: (entry: LibraryEntry) => void;
+  x: number;
+  y: number;
+}) {
+  useEffect(() => {
+    function dismiss(event: globalThis.KeyboardEvent | globalThis.MouseEvent) {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      onClose();
+    }
+    document.addEventListener("keydown", dismiss);
+    document.addEventListener("mousedown", dismiss);
+    return () => {
+      document.removeEventListener("keydown", dismiss);
+      document.removeEventListener("mousedown", dismiss);
+    };
+  }, [onClose]);
+
+  const actions: { id: string; label: string; run: () => void }[] = [];
+  if (entry.kind === "markdown") {
+    actions.push({
+      id: "open",
+      label: "Open",
+      run: () => {
+        onOpen(entry.path);
+      },
+    });
+  }
+  if (entry.kind === "folder") {
+    actions.push(
+      {
+        id: "new-note",
+        label: "New note here",
+        run: () => {
+          onNewNote(entry);
+        },
+      },
+      {
+        id: "new-folder",
+        label: "New folder here",
+        run: () => {
+          onNewFolder(entry);
+        },
+      },
+      {
+        id: "reorganize",
+        label: "Reorganize this folder",
+        run: () => {
+          onReorganize(entry);
+        },
+      },
+    );
+  }
+  if (entry.kind !== "attachment") {
+    actions.push({
+      id: "rename",
+      label: "Rename",
+      run: () => {
+        onRename(entry);
+      },
+    });
+  }
+  actions.push({
+    id: "delete",
+    label: "Delete",
+    run: () => {
+      onDelete(entry);
+    },
+  });
+
+  return (
+    <div
+      aria-label={`Actions for ${entry.name}`}
+      className="explorer-menu"
+      onMouseDown={(event) => {
+        event.stopPropagation();
+      }}
+      role="menu"
+      style={{ left: x, top: y }}
+    >
+      {actions.map((action) => (
+        <button
+          className={action.id === "delete" ? "is-danger" : undefined}
+          key={action.id}
+          onClick={() => {
+            action.run();
+            onClose();
+          }}
+          role="menuitem"
+          type="button"
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface ExplorerPaneProps {
+  crowdedFolders: string[];
   library: LibrarySnapshot | null;
   onCreateFolder: (path: string) => Promise<void>;
   onCreateNote: (path: string) => Promise<void>;
+  onDelete: (path: string) => Promise<void>;
+  onMove: (path: string, destination: string) => Promise<void>;
   onOpen: (path: string) => void;
+  onRename: (path: string, name: string) => Promise<void>;
+  onReorganize: (folder: string) => Promise<void>;
   onSearch: (query: string) => void;
   openNotePath: string;
   searchResult: RetrievalResult | null;
   vaultName: string;
 }
 
+interface ContextMenuState {
+  entry: LibraryEntry;
+  x: number;
+  y: number;
+}
+
 function ExplorerPane({
+  crowdedFolders,
   library,
   onCreateFolder,
   onCreateNote,
+  onDelete,
+  onMove,
   onOpen,
+  onRename,
+  onReorganize,
   onSearch,
   openNotePath,
   searchResult,
@@ -596,9 +765,14 @@ function ExplorerPane({
   const [collapsed, setCollapsed] = useState(() => restoreCollapsed(vaultName));
   const [activeFolder, setActiveFolder] = useState("");
   const [draft, setDraft] = useState<{
-    kind: "note" | "folder";
+    kind: "note" | "folder" | "rename";
     name: string;
+    target?: string;
   } | null>(null);
+  const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [confirming, setConfirming] = useState<LibraryEntry | null>(null);
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [error, setError] = useState("");
   const defaultEntries: LibraryEntry[] = ["Inbox", "Projects", "Research"].map(
     (name) => ({
@@ -653,15 +827,36 @@ function ExplorerPane({
       setDraft(null);
       return;
     }
-    const path = activeFolder ? `${activeFolder}/${name}` : name;
     try {
       setError("");
-      if (draft.kind === "note") await onCreateNote(path);
-      else await onCreateFolder(path);
+      if (draft.kind === "rename" && draft.target) {
+        await onRename(draft.target, name);
+      } else {
+        const path = activeFolder ? `${activeFolder}/${name}` : name;
+        if (draft.kind === "note") await onCreateNote(path);
+        else await onCreateFolder(path);
+      }
       setDraft(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
     }
+  }
+
+  async function runAction(action: Promise<void>) {
+    try {
+      setError("");
+      await action;
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    }
+  }
+
+  function dropInto(destination: string) {
+    const moving = dragged;
+    setDropTarget(null);
+    setDragged(null);
+    if (!moving || moving === destination) return;
+    void runAction(onMove(moving, destination));
   }
 
   const hits = searchResult ? documentHits(searchResult) : [];
@@ -759,9 +954,19 @@ function ExplorerPane({
         ) : (
           <>
             <button
-              className={`tree-root${activeFolder === "" ? " tree-row-target" : ""}`}
+              className={`tree-root${activeFolder === "" ? " tree-row-target" : ""}${
+                dropTarget === "" ? " tree-row-drop" : ""
+              }`}
               onClick={() => {
                 setActiveFolder("");
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDropTarget("");
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                dropInto("");
               }}
               type="button"
             >
@@ -770,7 +975,7 @@ function ExplorerPane({
             </button>
             {draft ? (
               <div className="tree-draft">
-                {draft.kind === "note" ? (
+                {draft.kind !== "folder" ? (
                   <FileText
                     aria-hidden="true"
                     className="tree-icon tree-icon-note"
@@ -785,7 +990,11 @@ function ExplorerPane({
                 )}
                 <input
                   aria-label={
-                    draft.kind === "note" ? "New note name" : "New folder name"
+                    draft.kind === "rename"
+                      ? "New name"
+                      : draft.kind === "note"
+                        ? "New note name"
+                        : "New folder name"
                   }
                   autoFocus
                   onChange={(event) => {
@@ -799,9 +1008,11 @@ function ExplorerPane({
                     }
                   }}
                   placeholder={
-                    draft.kind === "note"
-                      ? `Note name in ${activeFolder || vaultName}`
-                      : `Folder name in ${activeFolder || vaultName}`
+                    draft.kind === "rename"
+                      ? "New name"
+                      : draft.kind === "note"
+                        ? `Note name in ${activeFolder || vaultName}`
+                        : `Folder name in ${activeFolder || vaultName}`
                   }
                   value={draft.name}
                 />
@@ -818,6 +1029,15 @@ function ExplorerPane({
                 tree={{
                   activeFolder,
                   collapsed,
+                  dropTarget,
+                  onContextMenu: (event, entry) => {
+                    event.preventDefault();
+                    setError("");
+                    setMenu({ entry, x: event.clientX, y: event.clientY });
+                  },
+                  onDragEnterFolder: setDropTarget,
+                  onDragStartEntry: setDragged,
+                  onDropInto: dropInto,
                   onOpen,
                   onSelectFolder: setActiveFolder,
                   onToggleFolder: toggleFolder,
@@ -828,12 +1048,94 @@ function ExplorerPane({
           </>
         )}
       </nav>
+      {confirming ? (
+        <div
+          className="explorer-confirm"
+          role="alertdialog"
+          aria-label="Confirm delete"
+        >
+          <p>
+            Delete <strong>{confirming.name}</strong>
+            {confirming.kind === "folder" ? " and everything inside it" : ""}?
+          </p>
+          <div>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setConfirming(null);
+              }}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="danger-button"
+              onClick={() => {
+                const target = confirming;
+                setConfirming(null);
+                void runAction(onDelete(target.path));
+              }}
+              type="button"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {crowdedFolders.length > 0 && !searching ? (
+        <p className="explorer-suggestion" role="status">
+          <Sparkles aria-hidden="true" size={12} />
+          <span>{crowdedFolders[0]} is getting crowded.</span>
+          <button
+            className="text-button"
+            onClick={() => {
+              const folder = crowdedFolders[0];
+              if (folder) void runAction(onReorganize(folder));
+            }}
+            type="button"
+          >
+            Reorganize
+          </button>
+        </p>
+      ) : null}
       <footer className="explorer-footer">
         <span>
           <CircleDot aria-hidden="true" size={13} /> Local vault
         </span>
         <span>{library?.noteCount ?? 0} notes</span>
       </footer>
+      {menu ? (
+        <ExplorerContextMenu
+          entry={menu.entry}
+          onClose={() => {
+            setMenu(null);
+          }}
+          onDelete={(entry) => {
+            setConfirming(entry);
+          }}
+          onNewFolder={(entry) => {
+            setActiveFolder(entry.path);
+            setDraft({ kind: "folder", name: "" });
+          }}
+          onNewNote={(entry) => {
+            setActiveFolder(entry.path);
+            setDraft({ kind: "note", name: "" });
+          }}
+          onOpen={onOpen}
+          onRename={(entry) => {
+            setDraft({
+              kind: "rename",
+              name: entry.name.replace(/\.md$/i, ""),
+              target: entry.path,
+            });
+          }}
+          onReorganize={(entry) => {
+            void runAction(onReorganize(entry.path));
+          }}
+          x={menu.x}
+          y={menu.y}
+        />
+      ) : null}
     </div>
   );
 }
@@ -999,6 +1301,8 @@ function RetrieveSurface({
   const [searchResult, setSearchResult] = useState<RetrievalResult | null>(
     null,
   );
+  const [crowded, setCrowded] = useState<string[]>([]);
+  const [librarian, setLibrarian] = useState<LibrarianOutcome | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1021,9 +1325,13 @@ function RetrieveSurface({
       .getLibrary()
       .then(async (nextLibrary) => {
         const nextGraph = await knowledgeClient.getGraph();
+        const nextCrowded = await knowledgeClient
+          .crowdedFolders()
+          .catch(() => []);
         if (cancelled) return;
         setLibrary(nextLibrary);
         setGraph(nextGraph);
+        setCrowded(nextCrowded);
       })
       .catch(() => {
         // The native vault can still be opened manually when indexing is unavailable.
@@ -1059,6 +1367,39 @@ function RetrieveSurface({
 
   async function createFolder(path: string) {
     setLibrary(await knowledgeClient.createFolder(path));
+  }
+
+  async function renameEntry(path: string, name: string) {
+    setLibrary(await knowledgeClient.renameEntry(path, name));
+    if (document.path === path) {
+      const parent = path.includes("/")
+        ? path.slice(0, path.lastIndexOf("/"))
+        : "";
+      const file = /\.md$/i.test(name) ? name : `${name}.md`;
+      await openDocument(parent ? `${parent}/${file}` : file);
+    }
+  }
+
+  async function deleteEntry(path: string) {
+    setLibrary(await knowledgeClient.deleteEntry(path));
+  }
+
+  async function moveEntry(path: string, destination: string) {
+    setLibrary(await knowledgeClient.moveEntry(path, destination));
+  }
+
+  async function reorganizeFolder(folder: string) {
+    const outcome = await knowledgeClient.reorganizeFolder(folder);
+    setLibrary(outcome.library);
+    setLibrarian(outcome);
+    setCrowded(await knowledgeClient.crowdedFolders());
+  }
+
+  async function undoReorganization() {
+    const outcome = await knowledgeClient.undoReorganization();
+    setLibrary(outcome.library);
+    setLibrarian(null);
+    setCrowded(await knowledgeClient.crowdedFolders());
   }
 
   return (
@@ -1132,7 +1473,9 @@ function RetrieveSurface({
       <div
         className="retrieve-workspace"
         style={{
-          gridTemplateColumns: `${explorerColumn} minmax(320px, 1fr) ${assistantColumn}`,
+          gridTemplateColumns: `${explorerColumn} ${
+            explorer.collapsed ? "0px" : "3px"
+          } minmax(320px, 1fr) ${assistant.collapsed ? "0px" : "3px"} ${assistantColumn}`,
         }}
       >
         <Pane
@@ -1141,9 +1484,14 @@ function RetrieveSurface({
           collapsed={explorer.collapsed}
         >
           <ExplorerPane
+            crowdedFolders={crowded}
             library={library}
             onCreateFolder={createFolder}
             onCreateNote={createNote}
+            onDelete={deleteEntry}
+            onMove={moveEntry}
+            onRename={renameEntry}
+            onReorganize={reorganizeFolder}
             onOpen={(path) => void openDocument(path)}
             onSearch={(query) => {
               if (!query) {
@@ -1170,7 +1518,47 @@ function RetrieveSurface({
             vaultName={vaultName}
           />
         </Pane>
+        <PaneDivider
+          collapsed={explorer.collapsed}
+          label="Resize Explorer"
+          pane="explorer"
+          width={explorer.width}
+          onResize={(delta) => {
+            onLayoutChange(
+              resizePane(layout, "explorer", explorer.width + delta),
+            );
+          }}
+        />
         <Pane aria-label="Knowledge canvas" className="canvas-region">
+          {librarian ? (
+            <div className="librarian-report" role="status">
+              <span>
+                Reorganized {librarian.folder} — {librarian.moves.length}{" "}
+                {librarian.moves.length === 1 ? "note" : "notes"} moved
+                {librarian.skipped.length > 0
+                  ? `, ${String(librarian.skipped.length)} skipped`
+                  : ""}
+                .
+              </span>
+              <button
+                className="secondary-button"
+                onClick={() => void undoReorganization()}
+                type="button"
+              >
+                Undo
+              </button>
+              <button
+                aria-label="Dismiss reorganization report"
+                className="bare-icon-button"
+                onClick={() => {
+                  setLibrarian(null);
+                }}
+                type="button"
+              >
+                <X aria-hidden="true" size={13} />
+              </button>
+            </div>
+          ) : null}
           <div className="canvas-tabbar">
             <div
               aria-label="Canvas tabs"
@@ -1227,7 +1615,12 @@ function RetrieveSurface({
           </div>
           {canvasView === "graph" ? (
             <div aria-label="Graph view" id="graph-panel" role="tabpanel">
-              <KnowledgeGraph graph={graph} />
+              <KnowledgeGraph
+                graph={graph}
+                onOpenNote={(path) => {
+                  void openDocument(path);
+                }}
+              />
             </div>
           ) : (
             <div
@@ -1238,6 +1631,10 @@ function RetrieveSurface({
               <MarkdownEditor
                 document={document}
                 onDirtyChange={setNoteDirty}
+                onOpenNote={(target) => {
+                  const match = findNoteByName(library?.entries ?? [], target);
+                  if (match) void openDocument(match);
+                }}
                 onSave={async (content) => {
                   const saved = await editorClient.saveNote(
                     document.path,
@@ -1250,6 +1647,17 @@ function RetrieveSurface({
             </div>
           )}
         </Pane>
+        <PaneDivider
+          collapsed={assistant.collapsed}
+          label="Resize Assistant"
+          pane="assistant"
+          width={assistant.width}
+          onResize={(delta) => {
+            onLayoutChange(
+              resizePane(layout, "assistant", assistant.width - delta),
+            );
+          }}
+        />
         <Pane
           aria-label="Assistant"
           className="assistant-region"
@@ -1281,6 +1689,7 @@ export function AppShell({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(initialSettings ?? emptySettings);
   const [knowledgeRevision, setKnowledgeRevision] = useState(0);
+  const [captureFolders, setCaptureFolders] = useState<string[]>([]);
   const [layout, setLayout] = useState(() =>
     restoreLayout(
       initialSettings?.layoutJson ?? serializeLayout(DEFAULT_LAYOUT),
@@ -1321,6 +1730,25 @@ export function AppShell({
       cancelled = true;
     };
   }, [initialSettings, settingsClient, setupComplete]);
+
+  // The composer offers the vault's real folders, so "file it here" is a
+  // choice between places that exist rather than free text.
+  useEffect(() => {
+    if (!setupDone) return undefined;
+    let cancelled = false;
+    void knowledgeClient
+      .getLibrary()
+      .then((library) => {
+        if (cancelled) return;
+        setCaptureFolders(folderPaths(library.entries));
+      })
+      .catch(() => {
+        // The composer still works with automatic placement only.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [knowledgeClient, knowledgeRevision, setupDone]);
 
   function persistWorkspace(
     nextMode: PrimaryMode,
@@ -1456,6 +1884,7 @@ export function AppShell({
             {mode === "Ingest" ? (
               <IngestSurface
                 client={knowledgeClient}
+                folders={captureFolders}
                 onCaptured={() => {
                   setKnowledgeRevision((current) => current + 1);
                 }}

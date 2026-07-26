@@ -1,8 +1,11 @@
 use std::fs;
 
 use knowledge_os_desktop_lib::knowledge::{
-    CaptureCommandRequest, CaptureKind, capture_in_vault, create_folder_in_vault, graph_in_vault,
-    library_in_vault, search_in_vault,
+    CaptureCommandRequest, CaptureKind, CaptureSegments, EnrichmentContext,
+    KnowledgeEnrichmentPort, OrganizeMode, capture_in_vault, capture_in_vault_with_services,
+    create_folder_in_vault, delete_entry_in_vault, graph_in_vault, library_in_vault,
+    move_entry_in_vault, recent_corrections, rename_entry_in_vault, search_in_vault,
+    segment_capture,
 };
 use tempfile::tempdir;
 
@@ -25,6 +28,7 @@ fn native_text_capture_is_searchable_and_visible_in_graph_and_library() {
                     .to_owned(),
             file_name: String::new(),
             bytes: Vec::new(),
+            ..CaptureCommandRequest::default()
         },
     )
     .unwrap();
@@ -70,6 +74,7 @@ fn auto_capture_infers_plain_text_without_network_access() {
             content: "A local meeting summary about model routing and cost controls.".to_owned(),
             file_name: String::new(),
             bytes: Vec::new(),
+            ..CaptureCommandRequest::default()
         },
     )
     .unwrap();
@@ -151,4 +156,239 @@ fn folder_creation_shows_the_new_folder_and_refuses_unsafe_names() {
     assert!(create_folder_in_vault(vault.path(), ".hidden").is_err());
     assert!(create_folder_in_vault(vault.path(), "   ").is_err());
     assert!(!vault.path().parent().unwrap().join("escape").exists());
+}
+
+#[test]
+fn renaming_a_note_moves_the_file_and_drops_its_stale_search_hits() {
+    let vault = tempdir().unwrap();
+    fs::create_dir(vault.path().join("Research")).unwrap();
+    fs::write(
+        vault.path().join("Research/Draft.md"),
+        "# Draft\n\nA note about semaphores.",
+    )
+    .unwrap();
+    library_in_vault(vault.path()).unwrap();
+    assert_eq!(
+        search_in_vault(vault.path(), "semaphores").unwrap().hits[0].path,
+        "Research/Draft.md"
+    );
+
+    let snapshot = rename_entry_in_vault(vault.path(), "Research/Draft.md", "Final").unwrap();
+
+    assert!(vault.path().join("Research/Final.md").is_file());
+    assert!(!vault.path().join("Research/Draft.md").exists());
+    assert_eq!(snapshot.note_count, 1);
+    let hits = search_in_vault(vault.path(), "semaphores").unwrap().hits;
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].path, "Research/Final.md");
+}
+
+#[test]
+fn renaming_refuses_collisions_and_unsafe_names() {
+    let vault = tempdir().unwrap();
+    fs::write(vault.path().join("One.md"), "# One").unwrap();
+    fs::write(vault.path().join("Two.md"), "# Two").unwrap();
+
+    assert!(rename_entry_in_vault(vault.path(), "One.md", "Two").is_err());
+    assert!(rename_entry_in_vault(vault.path(), "One.md", "../escape").is_err());
+    assert!(rename_entry_in_vault(vault.path(), "One.md", "Nested/Name").is_err());
+    assert!(rename_entry_in_vault(vault.path(), "One.md", "   ").is_err());
+    assert!(rename_entry_in_vault(vault.path(), "Missing.md", "Any").is_err());
+    assert!(vault.path().join("One.md").is_file());
+}
+
+#[test]
+fn deleting_removes_the_file_and_its_index_rows() {
+    let vault = tempdir().unwrap();
+    fs::create_dir(vault.path().join("Notes")).unwrap();
+    fs::write(
+        vault.path().join("Notes/Temp.md"),
+        "# Temp\n\nA disposable idea about kubernetes.",
+    )
+    .unwrap();
+    library_in_vault(vault.path()).unwrap();
+
+    let snapshot = delete_entry_in_vault(vault.path(), "Notes/Temp.md").unwrap();
+
+    assert!(!vault.path().join("Notes/Temp.md").exists());
+    assert_eq!(snapshot.note_count, 0);
+    assert!(
+        search_in_vault(vault.path(), "kubernetes")
+            .unwrap()
+            .hits
+            .is_empty()
+    );
+}
+
+#[test]
+fn deleting_a_folder_removes_its_contents_and_refuses_unsafe_paths() {
+    let vault = tempdir().unwrap();
+    fs::create_dir_all(vault.path().join("Projects/Old")).unwrap();
+    fs::write(vault.path().join("Projects/Old/One.md"), "# One").unwrap();
+
+    assert!(delete_entry_in_vault(vault.path(), "../..").is_err());
+    assert!(delete_entry_in_vault(vault.path(), ".knowledge-os").is_err());
+    delete_entry_in_vault(vault.path(), "Projects/Old").unwrap();
+
+    assert!(!vault.path().join("Projects/Old").exists());
+    assert!(vault.path().join("Projects").is_dir());
+}
+
+#[test]
+fn moving_a_note_relocates_it_and_records_a_pinned_correction() {
+    let vault = tempdir().unwrap();
+    fs::create_dir_all(vault.path().join("Inbox")).unwrap();
+    fs::create_dir_all(vault.path().join("Projects/Docker")).unwrap();
+    fs::write(
+        vault.path().join("Inbox/Containers.md"),
+        "# Containers\n\nImages, layers and registries.",
+    )
+    .unwrap();
+    library_in_vault(vault.path()).unwrap();
+
+    move_entry_in_vault(vault.path(), "Inbox/Containers.md", "Projects/Docker").unwrap();
+
+    assert!(vault.path().join("Projects/Docker/Containers.md").is_file());
+    assert!(!vault.path().join("Inbox/Containers.md").exists());
+    assert_eq!(
+        search_in_vault(vault.path(), "registries").unwrap().hits[0].path,
+        "Projects/Docker/Containers.md"
+    );
+    assert_eq!(recent_corrections(vault.path(), 10).unwrap(), ["Docker"]);
+}
+
+#[test]
+fn moving_refuses_self_nesting_and_collisions() {
+    let vault = tempdir().unwrap();
+    fs::create_dir_all(vault.path().join("Projects/Inner")).unwrap();
+    fs::create_dir_all(vault.path().join("Areas")).unwrap();
+    fs::write(vault.path().join("Areas/Note.md"), "# Note").unwrap();
+    fs::write(vault.path().join("Projects/Note.md"), "# Other note").unwrap();
+
+    assert!(move_entry_in_vault(vault.path(), "Projects", "Projects/Inner").is_err());
+    assert!(move_entry_in_vault(vault.path(), "Projects", "Projects").is_err());
+    assert!(move_entry_in_vault(vault.path(), "Areas/Note.md", "Projects").is_err());
+    assert!(move_entry_in_vault(vault.path(), "Areas/Note.md", "Missing").is_err());
+    assert!(vault.path().join("Areas/Note.md").is_file());
+    assert!(vault.path().join("Projects/Inner").is_dir());
+}
+
+#[test]
+fn mixed_submission_splits_into_a_source_link_and_the_users_framing() {
+    let segments = segment_capture(
+        "assisti esse video https://youtu.be/abc e ele explica containers, veja tambem https://docs.docker.com",
+        false,
+    );
+
+    assert_eq!(segments.source_url.as_deref(), Some("https://youtu.be/abc"));
+    assert_eq!(segments.extra_urls, ["https://docs.docker.com"]);
+    assert_eq!(
+        segments.framing,
+        "assisti esse video e ele explica containers, veja tambem"
+    );
+}
+
+#[test]
+fn an_attachment_keeps_the_whole_message_as_framing_and_no_source_link() {
+    let segments = segment_capture("esse pdf cobre otimizadores https://ref.example", true);
+
+    assert_eq!(segments.source_url, None);
+    assert_eq!(
+        segments.framing,
+        "esse pdf cobre otimizadores https://ref.example"
+    );
+    assert_eq!(segments.extra_urls, ["https://ref.example"]);
+}
+
+#[test]
+fn prose_only_submissions_are_unchanged() {
+    let segments = segment_capture("a plain note about routing", false);
+
+    assert_eq!(segments, CaptureSegments::default());
+}
+
+#[test]
+fn explicit_folder_placement_overrides_inference_and_none_files_to_inbox() {
+    let vault = tempdir().unwrap();
+    let placed = capture_in_vault(
+        vault.path(),
+        &CaptureCommandRequest {
+            kind: CaptureKind::Text,
+            title: "Kubernetes rollout".to_owned(),
+            content: "Rollouts move pods gradually between revisions.".to_owned(),
+            organize: OrganizeMode::Folder,
+            organize_folder: "Projects/Platform".to_owned(),
+            ..CaptureCommandRequest::default()
+        },
+    )
+    .unwrap();
+    assert!(placed.document.path.starts_with("Projects/Platform/"));
+    assert!(vault.path().join(&placed.document.path).is_file());
+
+    let unorganized = capture_in_vault(
+        vault.path(),
+        &CaptureCommandRequest {
+            kind: CaptureKind::Text,
+            title: "Loose idea".to_owned(),
+            content: "A loose idea about caching layers.".to_owned(),
+            organize: OrganizeMode::None,
+            ..CaptureCommandRequest::default()
+        },
+    )
+    .unwrap();
+    assert!(unorganized.document.path.starts_with("Inbox/"));
+}
+
+#[test]
+fn auto_placement_reuses_an_existing_folder_instead_of_a_near_duplicate() {
+    struct NearDuplicateEnricher;
+    impl KnowledgeEnrichmentPort for NearDuplicateEnricher {
+        fn enrich(
+            &self,
+            _source: &knowledge_storage::SourceRecord,
+            _content: &knowledge_ingestion::ExtractedContent,
+            context: &EnrichmentContext,
+        ) -> Result<knowledge_ingestion::KnowledgeEnrichment, String> {
+            assert!(
+                context
+                    .folders
+                    .contains(&"Projects/Machine Learning".to_owned())
+            );
+            Ok(knowledge_ingestion::KnowledgeEnrichment {
+                title: "Optimizers".to_owned(),
+                context: "Compares optimizer families.".to_owned(),
+                summary: "A detailed comparison of optimizer families and their trade-offs."
+                    .to_owned(),
+                concepts: vec!["Adam".to_owned()],
+                concept_definitions: Vec::new(),
+                projects: vec!["machine learning".to_owned()],
+                areas: Vec::new(),
+                tags: Vec::new(),
+            })
+        }
+    }
+
+    let vault = tempdir().unwrap();
+    fs::create_dir_all(vault.path().join("Projects/Machine Learning")).unwrap();
+    let captured = capture_in_vault_with_services(
+        vault.path(),
+        &CaptureCommandRequest {
+            kind: CaptureKind::Text,
+            title: "Optimizers".to_owned(),
+            content: "Adam and SGD differ in how they adapt learning rates.".to_owned(),
+            ..CaptureCommandRequest::default()
+        },
+        None,
+        Some(&NearDuplicateEnricher),
+    )
+    .unwrap();
+
+    assert!(
+        captured
+            .document
+            .path
+            .starts_with("Projects/Machine Learning/"),
+        "path was {}",
+        captured.document.path
+    );
 }

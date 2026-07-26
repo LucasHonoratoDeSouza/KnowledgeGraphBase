@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     CaptureReceipt, ExtractedContent, ExtractionArtifact, IngestionError, SourceLocator,
-    chunk_text, content_hash, render_markdown, validate_text, yaml_scalar,
+    chunk_text, content_hash, deterministic_context, render_markdown, validate_text, yaml_scalar,
 };
 
 const WORKER: &str = "native-ingestion";
@@ -36,12 +36,26 @@ pub struct ConceptDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeEnrichment {
     pub title: String,
+    /// One-line machine-oriented description for the note's `context:` field.
+    /// Empty when the model omitted it — the pipeline then falls back to
+    /// [`deterministic_context`].
+    pub context: String,
     pub summary: String,
     pub concepts: Vec<String>,
     pub concept_definitions: Vec<ConceptDefinition>,
     pub projects: Vec<String>,
     pub areas: Vec<String>,
     pub tags: Vec<String>,
+}
+
+/// What the user asked for at capture time: where the note goes and the
+/// framing they typed with it. Defaults reproduce the pre-#4/#5 behaviour.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlacementRequest {
+    /// Explicit destination folder, relative to the vault root. `None` leaves
+    /// placement to the Main model's enrichment (or the Inbox without it).
+    pub folder: Option<String>,
+    pub framing: String,
 }
 
 pub struct DeterministicPipeline<'a> {
@@ -71,6 +85,19 @@ impl<'a> DeterministicPipeline<'a> {
         receipt: &CaptureReceipt,
         content: ExtractedContent,
         enrichment: Option<&KnowledgeEnrichment>,
+    ) -> Result<PipelineResult, IngestionError> {
+        self.process_placed(receipt, content, enrichment, &PlacementRequest::default())
+    }
+
+    /// Same pipeline, with the user's own placement and framing decisions:
+    /// an explicit destination folder overrides whatever the model inferred,
+    /// and framing text is preserved in the note (#4, #5).
+    pub fn process_placed(
+        &self,
+        receipt: &CaptureReceipt,
+        content: ExtractedContent,
+        enrichment: Option<&KnowledgeEnrichment>,
+        placement: &PlacementRequest,
     ) -> Result<PipelineResult, IngestionError> {
         validate_text(&content.body)?;
         if receipt.duplicate && receipt.source.state == ProcessingState::Completed {
@@ -106,7 +133,7 @@ impl<'a> DeterministicPipeline<'a> {
         if leased.is_none() {
             return Err(IngestionError::PipelineBusy);
         }
-        match self.process_leased(receipt, content, enrichment) {
+        match self.process_leased(receipt, content, enrichment, placement) {
             Ok(result) => Ok(result),
             Err(error) => {
                 if self
@@ -133,6 +160,7 @@ impl<'a> DeterministicPipeline<'a> {
         receipt: &CaptureReceipt,
         mut content: ExtractedContent,
         enrichment: Option<&KnowledgeEnrichment>,
+        placement: &PlacementRequest,
     ) -> Result<PipelineResult, IngestionError> {
         self.transition(&receipt.source.id, ProcessingState::Fetching)?;
         self.transition(&receipt.source.id, ProcessingState::Extracting)?;
@@ -170,11 +198,20 @@ impl<'a> DeterministicPipeline<'a> {
             chunk.locator = serde_json::to_string(reference)
                 .map_err(|error| IngestionError::Storage(error.to_string()))?;
         }
+        let mini_summary = enrichment
+            .map(|value| value.context.trim())
+            .filter(|value| !value.is_empty())
+            .map_or_else(
+                || deterministic_context(&content.title, &content.body),
+                ToOwned::to_owned,
+            );
         let artifact = ExtractionArtifact {
             title: content.title.clone(),
             source_kind: source_kind(receipt.source.kind).to_owned(),
             original_uri: receipt.source.original_uri.clone(),
             content_hash: receipt.source.content_hash.clone(),
+            context: mini_summary,
+            framing: placement.framing.clone(),
             summary: summary.clone(),
             concepts: concepts.clone(),
             notes: key_points(&content.body),
@@ -182,7 +219,10 @@ impl<'a> DeterministicPipeline<'a> {
             full_content: content.body,
         };
         let markdown = render_markdown(&artifact);
-        let path = artifact_path(&content.title, &receipt.source.id, enrichment);
+        let path = placement.folder.as_ref().map_or_else(
+            || artifact_path(&content.title, &receipt.source.id, enrichment),
+            |folder| placed_artifact_path(folder, &content.title, &receipt.source.id),
+        );
         self.store
             .publish_markdown(
                 &self.vault_root,
@@ -403,16 +443,35 @@ fn slugify(title: &str, max_words: usize) -> String {
         .join("-")
 }
 
-fn artifact_path(
-    title: &str,
-    source_id: &str,
-    enrichment: Option<&KnowledgeEnrichment>,
-) -> String {
+fn artifact_path(title: &str, source_id: &str, enrichment: Option<&KnowledgeEnrichment>) -> String {
     let slug = slugify(title, 8);
     let short_id = source_id.get(..8).unwrap_or(source_id);
     format!(
         "{}/{}-{short_id}.md",
         primary_folder(enrichment),
+        if slug.is_empty() { "knowledge" } else { &slug }
+    )
+}
+
+/// The user picked the destination themselves, so the folder is used exactly
+/// as given (sanitized per segment) instead of being inferred.
+fn placed_artifact_path(folder: &str, title: &str, source_id: &str) -> String {
+    let slug = slugify(title, 8);
+    let short_id = source_id.get(..8).unwrap_or(source_id);
+    let cleaned = folder
+        .trim_matches('/')
+        .split('/')
+        .filter(|segment| !segment.trim().is_empty())
+        .map(sanitize_folder_name)
+        .collect::<Vec<_>>()
+        .join("/");
+    let location = if cleaned.is_empty() {
+        "Inbox".to_owned()
+    } else {
+        cleaned
+    };
+    format!(
+        "{location}/{}-{short_id}.md",
         if slug.is_empty() { "knowledge" } else { &slug }
     )
 }
@@ -431,8 +490,9 @@ fn concept_note_path(display_name: &str, concept_id: &str) -> String {
 
 fn render_concept_note(name: &str, definition: &str) -> String {
     format!(
-        "---\ntitle: {}\nkind: concept\n---\n\n# {name}\n\n{definition}\n",
-        yaml_scalar(name)
+        "---\ntitle: {}\nkind: concept\ncontext: {}\n---\n\n# {name}\n\n{definition}\n",
+        yaml_scalar(name),
+        yaml_scalar(&deterministic_context(name, definition))
     )
 }
 
@@ -445,10 +505,18 @@ fn primary_folder(enrichment: Option<&KnowledgeEnrichment>) -> String {
     let Some(enrichment) = enrichment else {
         return "Inbox".to_owned();
     };
-    if let Some(project) = enrichment.projects.iter().find(|value| !value.trim().is_empty()) {
+    if let Some(project) = enrichment
+        .projects
+        .iter()
+        .find(|value| !value.trim().is_empty())
+    {
         return format!("Projects/{}", sanitize_folder_name(project));
     }
-    if let Some(area) = enrichment.areas.iter().find(|value| !value.trim().is_empty()) {
+    if let Some(area) = enrichment
+        .areas
+        .iter()
+        .find(|value| !value.trim().is_empty())
+    {
         return format!("Areas/{}", sanitize_folder_name(area));
     }
     "Inbox".to_owned()

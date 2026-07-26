@@ -3,6 +3,7 @@ pub mod editor;
 mod enrichment;
 pub mod ipc;
 pub mod knowledge;
+pub mod librarian;
 pub mod settings;
 mod transcription;
 
@@ -36,6 +37,12 @@ pub fn run() {
             commands::source_capture,
             commands::library_get,
             commands::folder_create,
+            commands::entry_rename,
+            commands::entry_delete,
+            commands::entry_move,
+            commands::librarian_reorganize,
+            commands::librarian_undo,
+            commands::librarian_suggestions,
             commands::organization_get,
             commands::graph_get,
             commands::assistant_ask,

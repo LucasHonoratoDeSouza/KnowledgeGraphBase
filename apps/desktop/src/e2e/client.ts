@@ -14,6 +14,12 @@ const noteKey = "knowledge-os:e2e:welcome-note";
 const notesKey = "knowledge-os:e2e:notes";
 const providerCallKey = "knowledge-os:e2e:provider-call-count";
 const libraryKey = "knowledge-os:e2e:library";
+const initialNotes: Record<string, string> = {
+  "Projects/Knowledge OS.md":
+    "# Knowledge OS\n\nLocal-first retrieval, organization and grounded knowledge.\n",
+  "Projects/AI Research.md":
+    "# AI Research\n\nResearch notes about agents, RAG and language models.\n",
+};
 
 export const browserE2EFolderPicker: FolderPicker = {
   chooseParentLocation: () => Promise.resolve("/tmp/knowledge-os-e2e"),
@@ -172,7 +178,9 @@ function inspectMarkdown(content: string): NoteDocument["diagnostics"] {
 
 function readNotes(): Record<string, string> {
   const saved = localStorage.getItem(notesKey);
-  return saved ? (JSON.parse(saved) as Record<string, string>) : {};
+  return saved
+    ? (JSON.parse(saved) as Record<string, string>)
+    : structuredClone(initialNotes);
 }
 
 export const browserE2EEditorClient: EditorClient = {
@@ -308,7 +316,84 @@ function addLibraryEntry(path: string, kind: "folder" | "markdown") {
   return library;
 }
 
+function removeEntry(
+  entries: LibrarySnapshot["entries"],
+  path: string,
+): boolean {
+  const index = entries.findIndex((entry) => entry.path === path);
+  if (index >= 0) {
+    entries.splice(index, 1);
+    return true;
+  }
+  return entries.some((entry) => removeEntry(entry.children, path));
+}
+
+function findEntry(
+  entries: LibrarySnapshot["entries"],
+  path: string,
+): LibrarySnapshot["entries"][number] | undefined {
+  for (const entry of entries) {
+    if (entry.path === path) return entry;
+    const nested = findEntry(entry.children, path);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
 export const browserE2EKnowledgeClient: KnowledgeClient = {
+  deleteEntry: (path) => {
+    const library = readLibrary();
+    if (!removeEntry(library.entries, path))
+      return Promise.reject(new Error("the item no longer exists"));
+    localStorage.setItem(libraryKey, JSON.stringify(library));
+    return Promise.resolve(library);
+  },
+  moveEntry: (path, destination) => {
+    const library = readLibrary();
+    const entry = findEntry(library.entries, path);
+    if (!entry) return Promise.reject(new Error("the item no longer exists"));
+    if (destination === path || destination.startsWith(`${path}/`))
+      return Promise.reject(
+        new Error("a folder cannot be moved inside itself"),
+      );
+    removeEntry(library.entries, path);
+    const moved = {
+      ...entry,
+      path: destination ? `${destination}/${entry.name}` : entry.name,
+    };
+    const parent = destination
+      ? findEntry(library.entries, destination)
+      : undefined;
+    if (destination && !parent)
+      return Promise.reject(new Error("the destination folder does not exist"));
+    (parent ? parent.children : library.entries).push(moved);
+    localStorage.setItem(libraryKey, JSON.stringify(library));
+    return Promise.resolve(library);
+  },
+  renameEntry: (path, name) => {
+    const library = readLibrary();
+    const entry = findEntry(library.entries, path);
+    if (!entry) return Promise.reject(new Error("the item no longer exists"));
+    const isNote = entry.kind === "markdown";
+    const nextName = isNote && !name.endsWith(".md") ? `${name}.md` : name;
+    const parent = path.includes("/")
+      ? path.slice(0, path.lastIndexOf("/"))
+      : "";
+    entry.name = nextName;
+    entry.path = parent ? `${parent}/${nextName}` : nextName;
+    localStorage.setItem(libraryKey, JSON.stringify(library));
+    return Promise.resolve(library);
+  },
+  reorganizeFolder: (folder) =>
+    Promise.resolve({
+      folder,
+      moves: [],
+      skipped: [],
+      library: readLibrary(),
+    }),
+  undoReorganization: () =>
+    Promise.reject(new Error("there is no reorganization to undo")),
+  crowdedFolders: () => Promise.resolve([]),
   createFolder: (path) => {
     const existing = readLibrary();
     const taken = (entries: LibrarySnapshot["entries"]): boolean =>
@@ -379,8 +464,23 @@ export const browserE2EKnowledgeClient: KnowledgeClient = {
         id: document.id,
         normalizedName: document.title.toLowerCase(),
         displayName: document.title,
+        notePath: document.path,
       })),
-      edges: [],
+      edges: documents.flatMap((document, index) => {
+        const target = documents[index + 1];
+        return target
+          ? [
+              {
+                id: `edge-${document.id}-${target.id}`,
+                sourceConceptId: document.id,
+                targetConceptId: target.id,
+                relation: "related",
+                confidenceBasisPoints: 9_000,
+                originDocumentIds: [document.id, target.id],
+              },
+            ]
+          : [];
+      }),
       truncated: false,
     });
   },

@@ -29,3 +29,23 @@ Object.defineProperties(Range.prototype, {
     }),
   },
 });
+
+// jsdom exposes PointerEvent but not the capture methods used by desktop drag
+// surfaces. Browser/E2E tests exercise real capture; unit tests only need the
+// contract to exist so pointer sequences can finish without unhandled errors.
+if (typeof Element.prototype.setPointerCapture !== "function") {
+  Object.defineProperties(Element.prototype, {
+    hasPointerCapture: {
+      configurable: true,
+      value: () => true,
+    },
+    releasePointerCapture: {
+      configurable: true,
+      value: () => undefined,
+    },
+    setPointerCapture: {
+      configurable: true,
+      value: () => undefined,
+    },
+  });
+}

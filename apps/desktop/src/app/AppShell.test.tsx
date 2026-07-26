@@ -6,7 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import axe from "axe-core";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../App";
 import type {
@@ -19,7 +19,7 @@ import type {
   OrganizationSnapshot,
   RetrievalResult,
 } from "../knowledge";
-import type { SettingsSnapshot } from "../settings";
+import type { SettingsClient, SettingsSnapshot } from "../settings";
 
 function createKnowledgeClient() {
   const capture = vi.fn((request: CaptureRequest): Promise<CaptureResponse> =>
@@ -75,6 +75,7 @@ function createKnowledgeClient() {
           id: "concept-1",
           normalizedName: "transformers",
           displayName: "Transformers",
+          notePath: "Research/Transformers.md",
         },
       ],
       edges: [],
@@ -132,9 +133,72 @@ function createKnowledgeClient() {
       ],
     })),
   );
+  const deleteEntry = vi.fn((path: string) =>
+    getLibrary().then((library) => ({
+      ...library,
+      entries: library.entries.filter((entry) => entry.path !== path),
+    })),
+  );
+  const moveEntry = vi.fn((path: string, destination: string) =>
+    getLibrary().then((library) => ({
+      ...library,
+      entries: [
+        ...library.entries,
+        {
+          name: path.split("/").at(-1) ?? path,
+          path: `${destination}/${path.split("/").at(-1) ?? path}`,
+          kind: "markdown" as const,
+          children: [],
+        },
+      ],
+    })),
+  );
+  const renameEntry = vi.fn((path: string, name: string) =>
+    getLibrary().then((library) => ({
+      ...library,
+      entries: [
+        ...library.entries,
+        {
+          name,
+          path: `${path.split("/").slice(0, -1).join("/")}/${name}`,
+          kind: "folder" as const,
+          children: [],
+        },
+      ],
+    })),
+  );
+  const reorganizeFolder = vi.fn((folder: string) =>
+    getLibrary().then((library) => ({
+      folder,
+      moves: [
+        {
+          from: `${folder}/one.md`,
+          to: `${folder}/Optimization/one.md`,
+          reason: "training dynamics",
+        },
+      ],
+      skipped: [],
+      library,
+    })),
+  );
+  const undoReorganization = vi.fn(() =>
+    getLibrary().then((library) => ({
+      folder: "",
+      moves: [],
+      skipped: [],
+      library,
+    })),
+  );
+  const crowdedFolders = vi.fn(() => Promise.resolve<string[]>([]));
   const client: KnowledgeClient = {
     capture,
     createFolder,
+    deleteEntry,
+    moveEntry,
+    renameEntry,
+    reorganizeFolder,
+    undoReorganization,
+    crowdedFolders,
     getLibrary,
     getOrganization,
     getGraph,
@@ -146,6 +210,12 @@ function createKnowledgeClient() {
     capture,
     client,
     createFolder,
+    crowdedFolders,
+    deleteEntry,
+    moveEntry,
+    renameEntry,
+    reorganizeFolder,
+    undoReorganization,
     getGraph,
     getLibrary,
     getOrganization,
@@ -186,7 +256,31 @@ const configuredSettings: SettingsSnapshot = {
   },
 };
 
+/** Settings client that only records what the workspace persisted. */
+function settingsStub(
+  saveWorkspaceState: SettingsClient["saveWorkspaceState"],
+): SettingsClient {
+  const snapshot = () => Promise.resolve(configuredSettings);
+  return {
+    getSettings: snapshot,
+    completeOnboarding: snapshot,
+    connectProvider: snapshot,
+    rotateProvider: snapshot,
+    saveAiConfiguration: snapshot,
+    setAiEnabled: snapshot,
+    saveWorkspaceState,
+    testProvider: snapshot,
+    removeProvider: snapshot,
+  };
+}
+
 describe("application shell", () => {
+  // Explorer collapse state persists per vault (#6), so one test's collapsed
+  // folder would otherwise hide rows the next test needs.
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it("gates the primary modes until onboarding is complete", () => {
     render(<App setupComplete={false} />);
 
@@ -398,9 +492,48 @@ describe("application shell", () => {
     );
 
     expect((await screen.findAllByText("Transformers"))[0]).toBeVisible();
-    expect(screen.getByRole("img", { name: "Knowledge graph" })).toBeVisible();
-    expect(getLibrary).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("group", { name: "Knowledge graph" }),
+    ).toBeVisible();
+    // The shell also reads the library to offer real folders in the Ingest
+    // composer (#5), so this asserts the surface loaded, not the call count.
+    expect(getLibrary).toHaveBeenCalled();
     expect(getGraph).toHaveBeenCalledOnce();
+  });
+
+  it("opens the concept Markdown note from the graph", async () => {
+    const { client } = createKnowledgeClient();
+    const openNote = vi.fn((path: string) =>
+      Promise.resolve({
+        path,
+        content: "# Transformers\n\nAttention research.\n",
+        diagnostics: [],
+      }),
+    );
+    render(
+      <App
+        editorClient={{
+          openNote,
+          saveNote: (path, content) =>
+            Promise.resolve({ path, content, diagnostics: [] }),
+        }}
+        initialMode="Retrieve"
+        knowledgeClient={client}
+        setupComplete
+      />,
+    );
+
+    fireEvent.keyDown(
+      await screen.findByRole("link", { name: "Transformers" }),
+      { key: "Enter" },
+    );
+
+    await waitFor(() => {
+      expect(openNote).toHaveBeenCalledWith("Research/Transformers.md");
+    });
+    expect(
+      await screen.findByRole("tab", { name: /Transformers\.md/ }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
   it("runs local retrieval from the Explorer and renders resolvable evidence", async () => {
@@ -550,6 +683,236 @@ describe("application shell", () => {
         screen.queryByRole("textbox", { name: "New folder name" }),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("sends the chosen organization mode with the capture", async () => {
+    const { capture, client } = createKnowledgeClient();
+    render(<App knowledgeClient={client} setupComplete />);
+    const organize = await screen.findByRole("combobox", {
+      name: "Organize this capture",
+    });
+    expect(organize).toHaveValue("auto");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Add knowledge" }), {
+      target: { value: "A note about retrieval." },
+    });
+    fireEvent.change(organize, { target: { value: "Research" } });
+    fireEvent.click(screen.getByRole("button", { name: "Process source" }));
+
+    await waitFor(() => {
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organize: "folder",
+          organizeFolder: "Research",
+        }),
+      );
+    });
+  });
+
+  it("captures without enrichment when organization is declined", async () => {
+    const { capture, client } = createKnowledgeClient();
+    render(<App knowledgeClient={client} setupComplete />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Add knowledge" }), {
+      target: { value: "A loose thought." },
+    });
+    fireEvent.change(
+      await screen.findByRole("combobox", { name: "Organize this capture" }),
+      { target: { value: "none" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Process source" }));
+
+    await waitFor(() => {
+      expect(capture).toHaveBeenCalledWith(
+        expect.objectContaining({ organize: "none", organizeFolder: "" }),
+      );
+    });
+  });
+
+  it("renames a note from the right-click menu", async () => {
+    const { client, renameEntry } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    const note = await screen.findByRole("button", { name: "Transformers" });
+
+    fireEvent.contextMenu(note);
+    fireEvent.click(
+      within(
+        screen.getByRole("menu", { name: "Actions for Transformers.md" }),
+      ).getByRole("menuitem", { name: "Rename" }),
+    );
+    const name = screen.getByRole("textbox", { name: "New name" });
+    expect(name).toHaveValue("Transformers");
+    fireEvent.change(name, { target: { value: "Attention" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(renameEntry).toHaveBeenCalledWith(
+        "Research/Transformers.md",
+        "Attention",
+      );
+    });
+  });
+
+  it("deletes a folder only after the confirmation is accepted", async () => {
+    const { client, deleteEntry } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    const folder = await screen.findByRole("button", { name: "Research" });
+
+    fireEvent.contextMenu(folder);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    const confirm = screen.getByRole("alertdialog", { name: "Confirm delete" });
+    expect(confirm).toHaveTextContent("and everything inside it");
+    expect(deleteEntry).not.toHaveBeenCalled();
+
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(deleteEntry).not.toHaveBeenCalled();
+
+    fireEvent.contextMenu(folder);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("alertdialog", { name: "Confirm delete" }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    await waitFor(() => {
+      expect(deleteEntry).toHaveBeenCalledWith("Research");
+    });
+  });
+
+  it("closes the context menu on Escape without acting", async () => {
+    const { client, deleteEntry } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    fireEvent.contextMenu(
+      await screen.findByRole("button", { name: "Research" }),
+    );
+    expect(screen.getByRole("menu")).toBeVisible();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(deleteEntry).not.toHaveBeenCalled();
+  });
+
+  it("moves a note into the folder it is dropped on", async () => {
+    const { client, moveEntry } = createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    const note = await screen.findByRole("button", { name: "Transformers" });
+    const folder = screen.getByRole("button", { name: "Research" });
+    const dataTransfer = {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: vi.fn(),
+      getData: () => "Research/Transformers.md",
+    };
+
+    fireEvent.dragStart(note, { dataTransfer });
+    fireEvent.dragOver(folder, { dataTransfer });
+    fireEvent.drop(folder, { dataTransfer });
+
+    await waitFor(() => {
+      expect(moveEntry).toHaveBeenCalledWith(
+        "Research/Transformers.md",
+        "Research",
+      );
+    });
+  });
+
+  it("reorganizes a folder from the menu and offers a single undo", async () => {
+    const { client, reorganizeFolder, undoReorganization } =
+      createKnowledgeClient();
+    render(
+      <App initialMode="Retrieve" knowledgeClient={client} setupComplete />,
+    );
+    fireEvent.contextMenu(
+      await screen.findByRole("button", { name: "Research" }),
+    );
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Reorganize this folder" }),
+    );
+
+    await waitFor(() => {
+      expect(reorganizeFolder).toHaveBeenCalledWith("Research");
+    });
+    expect(
+      await screen.findByText(/Reorganized Research — 1 note moved/),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => {
+      expect(undoReorganization).toHaveBeenCalledOnce();
+    });
+  });
+
+  it("resizes a pane by dragging its divider and persists the width", async () => {
+    const saveWorkspaceState = vi.fn((_mode: unknown, layoutJson: string) =>
+      Promise.resolve({ ...configuredSettings, layoutJson }),
+    );
+    render(
+      <App
+        initialSettings={configuredSettings}
+        settingsClient={settingsStub(
+          saveWorkspaceState as unknown as SettingsClient["saveWorkspaceState"],
+        )}
+      />,
+    );
+    const divider = screen.getByRole("separator", { name: "Resize Explorer" });
+
+    fireEvent.pointerDown(divider, { clientX: 240, pointerId: 1 });
+    fireEvent.pointerMove(divider, { clientX: 300, pointerId: 1 });
+    fireEvent.pointerUp(divider, { clientX: 300, pointerId: 1 });
+
+    await waitFor(() => {
+      expect(saveWorkspaceState).toHaveBeenCalled();
+    });
+    const [, layoutJson] = saveWorkspaceState.mock.calls.at(-1) ?? [];
+    expect(
+      (
+        JSON.parse(layoutJson ?? "{}") as {
+          panes: { explorer: { width: number } };
+        }
+      ).panes.explorer.width,
+    ).toBe(300);
+  });
+
+  it("resizes a pane with the keyboard from the divider", async () => {
+    const saveWorkspaceState = vi.fn((_mode: unknown, layoutJson: string) =>
+      Promise.resolve({ ...configuredSettings, layoutJson }),
+    );
+    render(
+      <App
+        initialSettings={configuredSettings}
+        settingsClient={settingsStub(
+          saveWorkspaceState as unknown as SettingsClient["saveWorkspaceState"],
+        )}
+      />,
+    );
+
+    fireEvent.keyDown(
+      screen.getByRole("separator", { name: "Resize Assistant" }),
+      { key: "ArrowLeft" },
+    );
+
+    await waitFor(() => {
+      expect(saveWorkspaceState).toHaveBeenCalled();
+    });
+    const [, layoutJson] = saveWorkspaceState.mock.calls.at(-1) ?? [];
+    expect(
+      (
+        JSON.parse(layoutJson ?? "{}") as {
+          panes: { assistant: { width: number } };
+        }
+      ).panes.assistant.width,
+    ).toBe(336);
   });
 
   it("has no detectable accessibility violations in either mode", async () => {
