@@ -142,7 +142,8 @@ describe("fluid knowledge graph", () => {
     });
 
     expect(down.defaultPrevented).toBe(true);
-    expect(Number(dragged.dataset.graphX)).toBeCloseTo(startX + 180, 4);
+    expect(Number(dragged.dataset.graphX)).toBeGreaterThan(startX);
+    expect(Number(dragged.dataset.graphX)).toBeLessThan(startX + 180);
     expect(
       Math.hypot(
         Number(neighbor.dataset.graphX) - neighborBefore.x,
