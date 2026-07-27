@@ -80,7 +80,7 @@ jobs:
         working-directory: apps/desktop
         run: |
           set -euo pipefail
-          find src-tauri/target/release/bundle -maxdepth 2 -type f \
+          find ../../target/release/bundle -maxdepth 2 -type f \
             \( -name '*.AppImage' -o -name '*.deb' -o -name '*.sig' -o -name 'latest.json' \) \
             -exec sha256sum {} \; \
             | sed -E 's#  .*/([^/]+)$#  \1#' \
