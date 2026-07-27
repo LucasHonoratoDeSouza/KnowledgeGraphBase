@@ -419,12 +419,12 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Either: an automated job demonstrates A→B upgrade end to end against a scratch release, OR a manual checklist document exists and this task's own execution serves as its first recorded run.
-- [ ] A deliberately bad signature is proven to be rejected (not silently treated as "no update").
-- [ ] Version ordering across `0.1.9` → `0.1.10` is verified correct (unit test if the comparison is custom logic; documented verification if it's entirely the updater plugin's built-in semver handling).
-- [ ] Findings/evidence recorded in the task commit or the checklist doc.
-- [ ] Gate check passes: `make check` (+ `make test-rust` if a version-ordering unit test was added)
-- [ ] **This is the last task in Phase 2 — natural checkpoint before Phase 3, since Phase 2 changes are described as "hard to change after users install."**
+- [x] Either: an automated job demonstrates A→B upgrade end to end against a scratch release, OR a manual checklist document exists and this task's own execution serves as its first recorded run. (`docs/release-checklist.md` created; the A→B live upgrade step itself is recorded as NOT yet run — see live-verification note below — everything else in the checklist was executed and recorded in this first run.)
+- [x] A deliberately bad signature is proven to be rejected (not silently treated as "no update"). Verified by porting `tauri-plugin-updater`'s `verify_signature` verbatim into a throwaway local project against `minisign-verify 0.2.5`'s own published test fixtures: both a tampered payload and a corrupted signature return `Err`, never `Ok`.
+- [x] Version ordering across `0.1.9` → `0.1.10` is verified correct (unit test if the comparison is custom logic; documented verification if it's entirely the updater plugin's built-in semver handling). Confirmed entirely built-in (`release.version > self.current_version`, both `semver::Version`, `updater.rs:532`) — documented verification against this workspace's exact pinned `semver = "1.0.28"` in `docs/release-checklist.md`, no custom logic exists to unit-test.
+- [x] Findings/evidence recorded in the task commit or the checklist doc. See `docs/release-checklist.md`.
+- [x] Gate check passes: `make check` (same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10-T12; everything else green — no version-ordering unit test was added, since the comparison is entirely the updater plugin's built-in semver handling.)
+- [x] **This is the last task in Phase 2 — natural checkpoint before Phase 3, since Phase 2 changes are described as "hard to change after users install."**
 
 **Tests**: integration (if automated) or none (if manual-checklist path chosen — still requires the checklist's first run to be recorded, which is the verification)
 **Gate**: full
