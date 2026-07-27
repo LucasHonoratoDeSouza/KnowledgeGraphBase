@@ -190,11 +190,11 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `integration` and `e2e` jobs added, each using the composite action.
-- [ ] `e2e` job uploads Playwright traces/screenshots as run artifacts on failure (`actions/upload-artifact@v4`, `if: failure()`).
-- [ ] Full `make check` surface (static, unit, integration, e2e) is now covered across `ci.yml`'s four jobs.
-- [ ] With a warm cache, total workflow wall time is under ~10 minutes (estimated from job step timings; exact figure recorded in the commit/PR description after the first real run).
-- [ ] Gate check passes: `make check`
+- [x] `integration` and `e2e` jobs added, each using the composite action.
+- [x] `e2e` job uploads Playwright traces/screenshots as run artifacts on failure (`actions/upload-artifact@v4`, `if: failure()`).
+- [x] Full `make check` surface (static, unit, integration, e2e) is now covered across `ci.yml`'s four jobs.
+- [x] With a warm cache, total workflow wall time is under ~10 minutes (estimated from job step timings; exact figure recorded in the commit/PR description after the first real run).
+- [x] Gate check passes: `make check`
 
 **Tests**: none (CI config)
 **Gate**: build

@@ -25,3 +25,26 @@ jobs:
       - uses: ./.github/actions/setup-tauri-build
       - name: Unit tests
         run: make test-quick
+
+  integration:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tauri-build
+      - name: Rust integration tests
+        run: make test-rust-integration
+
+  e2e:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tauri-build
+      - name: Desktop e2e tests
+        run: make test-desktop-e2e
+      - name: Upload Playwright traces/screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
