@@ -44,6 +44,30 @@ pnpm tauri dev
 
 `.github/workflows/dev-build.yml` builds and publishes a signed `dev` prerelease on every push to `dev`. The installed `.AppImage` silently checks for and installs updates from that release on startup — close and reopen the app to pick up the latest push. The `.deb` package does not self-update; use the AppImage for the auto-updating dev channel.
 
+## Verifying a downloaded release
+
+Every release (stable and `dev`) publishes a `SHA256SUMS` file covering every artifact, plus a `SHA256SUMS.sig` (minisign-signed, so the checksum list itself isn't an unsigned weak link) and a per-artifact `.sig`.
+
+Checksum verification (no extra tools beyond coreutils):
+
+```bash
+curl -fsSLO https://github.com/LucasHonoratoDeSouza/KnowledgeGraphBase/releases/latest/download/SHA256SUMS
+curl -fsSLO https://github.com/LucasHonoratoDeSouza/KnowledgeGraphBase/releases/latest/download/Knowledge.OS_<version>_amd64.AppImage
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+Signature verification with [`minisign`](https://jedisct1.github.io/minisign/) against the public key below (also embedded in the app and in `install.sh`):
+
+```
+untrusted comment: minisign public key: C7EF911473A1DB25
+RWQl26FzFJHvxw74sO1pttlHfyHfvsLRNH1y/SU001pRcHTeh/sb2YRd
+```
+
+```bash
+minisign -Vm SHA256SUMS -P RWQl26FzFJHvxw74sO1pttlHfyHfvsLRNH1y/SU001pRcHTeh/sb2YRd
+minisign -Vm Knowledge.OS_<version>_amd64.AppImage -P RWQl26FzFJHvxw74sO1pttlHfyHfvsLRNH1y/SU001pRcHTeh/sb2YRd
+```
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE).

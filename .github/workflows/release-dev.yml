@@ -69,3 +69,24 @@ jobs:
           prerelease: true
           includeUpdaterJson: true
           args: --config '{"version":"${{ steps.version.outputs.value }}","plugins":{"updater":{"endpoints":["https://github.com/LucasHonoratoDeSouza/KnowledgeGraphBase/releases/download/dev/latest.json"]}}}'
+
+      # SAFETY: same literal-`dev`-tag guarantee as the pruning step above --
+      # this uploads to the `dev` release only, never a variable-resolved tag.
+      - name: Generate and publish SHA256SUMS (#50)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          find src-tauri/target/release/bundle -maxdepth 2 -type f \
+            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.sig' -o -name 'latest.json' \) \
+            -exec sha256sum {} \; \
+            | sed -E 's#  .*/([^/]+)$#  \1#' \
+            | sort -k2 > SHA256SUMS
+          corepack pnpm exec tauri signer sign \
+            -k "$TAURI_SIGNING_PRIVATE_KEY" \
+            -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+            SHA256SUMS
+          gh release upload dev SHA256SUMS SHA256SUMS.sig --clobber
