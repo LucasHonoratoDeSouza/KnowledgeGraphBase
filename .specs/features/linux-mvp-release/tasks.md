@@ -580,10 +580,14 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Rust integration test opens a fixture vault stamped with an older schema version and asserts a non-destructive, automatic rebuild path is taken (no data loss, cache regenerated correctly).
-- [ ] Rust integration test opens a fixture vault stamped with a newer-than-binary version and asserts the app refuses to open, returns a clear message, and the fixture file is byte-for-byte unchanged after the attempt.
-- [ ] Rebuild-in-progress state is observable in the UI (a progress indicator, not a frozen window) — verified by a React/Playwright test asserting the progress UI renders during a simulated rebuild.
-- [ ] Gate check passes: `make test-rust-integration`, `make test-desktop-e2e`
+- [x] Rust integration test opens a fixture vault stamped with an older schema version and asserts a non-destructive, automatic rebuild path is taken (no data loss, cache regenerated correctly). `apps/desktop/src-tauri/tests/vault_compatibility.rs::older_sqlite_schema_triggers_a_non_destructive_automatic_rebuild`.
+- [x] Rust integration test opens a fixture vault stamped with a newer-than-binary version and asserts the app refuses to open, returns a clear message, and the fixture file is byte-for-byte unchanged after the attempt. `vault_compatibility.rs::vault_newer_than_binary_refuses_and_leaves_the_fixture_byte_for_byte_unchanged`.
+- [x] Rebuild-in-progress state is observable in the UI (a progress indicator, not a frozen window) — verified by a React/Playwright test asserting the progress UI renders during a simulated rebuild. New `apps/desktop/src/app/VaultCompatibilityNotice.tsx` + `VaultCompatibilityNotice.test.tsx` (Testing Library, "simulated rebuild" = a `{ kind: "rebuilding" }` status prop): asserts a `role="status"` progress indicator is visible, and that no `role="dialog"`/`aria-modal="true"` exists anywhere in the output (non-modal, doesn't freeze the rest of the app).
+- [x] Gate check passes: `make test-rust-integration`, `make test-desktop-e2e` (`test-rust-integration` stops at the same pre-existing, out-of-scope `settings_security.rs` directory-name failure as T10-T19, which prevents `cargo test --workspace --tests` from reaching `vault_compatibility.rs`'s binary in that single combined run since `cargo test` halts remaining binaries in the same crate after a failure; both new tests were directly confirmed passing via `cargo test --test vault_compatibility` — 2/2 pass. `test-desktop-e2e`: 33/33 pass, unaffected.)
+
+**SPEC_DEVIATION**: `lib.rs`'s `setup()` never itself opens the `KnowledgeStore` -- only `knowledge.rs`'s per-command `open_store` does (correctly identified in this task's own `Reuses` field as `knowledge.rs:803`), which is the actual and only vault-open call site reached by every knowledge command, including the first one issued right after startup. No `lib.rs` change was needed or made; the compatibility check gates every real vault access through that one function.
+
+**Bugfix found while implementing this task** (committed separately, before this task's commit): `check_vault_compatibility` (T19) read the `SQLite` schema version via `KnowledgeStore::open()`, which unconditionally migrates on open -- meaning a to-be-`Refuse`d vault would get mutated by the mere act of checking it. Fixed to read `PRAGMA user_version` through a plain, unmigrated connection instead, which is what makes this task's "byte-for-byte unchanged" integration test able to pass at all.
 
 **Tests**: integration + e2e
 **Gate**: full
