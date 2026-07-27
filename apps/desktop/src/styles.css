@@ -3103,6 +3103,14 @@ textarea:hover {
   transition: grid-template-columns var(--motion-base) var(--ease-out);
 }
 
+/* An active divider drag sets each track size directly from the pointer
+   every frame (#43) — animating on top of that lags the visible pane a
+   frame behind the cursor and leaves the rendered width transiently out of
+   sync with the committed layout state right at pointerup. */
+.retrieve-workspace.resizing {
+  transition: none;
+}
+
 /* Surface and panel entrances */
 
 .ingest-surface,

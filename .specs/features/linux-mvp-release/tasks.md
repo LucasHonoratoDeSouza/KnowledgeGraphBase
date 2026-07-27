@@ -88,10 +88,10 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Root cause is written in the commit message (which value is wrong: the persisted one, or the restore-path clamp/rounding).
-- [ ] Either the product bug is fixed and `tests/e2e/desktop-foundation/desktop-foundation.spec.ts:752-781` passes unchanged, OR (only if genuinely unfixable now) the test is marked `test.fixme()` with a comment linking to issue #43 — never `.skip()` or deleted.
-- [ ] Full Playwright suite run shows zero non-fixme failures.
-- [ ] Gate check passes: `make test-desktop-e2e`
+- [x] Root cause is written in the commit message (which value is wrong: the persisted one, or the restore-path clamp/rounding).
+- [x] Either the product bug is fixed and `tests/e2e/desktop-foundation/desktop-foundation.spec.ts:752-781` passes unchanged, OR (only if genuinely unfixable now) the test is marked `test.fixme()` with a comment linking to issue #43 — never `.skip()` or deleted.
+- [x] Full Playwright suite run shows zero non-fixme failures.
+- [x] Gate check passes: `make test-desktop-e2e`
 
 **Tests**: e2e
 **Gate**: full
