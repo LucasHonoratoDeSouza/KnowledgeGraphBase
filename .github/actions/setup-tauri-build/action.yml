@@ -22,10 +22,17 @@ runs:
       with:
         workspaces: apps/desktop/src-tauri -> ../../target
 
+    - name: Read the pinned uv version from pyproject.toml
+      id: uv-version
+      shell: bash
+      run: |
+        version=$(grep -oP 'required-version\s*=\s*"==\K[^"]+' pyproject.toml)
+        echo "value=${version}" >> "$GITHUB_OUTPUT"
+
     - uses: astral-sh/setup-uv@v3
       with:
         enable-cache: true
-        version-file: pyproject.toml
+        version: ${{ steps.uv-version.outputs.value }}
 
     - name: Install Tauri Linux build dependencies
       shell: bash
