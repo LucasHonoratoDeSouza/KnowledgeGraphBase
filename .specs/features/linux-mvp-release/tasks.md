@@ -554,9 +554,11 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `CompatibilityDecision` enum (`UpToDate`, `RebuildCache`, `Refuse(String)`) and `check_vault_compatibility` function implemented exactly per design's decision table.
-- [ ] Unit tests cover all four rows of the decision table (both-current, sqlite-behind, format-behind-with-defined-migration, vault-newer-than-binary) — 1:1 to the table, no branch untested.
-- [ ] Gate check passes: `make test-rust`
+- [x] `CompatibilityDecision` enum (`UpToDate`, `RebuildCache`, `Refuse(String)`) and `check_vault_compatibility` function implemented exactly per design's decision table.
+- [x] Unit tests cover all four rows of the decision table (both-current, sqlite-behind, format-behind-with-defined-migration, vault-newer-than-binary) — 1:1 to the table, no branch untested. Six tests total: the four named rows plus two branch-completeness tests (format-behind-without-a-defined-migration, and vault-format-newer-while-sqlite-matches) needed so the pure `decide` function's `if`/`else` branches are each exercised at least once.
+- [x] Gate check passes: `make test-rust` (6/6 new tests pass; full workspace suite unaffected.)
+
+**SPEC_DEVIATION**: `apps/desktop/src-tauri/src/lib.rs` required one line (`pub mod migration;`) beyond this task's listed `Where` file, to register the new module — without it, `cargo test --lib` would neither compile `migration.rs` as part of the crate nor run its tests, making this task's own Done-when unachievable. Same pattern as T9/T10's necessary-but-unlisted-file precedent.
 
 **Tests**: unit
 **Gate**: quick

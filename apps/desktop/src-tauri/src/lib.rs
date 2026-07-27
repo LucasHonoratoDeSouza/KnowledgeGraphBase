@@ -6,6 +6,7 @@ pub mod ipc;
 pub mod knowledge;
 pub mod librarian;
 pub mod logging;
+pub mod migration;
 pub mod settings;
 mod transcription;
 
