@@ -67,15 +67,14 @@ jobs:
           config: cliff.toml
           args: --tag ${{ needs.check-version.outputs.version }}
 
-      - name: Commit updated CHANGELOG.md
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          if ! git diff --cached --quiet; then
-            git commit -m "docs(changelog): update for ${{ needs.check-version.outputs.version }} [skip ci]"
-            git push origin HEAD:main
-          fi
+      # NOTE: cannot commit this back to `main` directly -- main's branch
+      # protection (enforce_admins: true, required status checks) rejects
+      # even GITHUB_TOKEN pushes, by design (#42). CHANGELOG.md is still
+      # regenerated here and uploaded as a release asset below (see the
+      # SHA256SUMS step) so it's not lost, but the repo's tracked copy only
+      # advances via a normal PR. Follow-up: either open an automated PR for
+      # this, or accept manual upkeep -- tracked as a known gap, not solved
+      # in this pass.
 
       - name: Build and publish stable release
         uses: tauri-apps/tauri-action@v0
@@ -113,6 +112,7 @@ jobs:
             -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
             SHA256SUMS
           gh release upload "${{ needs.check-version.outputs.version }}" SHA256SUMS SHA256SUMS.sig --clobber
+          gh release upload "${{ needs.check-version.outputs.version }}" ../CHANGELOG.md --clobber
 
       - name: Generate and publish SBOM (#54)
         env:
