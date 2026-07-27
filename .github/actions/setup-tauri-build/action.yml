@@ -22,6 +22,10 @@ runs:
       with:
         workspaces: apps/desktop/src-tauri -> ../../target
 
+    - uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+
     - name: Install Tauri Linux build dependencies
       shell: bash
       run: |
@@ -30,4 +34,6 @@ runs:
 
     - name: Install workspace dependencies
       shell: bash
-      run: pnpm install --frozen-lockfile
+      run: |
+        pnpm install --frozen-lockfile
+        uv sync --locked --all-packages
