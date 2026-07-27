@@ -22,6 +22,38 @@ Polyglot monorepo:
 
 Markdown in the vault is the canonical, durable format (AD-002); SQLite holds metadata, full-text index and graph as a reconstructible cache, never the source of truth.
 
+## Installing Knowledge OS
+
+Two ways to get a running app, side by side:
+
+| | One-line installer | Building from source |
+| --- | --- | --- |
+| For | Using the app | Contributing / development |
+| Command | `curl -fsSL https://raw.githubusercontent.com/LucasHonoratoDeSouza/KnowledgeGraphBase/main/install.sh \| sh` | See [Getting started](#getting-started) below |
+| Gets you | The latest **stable** signed AppImage, verified and installed to `~/.local/bin`, with a launcher entry | A dev build you can modify and run with `pnpm tauri dev` |
+| Self-updates | Yes (stable channel) | No — you rebuild from source |
+
+The installer:
+
+1. Resolves the latest stable (non-prerelease) GitHub release.
+2. Downloads the `amd64` AppImage plus its checksum (`SHA256SUMS`) and signature (`.sig`), and refuses to install if either verification fails.
+3. Installs it to `~/.local/bin/knowledge-os` and registers a `.desktop` entry + icon so it shows up in your application launcher.
+4. Never invokes or requires `sudo`.
+
+Run it again any time to upgrade in place — it replaces the existing install rather than duplicating it. To remove Knowledge OS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LucasHonoratoDeSouza/KnowledgeGraphBase/main/install.sh | sh -s -- --uninstall
+```
+
+`--uninstall` removes the binary, `.desktop` entry, and icon, and prints where your vault lives — it never touches the vault itself.
+
+### Supported distributions and architectures
+
+This MVP supports **`amd64` (x86_64) Linux only**. The installer detects any other architecture and exits immediately with a clear message rather than downloading an incompatible binary. `aarch64`/`arm64` support is a deliberately deferred decision, not an oversight — see [issue #51](https://github.com/LucasHonoratoDeSouza/KnowledgeGraphBase/issues/51) for the cost/benefit tradeoff (GitHub ARM runners vs. cross-compiling a `webkit2gtk` sysroot) that would need to be revisited to add it.
+
+The installer targets any Linux distribution with a POSIX `sh`, `curl`, and standard `~/.local` XDG directories — it has been developed and tested against Ubuntu. Building from source instead has its own system-dependency requirements (not needed for the one-line installer, which downloads a prebuilt binary) — tracked separately.
+
 ## Getting started
 
 Prerequisites: Node (see `.node-version`) with Corepack enabled, Rust (see `rust-toolchain.toml`), and `uv` for the optional Python services.

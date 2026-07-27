@@ -529,10 +529,10 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] README shows both install paths side by side.
-- [ ] README states supported distributions and that only `amd64` is supported for this MVP, with aarch64 explicitly noted as deferred (traceable to issue #51).
-- [ ] Gate check passes: `make check`
-- [ ] **This is the last task in Phase 3 — natural checkpoint before Phase 4, since this completes the user-facing MVP deliverable.**
+- [x] README shows both install paths side by side. New "Installing Knowledge OS" section with a one-line-installer-vs.-build-from-source table plus the exact `--uninstall` invocation.
+- [x] README states supported distributions and that only `amd64` is supported for this MVP, with aarch64 explicitly noted as deferred (traceable to issue #51). Linked directly to `https://github.com/LucasHonoratoDeSouza/KnowledgeGraphBase/issues/51`.
+- [x] Gate check passes: `make check` (same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10-T17; lock-check, format, lint, typecheck, and test-quick all passed; this task changes only README.md.)
+- [x] **This is the last task in Phase 3 — natural checkpoint before Phase 4, since this completes the user-facing MVP deliverable.**
 
 **Tests**: none (doc)
 **Gate**: build
