@@ -50,6 +50,33 @@ jobs:
 
       - uses: ./.github/actions/setup-tauri-build
 
+      - name: Generate release notes for this version
+        id: release_notes
+        uses: orhun/git-cliff-action@v4
+        env:
+          OUTPUT: RELEASE_NOTES.md
+        with:
+          config: cliff.toml
+          args: --unreleased --tag ${{ needs.check-version.outputs.version }} --strip all
+
+      - name: Update CHANGELOG.md
+        uses: orhun/git-cliff-action@v4
+        env:
+          OUTPUT: CHANGELOG.md
+        with:
+          config: cliff.toml
+          args: --tag ${{ needs.check-version.outputs.version }}
+
+      - name: Commit updated CHANGELOG.md
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs(changelog): update for ${{ needs.check-version.outputs.version }} [skip ci]"
+            git push origin HEAD:main
+          fi
+
       - name: Build and publish stable release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -62,7 +89,7 @@ jobs:
           projectPath: apps/desktop
           tagName: ${{ needs.check-version.outputs.version }}
           releaseName: "Knowledge OS ${{ needs.check-version.outputs.version }}"
-          releaseBody: ""
+          releaseBody: ${{ steps.release_notes.outputs.content }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
