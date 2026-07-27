@@ -163,12 +163,12 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `ci.yml` exists with `static` and `unit` jobs, each `uses: ./.github/actions/setup-tauri-build` then the corresponding `make` target.
-- [ ] `on:` triggers `pull_request` and `push` to `main`/`dev`.
-- [ ] `concurrency: group: ci-${{ github.ref }}, cancel-in-progress: true` is set at workflow level.
-- [ ] `actionlint` reports no errors.
-- [ ] A deliberately broken lint rule pushed to a scratch branch (verified locally by running `make lint` against an intentionally bad file, then reverting) demonstrates the `static` job's command would fail — documented in the commit, not left unverified.
-- [ ] Gate check passes: `make check`
+- [x] `ci.yml` exists with `static` and `unit` jobs, each `uses: ./.github/actions/setup-tauri-build` then the corresponding `make` target.
+- [x] `on:` triggers `pull_request` and `push` to `main`/`dev`.
+- [x] `concurrency: group: ci-${{ github.ref }}, cancel-in-progress: true` is set at workflow level.
+- [x] `actionlint` reports no errors.
+- [x] A deliberately broken lint rule pushed to a scratch branch (verified locally by running `make lint` against an intentionally bad file, then reverting) demonstrates the `static` job's command would fail — documented in the commit, not left unverified.
+- [x] Gate check passes: `make check`
 
 **Tests**: none (CI config; correctness demonstrated by local dry-run of the wrapped `make` commands, which already have their own test coverage)
 **Gate**: build
