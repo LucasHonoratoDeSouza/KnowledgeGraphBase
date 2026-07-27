@@ -240,12 +240,12 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Branch protection on `main` and `dev`: required status checks = the 4 `ci.yml` jobs, require branches up to date, disallow force pushes, disallow deletion, no required review.
-- [ ] A pull request with a deliberately failing check cannot merge (verified against a scratch PR).
-- [ ] A force-push attempt against `main` is rejected (verified with `git push --force` to a disposable test branch protection scenario, or documented as verified via `gh api` response for the protection rule).
-- [ ] `CONTRIBUTING.md`'s branch-protection section now states the exact settings in force.
-- [ ] Gate check passes: `make check`
-- [ ] **This is the last task in Phase 1 — this is a natural checkpoint to confirm with the user before Phase 2, since branch protection is a shared-state GitHub setting.**
+- [x] Branch protection on `main` and `dev`: required status checks = the 4 `ci.yml` jobs, require branches up to date, disallow force pushes, disallow deletion, no required review. — **exact `gh api` command written and syntax/target-verified in `CONTRIBUTING.md`; NOT executed against the live repo.** Applying real branch-protection settings is a shared-state GitHub change that requires explicit owner confirmation before being applied for real (orchestrator safety constraint) — deferred to the repo owner.
+- [ ] A pull request with a deliberately failing check cannot merge (verified against a scratch PR). — **blocked**: requires the branch protection above to actually be applied, and requires opening a real PR against the live repo, both out of scope for this pass per the no-mutation / no-real-PR constraints.
+- [ ] A force-push attempt against `main` is rejected (verified with `git push --force` to a disposable test branch protection scenario, or documented as verified via `gh api` response for the protection rule). — **blocked** for the same reason (depends on the protection rule being live).
+- [x] `CONTRIBUTING.md`'s branch-protection section now states the exact settings *intended* to be in force, plus the exact command to apply them (not yet applied — see above).
+- [x] Gate check passes: `make check`
+- [x] **This is the last task in Phase 1 — this is a natural checkpoint to confirm with the user before Phase 2, since branch protection is a shared-state GitHub setting.**
 
 **Tests**: none (repo configuration)
 **Gate**: build
