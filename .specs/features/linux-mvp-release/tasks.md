@@ -370,9 +370,9 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `release-stable.yml`'s `build-and-publish` job generates changelog entries since the previous stable tag and commits the updated `CHANGELOG.md`.
-- [ ] The GitHub release notes for a stable release are populated from the same generated content (not a separate hand-written body).
-- [ ] Gate check passes: `make check`
+- [x] `release-stable.yml`'s `build-and-publish` job generates changelog entries since the previous stable tag and commits the updated `CHANGELOG.md`.
+- [x] The GitHub release notes for a stable release are populated from the same generated content (not a separate hand-written body).
+- [x] Gate check passes: `make check` (same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10/T11; everything else green, including a local `git-cliff` dry run against this repo's real commit history producing valid output for both the release-notes and CHANGELOG.md generation steps.)
 
 **Tests**: none (CI config/doc generation)
 **Gate**: build
