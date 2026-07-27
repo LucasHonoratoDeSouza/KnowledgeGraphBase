@@ -216,9 +216,9 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `CONTRIBUTING.md` documents branch model, PR target (`dev`), Conventional Commits, and `make check`/CI-job mapping.
-- [ ] A "Branch protection" section exists with a placeholder noting exact settings will be recorded once configured (T7 fills this in).
-- [ ] Gate check passes: `make check`
+- [x] `CONTRIBUTING.md` documents branch model, PR target (`dev`), Conventional Commits, and `make check`/CI-job mapping.
+- [x] A "Branch protection" section exists with a placeholder noting exact settings will be recorded once configured (T7 fills this in).
+- [x] Gate check passes: `make check`
 
 **Tests**: none (doc)
 **Gate**: build
