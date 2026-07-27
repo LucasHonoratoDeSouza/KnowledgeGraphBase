@@ -4,6 +4,15 @@ on:
   pull_request:
   push:
     branches: [main, dev]
+  # SPEC_DEVIATION (T10): release-dev.yml/release-stable.yml gate their
+  # publish jobs on this exact workflow via `uses: ./.github/workflows/ci.yml`
+  # (a reusable workflow call), per design's Tech Decisions -- this
+  # guarantees the exact commit that passed CI is the exact commit that gets
+  # published, rather than a decoupled `workflow_run` trigger. T10's own
+  # Where field only names release-dev.yml, but the `workflow_call` trigger
+  # is the mechanism its Done-when criteria explicitly require, so this
+  # one-line addition to ci.yml is a necessary companion change.
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.ref }}

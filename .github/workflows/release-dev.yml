@@ -1,0 +1,71 @@
+name: Dev channel release
+
+on:
+  push:
+    branches: [dev]
+
+concurrency:
+  group: dev-channel-release
+  cancel-in-progress: true
+
+jobs:
+  # Reusable-workflow call, not a `workflow_run` trigger: this guarantees the
+  # exact commit that passes CI here is the exact commit `build-and-publish`
+  # below publishes -- see ci.yml's `workflow_call` trigger and design's Tech
+  # Decisions. `build-and-publish` is unreachable unless every ci.yml job
+  # succeeds first.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build-and-publish:
+    needs: ci
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-tauri-build
+
+      - name: Compute monotonic dev version
+        id: version
+        run: |
+          base=$(jq -r '.version' apps/desktop/src-tauri/tauri.conf.json | cut -d. -f1,2)
+          echo "value=${base}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Prune previous dev release assets
+        # SAFETY: the tag below is the hardcoded literal string "dev" -- it
+        # must NEVER be replaced with a variable or expression. This step
+        # deletes release assets; if this tag could ever resolve to anything
+        # other than the literal `dev` release, a bug here could delete a
+        # stable release's downloadable artifacts (MVP-46 AC3/AC4). The
+        # literal string itself, unchanged by any interpolation, IS the
+        # safety check -- review any future diff to this step for exactly
+        # that property.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view dev --json assets --jq '.assets[].name' | while IFS= read -r asset; do
+            [ -z "$asset" ] && continue
+            gh release delete-asset dev "$asset" --yes
+          done
+
+      - name: Build and publish dev release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Bakes the "dev" channel string into `app_info::channel()` (T9) --
+          # unset/defaulted to "dev" would work too, but this is explicit for
+          # clarity and drift-proofing, matching the endpoint override below.
+          KNOWLEDGE_OS_CHANNEL: dev
+        with:
+          projectPath: apps/desktop
+          tagName: dev
+          releaseName: "Knowledge OS (dev)"
+          releaseBody: "Automatic dev build from ${{ github.sha }}."
+          releaseDraft: false
+          prerelease: true
+          includeUpdaterJson: true
+          args: --config '{"version":"${{ steps.version.outputs.value }}","plugins":{"updater":{"endpoints":["https://github.com/LucasHonoratoDeSouza/KnowledgeGraphBase/releases/download/dev/latest.json"]}}}'

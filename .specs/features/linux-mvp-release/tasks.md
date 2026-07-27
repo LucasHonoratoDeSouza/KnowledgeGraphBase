@@ -317,12 +317,12 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `release-dev.yml` triggers on push to `dev`, `needs:` the `ci.yml` jobs (via `workflow_call`, per design's Tech Decisions) so publish is unreachable on a red run.
-- [ ] Prior `dev` release assets are deleted (via `gh release delete-asset` or equivalent) before/as part of uploading the new build; the deletion step hardcodes the literal string `dev` as the tag (never a variable), matching design's scoping-safety decision.
-- [ ] A code-review-visible assertion (comment + the literal-string check itself) confirms this step cannot resolve to any other tag.
-- [ ] The existing accumulated `dev` release assets are pruned down to the current build as a one-time manual/scripted cleanup, executed once as part of this task and recorded in the commit.
-- [ ] `dev-build.yml` is deleted.
-- [ ] Gate check passes: `make check`
+- [x] `release-dev.yml` triggers on push to `dev`, `needs:` the `ci.yml` jobs (via `workflow_call`, per design's Tech Decisions) so publish is unreachable on a red run. (SPEC_DEVIATION: this required adding a `workflow_call:` trigger to `ci.yml`, one line, not listed in this task's `Where` field but the literal mechanism this Done-when criterion names — see the marker comment in `ci.yml`.)
+- [x] Prior `dev` release assets are deleted (via `gh release delete-asset` or equivalent) before/as part of uploading the new build; the deletion step hardcodes the literal string `dev` as the tag (never a variable), matching design's scoping-safety decision.
+- [x] A code-review-visible assertion (comment + the literal-string check itself) confirms this step cannot resolve to any other tag.
+- [~] The existing accumulated `dev` release assets are pruned down to the current build as a one-time manual/scripted cleanup, executed once as part of this task and recorded in the commit. **NOT executed live**: per the orchestrator's no-real-publish/no-live-mutation guardrail, this workflow was implemented and validated with `actionlint`, but the actual one-time deletion of the ~61 accumulated assets on the real `LucasHonoratoDeSouza/KnowledgeGraphBase` repo's `dev` release was not run. Deferred to the repo owner to run once (`gh release delete-asset dev <asset>` per stale asset, or trigger this workflow for real).
+- [x] `dev-build.yml` is deleted.
+- [x] Gate check passes: `make check` (all stages pass except one pre-existing, out-of-scope integration test — `settings_security.rs::onboarding_persists_only_a_vault_display_name_publicly` — which fails only because this worktree's root directory is named `agent-ac19e909a14fdc363` instead of `Knowledge GraphBase`; verified failing identically on the pre-T10 commit, unrelated to any Phase 2 change.)
 
 **Tests**: none (CI config; pruning-safety is verified by the literal-string review + a follow-up real push observed to only affect `dev`)
 **Gate**: build
