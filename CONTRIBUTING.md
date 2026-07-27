@@ -73,4 +73,10 @@ Repeat identically for `dev` by substituting `branches/main/protection` with `br
 
 This mirrors GitHub's documented [Update branch protection](https://docs.github.com/en/rest/branches/branch-protection#update-branch-protection) REST endpoint: `required_status_checks.contexts` names the four `ci.yml` job ids as required checks, `strict: true` is "require branches to be up to date before merging", `required_pull_request_reviews: null` leaves no required review (per the owner decision above), `restrictions: null` leaves push access unrestricted beyond the checks themselves, and `allow_force_pushes`/`allow_deletions: false` reject force-pushes and branch deletion.
 
-**As of this writing, this command has not yet been executed against the live repository** — it is recorded here for a repo owner/admin to run deliberately (verified: the repo slug and both branch names resolve correctly via a read-only `gh api repos/LucasHonoratoDeSouza/KnowledgeGraphBase/branches/{main,dev}` check).
+**This has been applied to the live repository** (both `main` and `dev`) — the command above is kept here so it can be re-applied if the settings are ever lost or need to be restored.
+
+## Release channels and the updater endpoint
+
+`main` and `dev` build to two separate self-update channels — see `apps/desktop/src-tauri/src/app_info.rs`'s module doc comment for the full technical contract (how the channel string and the updater endpoint override are baked in at build time via `release-stable.yml`/`release-dev.yml`).
+
+**This is load-bearing and must not be changed casually**: the updater endpoint URL is compiled into every shipped binary. Once the first stable release ships, changing the stable channel's endpoint value strands every existing install that already checks the old one — they will never discover the new location on their own. If this ever needs to change, treat it as a deliberate, planned migration (e.g. a redirect at the old endpoint), never a routine config edit.

@@ -378,23 +378,23 @@ The app builds and runs, but there is no way for a stranger to install it (only 
 
 | Requirement ID | Story | Source Issue | Phase | Status |
 | --- | --- | --- | --- | --- |
-| MVP-40 | P1.1 License | #40 | Foundation | Pending |
-| MVP-41 | P1.2 CI check gate | #41 | Foundation | Pending |
-| MVP-42 | P1.3 Gated releases + branch protection | #42 | Foundation | Pending |
-| MVP-43 | P1.4 Fix flaky/failing e2e test | #43 | Foundation | Pending |
-| MVP-44 | P2.1 Stable/dev updater channel split | #44 | Release Channels | Pending |
-| MVP-45 | P2.2 Stable release workflow, semver, changelog | #45 | Release Channels | Pending |
-| MVP-46 | P2.3 Asset retention/pruning | #46 | Release Channels | Pending |
-| MVP-47 | P2.4 End-to-end updater verification | #47 | Release Channels | Pending |
-| MVP-49 | P3.1 One-line installer | #49 | Distribution | Pending |
-| MVP-50 | P3.2 SHA256SUMS | #50 | Distribution | Pending |
-| MVP-51 | P3.3 aarch64 decision | #51 | Distribution | Pending |
-| MVP-52 | P4.1 Vault/index migration | #52 | Professional Finish | Pending |
-| MVP-53 | P4.2 SECURITY.md | #53 | Professional Finish | Pending |
-| MVP-54 | P4.3 Dependency auditing/SBOM | #54 | Professional Finish | Pending |
-| MVP-55 | P4.4 Crash/error logging | #55 | Professional Finish | Pending |
-| MVP-48 | P4.5 Observable self-updates | #48 | Professional Finish | Pending |
-| MVP-56 | P4.6 Documentation/contributing | #56 | Professional Finish | Pending |
+| MVP-40 | P1.1 License | #40 | Foundation | ✅ Verified |
+| MVP-41 | P1.2 CI check gate | #41 | Foundation | ⚠️ Verified, live-run proof deferred to owner (AC4, AC7) |
+| MVP-42 | P1.3 Gated releases + branch protection | #42 | Foundation | ✅ Verified (live) |
+| MVP-43 | P1.4 Fix flaky/failing e2e test | #43 | Foundation | ✅ Verified |
+| MVP-44 | P2.1 Stable/dev updater channel split | #44 | Release Channels | ✅ Verified (AC5 gap fixed post-verification) |
+| MVP-45 | P2.2 Stable release workflow, semver, changelog | #45 | Release Channels | ✅ Verified |
+| MVP-46 | P2.3 Asset retention/pruning | #46 | Release Channels | ⚠️ Verified, one-time cleanup deferred to owner (AC2) |
+| MVP-47 | P2.4 End-to-end updater verification | #47 | Release Channels | ⚠️ Verified, real A→B upgrade deferred to owner (AC1) |
+| MVP-49 | P3.1 One-line installer | #49 | Distribution | ✅ Verified |
+| MVP-50 | P3.2 SHA256SUMS | #50 | Distribution | ⚠️ Verified, live dry run deferred to owner (AC3) |
+| MVP-51 | P3.3 aarch64 decision | #51 | Distribution | ✅ Verified |
+| MVP-52 | P4.1 Vault/index migration | #52 | Professional Finish | ✅ Verified (AC5 realistic-size test added post-verification) |
+| MVP-53 | P4.2 SECURITY.md | #53 | Professional Finish | ✅ Verified (live) |
+| MVP-54 | P4.3 Dependency auditing/SBOM | #54 | Professional Finish | ⚠️ Verified, live scan run deferred to owner (AC3) |
+| MVP-55 | P4.4 Crash/error logging | #55 | Professional Finish | ✅ Verified |
+| MVP-48 | P4.5 Observable self-updates | #48 | Professional Finish | ✅ Verified |
+| MVP-56 | P4.6 Documentation/contributing | #56 | Professional Finish | ⚠️ Verified, spec-precision gap noted (AC5) |
 
 **ID format:** `MVP-[issue number]` — chosen to keep 1:1 traceability with the already-numbered GitHub issues this epic tracks.
 

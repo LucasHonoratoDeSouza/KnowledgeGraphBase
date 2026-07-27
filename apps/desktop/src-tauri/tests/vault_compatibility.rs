@@ -9,8 +9,10 @@
 //! through a real command entry point.
 
 use std::fs;
+use std::time::Instant;
 
 use knowledge_os_desktop_lib::knowledge::graph_in_vault;
+use knowledge_storage::{ConceptDraft, KnowledgeStore};
 use rusqlite::Connection;
 use tempfile::tempdir;
 
@@ -73,6 +75,60 @@ fn older_sqlite_schema_triggers_a_non_destructive_automatic_rebuild() {
     assert_eq!(
         sqlite_version, 2,
         "SQLite schema must have been migrated forward, proving a real rebuild ran"
+    );
+}
+
+#[test]
+fn older_sqlite_schema_rebuild_is_correct_at_a_realistic_vault_size() {
+    // MVP-52 AC5 asks the rebuild to "complete correctly on a vault of
+    // realistic size", not only on the near-empty fixture used by the test
+    // above. 300 concepts is comfortably under `graph_in_vault`'s 500-node
+    // cap, so a correct rebuild must return every one of them, untruncated.
+    const CONCEPT_COUNT: usize = 300;
+
+    let vault = tempdir().unwrap();
+    let db_path = vault.path().join(".knowledge-os/knowledge.sqlite3");
+    fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+
+    // Populate at realistic scale through the real, current-schema store...
+    {
+        let store = KnowledgeStore::open(&db_path).unwrap();
+        for index in 0..CONCEPT_COUNT {
+            store
+                .upsert_concept(&ConceptDraft::new(format!(
+                    "Realistic Scale Concept {index}"
+                )))
+                .unwrap();
+        }
+    }
+
+    // ...then roll the persisted SQLite schema version back down, simulating
+    // a vault last touched by an older app version, without disturbing any
+    // of the data just inserted at scale.
+    {
+        let connection = Connection::open(&db_path).unwrap();
+        connection
+            .execute_batch("PRAGMA user_version = 0;")
+            .unwrap();
+    }
+
+    let started = Instant::now();
+    let result = graph_in_vault(vault.path());
+    let elapsed = started.elapsed();
+
+    let graph = result.expect("a realistic-size older-schema vault must still open via rebuild");
+    assert_eq!(
+        graph.concepts.len(),
+        CONCEPT_COUNT,
+        "every concept inserted before the rebuild must survive it, none lost or duplicated"
+    );
+    assert!(
+        !graph.truncated,
+        "300 concepts is under the 500-node cap and must come back untruncated"
+    );
+    assert!(
+        elapsed.as_secs() < 10,
+        "rebuild at realistic scale must complete promptly, took {elapsed:?}"
     );
 }
 

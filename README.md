@@ -40,7 +40,7 @@ The installer:
 3. Installs it to `~/.local/bin/knowledge-os` and registers a `.desktop` entry + icon so it shows up in your application launcher.
 4. Never invokes or requires `sudo`.
 
-Run it again any time to upgrade in place — it replaces the existing install rather than duplicating it. To remove Knowledge OS:
+Run it again any time to upgrade in place — it replaces the existing install rather than duplicating it. It's safe to re-run the installer while Knowledge OS is currently open: the new binary is written to a temp file and swapped into place with an atomic rename, so a running instance keeps using its own already-open copy until you restart it — you won't see the new version until you quit and relaunch. To remove Knowledge OS:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LucasHonoratoDeSouza/KnowledgeGraphBase/main/install.sh | sh -s -- --uninstall
