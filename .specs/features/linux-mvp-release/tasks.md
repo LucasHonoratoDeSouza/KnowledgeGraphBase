@@ -747,9 +747,9 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Dependabot config covers all four ecosystems with sensible update schedules.
-- [ ] `actionlint`/GitHub's own schema validation (via `gh api` dry-run or the Dependabot config validator) reports no errors.
-- [ ] Gate check passes: `make check`
+- [x] Dependabot config covers all four ecosystems (`cargo`, `npm`, `uv`, `github-actions`) with weekly update schedules — one `directory: "/"` entry per ecosystem, matching this monorepo's single root lockfile per ecosystem (`Cargo.lock`, `pnpm-lock.yaml`, `uv.lock`, all confirmed to exist only at repo root, not per-member).
+- [x] Config validated: `python3 -c "import yaml; yaml.safe_load(open('.github/dependabot.yml'))"` parses without error; `actionlint` does not apply to `dependabot.yml` (it validates `.github/workflows/*.yml` only) and no offline Dependabot-schema validator or `gh api` dry-run endpoint is available in this environment — YAML-validity plus manual review against GitHub's documented `package-ecosystem`/`directory`/`schedule` keys is the verification used. (SPEC_DEVIATION: this Done-when criterion names `actionlint` as if it applied to `dependabot.yml`; it does not — noted here rather than silently substituting a different claim.)
+- [x] Gate check passes: `make check` (lock-check, format, lint, typecheck all pass; same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10-T25 blocks the combined `test-full` run, already confirmed unrelated and everything else green in T24/T25; this task adds only `.github/dependabot.yml`, no code changed.)
 
 **Tests**: none (config)
 **Gate**: build
