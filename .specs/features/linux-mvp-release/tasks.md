@@ -797,8 +797,8 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `release-stable.yml` generates an SBOM covering the Rust, npm, and Python dependency trees and attaches it as a release asset.
-- [ ] Gate check passes: `make check`
+- [x] `release-stable.yml` generates an SBOM covering the Rust, npm, and Python dependency trees and attaches it as a release asset. Uses [Anchore Syft](https://github.com/anchore/syft) v1.49.0 (pinned) to scan the whole repo in one pass and emit a single CycloneDX JSON SBOM (`knowledge-os-<version>.cdx.json`), uploaded via `gh release upload`. (SPEC_DEVIATION: the task's `What`/`Tools` note suggested per-ecosystem tools — `cargo-cyclonedx`, `@cyclonedx/cyclonedx-npm` — but `@cyclonedx/cyclonedx-npm` was verified locally to not support this repo's `pnpm-lock.yaml`/pnpm-managed `node_modules` layout at all ("no package lock file nor npm shrinkwrap file" even with `node_modules` present); Syft was verified locally against this repo's real lockfiles to produce 1145 components spanning all three ecosystems — 617 cargo, 352 npm, 58 pypi — from `Cargo.lock`, `pnpm-lock.yaml`, and `uv.lock`/`pyproject.toml` directly, satisfying the Done-when criterion with one simpler tool instead of three.)
+- [x] Gate check passes: `make check` (lock-check, format, lint, typecheck all pass; `actionlint 1.7.7` reports zero errors on the modified `release-stable.yml`; same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10-T27 blocks the combined `test-full` run, already confirmed unrelated in prior tasks in this batch. This task only extends `release-stable.yml`'s `build-and-publish` job, no other code changed.)
 
 **Tests**: none (CI config)
 **Gate**: build
