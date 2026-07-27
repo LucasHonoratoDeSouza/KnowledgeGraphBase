@@ -695,10 +695,10 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Bug report template asks for version and channel (referencing where to find them: Settings → About from T23).
-- [ ] Feature request and PR checklist templates exist.
-- [ ] GitHub recognizes the templates (verified by opening the "New issue" chooser view via `gh issue create --web` locally, or confirmed by template file location matching GitHub's documented convention).
-- [ ] Gate check passes: `make check`
+- [x] Bug report template asks for version and channel (referencing where to find them: Settings → About from T23).
+- [x] Feature request and PR checklist templates exist.
+- [x] GitHub recognizes the templates (verified by template file location matching GitHub's documented convention: `.github/ISSUE_TEMPLATE/*.md` with `name`/`about` front matter for the issue chooser, `.github/PULL_REQUEST_TEMPLATE.md` at the `.github/` root — `gh issue create --web` requires a browser, unavailable in this environment, so file-location conformance is the verification used).
+- [x] Gate check passes: `make check` (same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10-T23 — this worktree's root is `agent-a736a81a6b4f53276` instead of `Knowledge GraphBase`; lock-check, format, lint, typecheck, test-quick, test-desktop-e2e (35/35), and build all passed directly. This task only adds `.github/` template files.)
 
 **Tests**: none (doc/config)
 **Gate**: build
