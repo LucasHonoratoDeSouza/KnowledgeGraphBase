@@ -116,11 +116,11 @@
 
 ## Handoff
 
-- **Feature**: Ready backlog / `.specs/features/ready-backlog/`
-- **Phase / Task**: Execute complete — all 25 tasks done, independent validation pass written to `validation.md` (PASS)
-- **Completed**: issues #4, #5, #7, #10, #12, #13, #14, #15, #17, #18 and #29, each with tests; full gates green (lint, typecheck, format, 117 desktop + 45 package unit tests, 26 Playwright e2e, Rust workspace suite, clippy, builds)
-- **In-progress**: none
-- **Next step**: owner testing of the branch, then PR into `dev`; remaining board items are the Blocked agent epic (#19–#26)
-- **Blockers**: none. Pre-existing repo drift: `cargo fmt --check` disagrees with five files this branch never touched (newer rustfmt)
-- **Uncommitted files**: none
-- **Branch**: `feat/ready-backlog`
+- **Feature**: Linux MVP release / `.specs/features/linux-mvp-release/`
+- **Phase / Task**: Execute complete — all 29 tasks done across 4 sequential batches, independent Verifier pass written to `validation.md` (PASS ✅, 79/89 ACs matched with evidence, 5/5 discrimination-sensor mutations killed), 3 ranked follow-up gaps closed directly in a post-verification fix commit
+- **Completed**: issues #40, #41, #42, #43, #44, #45, #46, #47, #49, #50, #51, #52, #53, #54, #55, #48, #56 (the full #39 epic except items that require publishing real releases — see below); branch protection genuinely applied live to `main`/`dev`; private vulnerability reporting genuinely enabled live
+- **In-progress**: none — PR #57 (`feat/linux-mvp-release` → `dev`) opened and pushed; CI (`ci.yml`) is running against it for the first time ever (this branch is what wires CI up in the first place)
+- **Next step**: owner review of PR #57. After merge: (1) run `make test-installer` with Docker to exercise the container-based installer test no agent sandbox had Docker for, (2) work through `docs/release-checklist.md` before cutting the first real stable release — the stable updater endpoint (`releases/latest/download/latest.json`) is baked into every binary from that point forward and cannot be casually changed afterward, (3) one-time manual cleanup of the ~61 accumulated `dev` release assets, (4) confirm `dependency-audit.yml` and the SBOM step run cleanly on real GitHub Actions.
+- **Blockers**: none. One pre-existing, environment-name-dependent Rust test (`settings_security.rs::onboarding_persists_only_a_vault_display_name_publicly`) fails in any checkout not literally named `Knowledge GraphBase` — confirmed unrelated to this feature by every batch and the Verifier.
+- **Uncommitted files**: none on `feat/linux-mvp-release`. Note: `.specs/features/fluid-knowledge-graph/validation.md` has a pre-existing uncommitted change from an unrelated earlier session, present on multiple branches including this one — deliberately left untouched throughout this feature's work.
+- **Branch**: `feat/linux-mvp-release` (pushed to origin, PR #57 open against `dev`)
