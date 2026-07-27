@@ -19,7 +19,6 @@
 
 use std::path::Path;
 
-use knowledge_storage::{KnowledgeStore, StorageError};
 use thiserror::Error;
 
 /// The `SQLite` schema version this binary expects. Bump alongside
@@ -60,14 +59,14 @@ pub enum MigrationError {
     VaultFormat(String),
 }
 
-impl From<StorageError> for MigrationError {
-    fn from(error: StorageError) -> Self {
-        Self::SqliteSchema(error.to_string())
-    }
-}
-
 /// Reads both persisted versions from the vault at `vault_root` and
 /// compares them against what this binary expects.
+///
+/// Deliberately opens the `SQLite` file with a plain, unmigrated connection
+/// (never `KnowledgeStore::open`, which unconditionally runs its own
+/// migration on open) -- this check must be side-effect-free so a
+/// [`CompatibilityDecision::Refuse`] outcome never mutates the file, even
+/// by a single byte, before the caller has decided what to do.
 ///
 /// # Errors
 ///
@@ -77,10 +76,19 @@ pub fn check_vault_compatibility(
     vault_root: &Path,
 ) -> Result<CompatibilityDecision, MigrationError> {
     let db_path = vault_root.join(".knowledge-os").join("knowledge.sqlite3");
+    let connection = rusqlite::Connection::open(&db_path)
+        .map_err(|error| MigrationError::SqliteSchema(error.to_string()))?;
 
-    let store = KnowledgeStore::open(&db_path)?;
-    let actual_sqlite = store.schema_version()?;
-    let actual_format = read_vault_format_version(&db_path)?;
+    let actual_sqlite: u32 = connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(|error| MigrationError::SqliteSchema(error.to_string()))?;
+    let actual_format: u32 = connection
+        .query_row(
+            "SELECT schema_version FROM vault_metadata WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| MigrationError::VaultFormat(error.to_string()))?;
 
     let migration_defined =
         vault_format_migration_defined(actual_format, EXPECTED_VAULT_FORMAT_VERSION);
@@ -92,18 +100,6 @@ pub fn check_vault_compatibility(
         EXPECTED_VAULT_FORMAT_VERSION,
         migration_defined,
     ))
-}
-
-fn read_vault_format_version(db_path: &Path) -> Result<u32, MigrationError> {
-    let connection = rusqlite::Connection::open(db_path)
-        .map_err(|error| MigrationError::VaultFormat(error.to_string()))?;
-    connection
-        .query_row(
-            "SELECT schema_version FROM vault_metadata WHERE id = 1",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|error| MigrationError::VaultFormat(error.to_string()))
 }
 
 /// Whether a defined migration exists to carry a vault-format version
