@@ -46,4 +46,31 @@ A red run on any of these four jobs is a required status check and blocks mergin
 - Force pushes and branch deletion are disabled on both branches.
 - No required approving review is configured — per owner decision, for a solo maintainer this repo relies on required checks only, not mandatory human review (avoids self-approval theater).
 
-These settings are configured directly in the repository's GitHub settings (Settings → Branches). If they are ever lost or need to be restored, the exact `gh api` invocation used to (re-)apply them is recorded here once configured.
+These settings are configured directly in the repository's GitHub settings (Settings → Branches). If they are ever lost or need to be restored, apply them with the exact `gh api` invocation below (run once per branch — this is a shared-state, repository-wide change and must be applied deliberately by a repo owner/admin, not as part of routine development):
+
+```bash
+gh api \
+  --method PUT \
+  -H "Accept: application/vnd.github+json" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  repos/LucasHonoratoDeSouza/KnowledgeGraphBase/branches/main/protection \
+  --input - <<'JSON'
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["static", "unit", "integration", "e2e"]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": null,
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
+```
+
+Repeat identically for `dev` by substituting `branches/main/protection` with `branches/dev/protection`.
+
+This mirrors GitHub's documented [Update branch protection](https://docs.github.com/en/rest/branches/branch-protection#update-branch-protection) REST endpoint: `required_status_checks.contexts` names the four `ci.yml` job ids as required checks, `strict: true` is "require branches to be up to date before merging", `required_pull_request_reviews: null` leaves no required review (per the owner decision above), `restrictions: null` leaves push access unrestricted beyond the checks themselves, and `allow_force_pushes`/`allow_deletions: false` reject force-pushes and branch deletion.
+
+**As of this writing, this command has not yet been executed against the live repository** — it is recorded here for a repo owner/admin to run deliberately (verified: the repo slug and both branch names resolve correctly via a read-only `gh api repos/LucasHonoratoDeSouza/KnowledgeGraphBase/branches/{main,dev}` check).
