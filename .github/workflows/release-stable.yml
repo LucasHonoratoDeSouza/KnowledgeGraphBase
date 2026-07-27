@@ -1,0 +1,69 @@
+name: Stable channel release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: stable-channel-release
+  cancel-in-progress: true
+
+jobs:
+  check-version:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.compare.outputs.version }}
+      should_publish: ${{ steps.compare.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare tauri.conf.json version against published stable releases
+        id: compare
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(jq -r '.version' apps/desktop/src-tauri/tauri.conf.json)
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+          if gh api "repos/${{ github.repository }}/releases" --paginate \
+              --jq '.[] | select(.prerelease == false) | .tag_name' \
+              | grep -Fxq -- "${version}"; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Reusable-workflow call, not a `workflow_run` trigger -- same rationale as
+  # release-dev.yml: guarantees the exact commit that passes CI here is the
+  # exact commit `build-and-publish` below publishes.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build-and-publish:
+    needs: [check-version, ci]
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-tauri-build
+
+      - name: Build and publish stable release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Bakes the "stable" channel string into `app_info::channel()` (T9).
+          KNOWLEDGE_OS_CHANNEL: stable
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ needs.check-version.outputs.version }}
+          releaseName: "Knowledge OS ${{ needs.check-version.outputs.version }}"
+          releaseBody: ""
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config '{"plugins":{"updater":{"endpoints":["https://github.com/LucasHonoratoDeSouza/KnowledgeGraphBase/releases/latest/download/latest.json"]}}}'
