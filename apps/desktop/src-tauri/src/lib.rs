@@ -4,6 +4,7 @@ mod enrichment;
 pub mod ipc;
 pub mod knowledge;
 pub mod librarian;
+pub mod logging;
 pub mod settings;
 mod transcription;
 
@@ -22,6 +23,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(editor::DocumentCommandState::default())
         .setup(|app| {
+            logging::init_logging(app)?;
             let data_directory = app.path().app_local_data_dir()?;
             std::fs::create_dir_all(&data_directory)?;
             app.manage(commands::SettingsCommandState::open(&data_directory)?);
