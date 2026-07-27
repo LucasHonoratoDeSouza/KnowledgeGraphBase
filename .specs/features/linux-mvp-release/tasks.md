@@ -636,11 +636,15 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] A Rust panic anywhere in the app writes to the rotating log via a registered panic hook.
-- [ ] Settings has an "open log" / "copy log path" action; log location is documented in-app and in the README.
-- [ ] The T8 redaction test is extended to cover the panic-hook path specifically (a panic triggered from a code path touching note/vault/credential data must not leak that data into the log).
-- [ ] A documented bug-report path exists telling the user exactly what to attach.
-- [ ] Gate check passes: `make test-rust`, `make test-ui`
+- [x] A Rust panic anywhere in the app writes to the rotating log via a registered panic hook. `logging::install_panic_hook`, called first thing in `lib.rs::run()`; chains to the previous (default, stderr-printing) hook afterward.
+- [x] Settings has an "open log" / "copy log path" action; log location is documented in-app and in the README. New `apps/desktop/src/settings/About.tsx` shows the resolved log path and a "Copy log path" button (writes to the clipboard); README's new "Crash and error logs, and filing a bug report" section documents the path.
+- [x] The T8 redaction test is extended to cover the panic-hook path specifically (a panic triggered from a code path touching note/vault/credential data must not leak that data into the log). Two levels: `logging.rs`'s `panic_hook_log_line_redacts_a_credential_shaped_payload`/`..._redacts_note_content` unit-test the extracted, pure `format_panic_log_line` formatter directly; `lib.rs`'s `installed_panic_hook_logs_a_panic_without_leaking_a_credential` is a genuine end-to-end test that installs the real hook, triggers and catches a real panic carrying a credential via `catch_unwind`, and asserts the captured log output contains a `panic:` line without the credential.
+- [x] A documented bug-report path exists telling the user exactly what to attach. README's new section: version+channel, the log file, repro steps; explicitly says never to attach vault Markdown or the provider section.
+- [x] Gate check passes: `make test-rust` (18/18 desktop-lib tests pass), `make test-ui` (176/176 pass, including new `About.test.tsx`).
+
+**Bugfix found while implementing this task**: adding `get_log_path` surfaced that T9's `get_app_info` command was never actually callable from the frontend -- `build.rs`'s explicit `AppManifest::commands(&[...])` list (which is what makes Tauri generate each command's `allow-*`/`deny-*` permission) never included it, so `capabilities/main.json` could not have granted it either. Both `get_app_info` and this task's new `get_log_path` are now added to `build.rs`, `capabilities/main.json`, and `ipc.rs`'s `DECLARED_COMMANDS` (with `tests/ipc_contract.rs`'s hardcoded list updated to match) -- confirmed working via a real `cargo build` (which failed loudly with "Permission allow-get-app-info not found" before this fix) and `ipc_contract.rs`'s 9/9 tests.
+
+**SPEC_DEVIATION**: touches `apps/desktop/src-tauri/build.rs`, `src/app_info.rs`, `src/ipc.rs`, `capabilities/main.json`, `tests/ipc_contract.rs`, and `src/settings/ipc.ts`/`index.ts` beyond this task's listed `Where` -- all necessary for `get_log_path` (and the latent `get_app_info` bug) to actually be callable end to end, not just compile.
 
 **Tests**: unit
 **Gate**: quick

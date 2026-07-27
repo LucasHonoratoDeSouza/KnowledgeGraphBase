@@ -92,6 +92,20 @@ Your vault is a plain directory you chose during setup. Everything inside it is 
 - Before any future migration that would rewrite Markdown content itself (not just the SQLite cache), Knowledge OS writes a timestamped copy of every note under `.knowledge-os/backups/markdown-<timestamp>/` first. To hand-recover from one, copy its files back over your notes' original paths in the vault root.
 - Uninstalling (`install.sh --uninstall`) never touches your vault directory, wherever you placed it.
 
+## Crash and error logs, and filing a bug report
+
+Knowledge OS writes a local, rotating log file (never phoning home) at `<app data directory>/knowledge-os-desktop.log` — typically `~/.local/share/dev.knowledge-os.desktop/knowledge-os-desktop.log` on Linux. Every unhandled panic and update-check/install failure is recorded there. Settings → About has a "Copy log path" action so you don't need to remember this path.
+
+Log contents are redaction-guarded: note content, vault contents, and provider credentials are never written verbatim, even from a panic triggered while handling that data.
+
+If you're filing a bug report, please attach:
+
+1. The Knowledge OS **version and channel** (Settings → About).
+2. The **log file** from the path above (or its last ~100 lines if it's large).
+3. **Steps to reproduce**, if known.
+
+Never attach your vault's Markdown files or a screenshot of Settings' provider section — the log and version/channel are all that's needed.
+
 ## Dev channel
 
 `.github/workflows/dev-build.yml` builds and publishes a signed `dev` prerelease on every push to `dev`. The installed `.AppImage` silently checks for and installs updates from that release on startup — close and reopen the app to pick up the latest push. The `.deb` package does not self-update; use the AppImage for the auto-updating dev channel.

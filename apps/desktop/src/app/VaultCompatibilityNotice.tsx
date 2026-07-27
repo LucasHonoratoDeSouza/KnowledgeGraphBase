@@ -29,7 +29,10 @@ export function VaultCompatibilityNotice({
 
   if (status.kind === "refused") {
     return (
-      <div role="alert" className="vault-compat-notice vault-compat-notice--refused">
+      <div
+        role="alert"
+        className="vault-compat-notice vault-compat-notice--refused"
+      >
         {status.message}
       </div>
     );
