@@ -609,10 +609,12 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Any Markdown-rewriting migration path creates a timestamped backup copy before writing (even though no such migration exists yet for the current schema — this establishes the required mechanism/contract for future ones).
-- [ ] Integration test simulates a Markdown-touching migration and asserts the backup exists, is a faithful copy, and restoring it recovers the pre-migration state.
-- [ ] README documents the vault layout and data locations so a user can recover by hand without the app.
-- [ ] Gate check passes: `make test-rust-integration`
+- [x] Any Markdown-rewriting migration path creates a timestamped backup copy before writing (even though no such migration exists yet for the current schema — this establishes the required mechanism/contract for future ones). `migration.rs::backup_markdown_before_migration` copies every `.md` file (mirroring relative structure, skipping `.knowledge-os`) into `<vault>/.knowledge-os/backups/markdown-<unix-nanos>/`.
+- [x] Integration test simulates a Markdown-touching migration and asserts the backup exists, is a faithful copy, and restoring it recovers the pre-migration state. New `apps/desktop/src-tauri/tests/markdown_migration_backup.rs` — `backup_is_faithful_and_restoring_it_recovers_the_pre_migration_state` (backs up, simulates a rewrite, restores, asserts exact recovery) and `backup_never_descends_into_the_sqlite_metadata_directory` (proves `.knowledge-os` itself is never backed up).
+- [x] README documents the vault layout and data locations so a user can recover by hand without the app. New "Vault layout and data locations" section.
+- [x] Gate check passes: `make test-rust-integration` (same pre-existing, out-of-scope `settings_security.rs` failure as T10-T20 blocks the combined run from reaching this task's new test binary; both new tests directly confirmed passing via `cargo test --test markdown_migration_backup` — 2/2 pass. `make test-quick` and `make test-desktop-e2e` also both green.)
+
+**SPEC_DEVIATION**: this task's own Done-when requires README changes, beyond the listed `Where` (`migration.rs` only) — same necessary-but-unlisted-file pattern as prior tasks in this phase.
 
 **Tests**: integration
 **Gate**: full

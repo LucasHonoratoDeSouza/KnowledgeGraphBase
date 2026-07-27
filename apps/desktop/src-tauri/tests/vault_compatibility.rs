@@ -14,7 +14,11 @@ use knowledge_os_desktop_lib::knowledge::graph_in_vault;
 use rusqlite::Connection;
 use tempfile::tempdir;
 
-fn create_fixture_db(vault_root: &std::path::Path, sqlite_schema_version: u32, vault_format_version: u32) {
+fn create_fixture_db(
+    vault_root: &std::path::Path,
+    sqlite_schema_version: u32,
+    vault_format_version: u32,
+) {
     let metadata_dir = vault_root.join(".knowledge-os");
     fs::create_dir_all(&metadata_dir).unwrap();
     let db_path = metadata_dir.join("knowledge.sqlite3");
@@ -53,11 +57,16 @@ fn older_sqlite_schema_triggers_a_non_destructive_automatic_rebuild() {
     let db_path = vault.path().join(".knowledge-os/knowledge.sqlite3");
     let connection = Connection::open(&db_path).unwrap();
     let format_version: u32 = connection
-        .query_row("SELECT schema_version FROM vault_metadata WHERE id = 1", [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT schema_version FROM vault_metadata WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
         .unwrap();
-    assert_eq!(format_version, 1, "vault_metadata row must survive the rebuild untouched");
+    assert_eq!(
+        format_version, 1,
+        "vault_metadata row must survive the rebuild untouched"
+    );
     let sqlite_version: u32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();

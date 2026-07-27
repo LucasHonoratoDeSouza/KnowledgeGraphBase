@@ -72,6 +72,26 @@ cd apps/desktop
 pnpm tauri dev
 ```
 
+## Vault layout and data locations
+
+Your vault is a plain directory you chose during setup. Everything inside it is recoverable by hand, with no app installed:
+
+```
+<your vault>/
+├── Projects/, Areas/, …        # your Markdown notes — the durable source of truth (AD-002)
+├── attachments/                # captured files (PDFs, etc.)
+└── .knowledge-os/
+    ├── knowledge.sqlite3       # reconstructible search/graph cache — never the source of truth
+    └── backups/                # timestamped Markdown backups, written automatically before
+                                 # any migration that would rewrite note content (never touched
+                                 # by a normal open/rebuild — see below)
+```
+
+- **Your notes are always plain Markdown files** you can open, copy, or back up with any text editor or file manager — they don't require Knowledge OS to read or recover.
+- `.knowledge-os/knowledge.sqlite3` is disposable: if it's ever lost, corrupted, or behind what your installed version expects, Knowledge OS rebuilds it automatically from your Markdown on next open (never silently, never destructively — see the app's compatibility check).
+- Before any future migration that would rewrite Markdown content itself (not just the SQLite cache), Knowledge OS writes a timestamped copy of every note under `.knowledge-os/backups/markdown-<timestamp>/` first. To hand-recover from one, copy its files back over your notes' original paths in the vault root.
+- Uninstalling (`install.sh --uninstall`) never touches your vault directory, wherever you placed it.
+
 ## Dev channel
 
 `.github/workflows/dev-build.yml` builds and publishes a signed `dev` prerelease on every push to `dev`. The installed `.AppImage` silently checks for and installs updates from that release on startup — close and reopen the app to pick up the latest push. The `.deb` package does not self-update; use the AppImage for the auto-updating dev channel.
