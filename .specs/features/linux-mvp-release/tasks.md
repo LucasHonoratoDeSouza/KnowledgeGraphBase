@@ -394,10 +394,10 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Each `Err`/early-return branch in `check_for_updates` now logs a structured event (updater-unavailable / check-failed / install-failed) via T8's logger before returning.
-- [ ] A Rust unit test injects each failure mode (via a mockable updater trait or cfg-gated seam) and asserts the corresponding log event is emitted.
-- [ ] No behavior change to the actual update/install flow itself — only observability.
-- [ ] Gate check passes: `make test-rust`
+- [x] Each `Err`/early-return branch in `check_for_updates` now logs a structured event (updater-unavailable / check-failed / install-failed) via T8's logger before returning.
+- [x] A Rust unit test injects each failure mode (via a mockable updater trait or cfg-gated seam) and asserts the corresponding log event is emitted.
+- [x] No behavior change to the actual update/install flow itself — only observability.
+- [x] Gate check passes: `make test-rust`
 
 **Tests**: unit
 **Gate**: quick

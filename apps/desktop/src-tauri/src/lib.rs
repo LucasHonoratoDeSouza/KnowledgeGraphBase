@@ -67,16 +67,128 @@ pub fn run() {
         .expect("error while running Knowledge OS");
 }
 
-/// Silently installs any available dev-channel update and relaunches.
+/// Silently installs any available update and relaunches.
 ///
-/// Runs once at startup so a closed-and-reopened dev build always ends up
-/// on the latest `dev` branch push without any user interaction.
+/// Runs once at startup so a closed-and-reopened build always ends up on
+/// the latest push for its channel without any user interaction. Every
+/// failure branch is logged via `logging::log_error` (T8) before returning
+/// -- this is observability only; the update/install flow itself is
+/// unchanged from before (each branch still returns silently to the
+/// caller).
 async fn check_for_updates(app: &tauri::AppHandle) {
-    let Ok(updater) = app.updater() else {
-        return;
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(error) => {
+            log_update_error("updater-unavailable", &error);
+            return;
+        }
     };
-    let Ok(Some(update)) = updater.check().await else {
-        return;
+
+    let update = match updater.check().await {
+        Ok(Some(update)) => update,
+        Ok(None) => return,
+        Err(error) => {
+            log_update_error("update-check-failed", &error);
+            return;
+        }
     };
-    let _ = update.download_and_install(|_, _| {}, || {}).await;
+
+    if let Err(error) = update.download_and_install(|_, _| {}, || {}).await {
+        log_update_error("update-install-failed", &error);
+    }
+}
+
+/// Logs one `check_for_updates` failure branch via `logging::log_error`.
+///
+/// This is the exact call each `Err` arm in `check_for_updates` makes -- a
+/// cfg-gated seam only in the sense that unit tests call it directly with
+/// injected error values, since `app.updater()`/`Update` need a running
+/// Tauri app and aren't constructible in a `#[cfg(test)]` unit test.
+fn log_update_error(stage: &str, error: &impl std::fmt::Display) {
+    logging::log_error(stage, &error.to_string());
+}
+
+#[cfg(test)]
+mod update_error_logging_tests {
+    use super::log_update_error;
+    use std::sync::{Mutex, Once};
+    use tauri_plugin_log::log::{self, Level, LevelFilter, Log, Metadata, Record};
+
+    static CAPTURED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    static INIT: Once = Once::new();
+
+    struct CapturingLogger;
+
+    impl Log for CapturingLogger {
+        fn enabled(&self, metadata: &Metadata) -> bool {
+            metadata.level() <= Level::Error
+        }
+
+        fn log(&self, record: &Record) {
+            if self.enabled(record.metadata()) {
+                CAPTURED.lock().unwrap().push(format!("{}", record.args()));
+            }
+        }
+
+        fn flush(&self) {}
+    }
+
+    fn init_capture() {
+        INIT.call_once(|| {
+            log::set_boxed_logger(Box::new(CapturingLogger))
+                .expect("failed to install test logger");
+            log::set_max_level(LevelFilter::Error);
+        });
+    }
+
+    #[test]
+    fn updater_unavailable_branch_logs_the_updater_unavailable_event() {
+        init_capture();
+
+        log_update_error("updater-unavailable", &"updater plugin missing");
+
+        let captured = CAPTURED.lock().unwrap();
+        assert!(
+            captured
+                .iter()
+                .any(|line| line.contains("updater-unavailable")
+                    && line.contains("updater plugin missing")),
+            "expected an updater-unavailable log line, got: {captured:?}"
+        );
+    }
+
+    #[test]
+    fn check_failed_branch_logs_the_update_check_failed_event() {
+        init_capture();
+
+        log_update_error(
+            "update-check-failed",
+            &"network timeout contacting release feed",
+        );
+
+        let captured = CAPTURED.lock().unwrap();
+        assert!(
+            captured
+                .iter()
+                .any(|line| line.contains("update-check-failed")
+                    && line.contains("network timeout contacting release feed")),
+            "expected an update-check-failed log line, got: {captured:?}"
+        );
+    }
+
+    #[test]
+    fn install_failed_branch_logs_the_update_install_failed_event() {
+        init_capture();
+
+        log_update_error("update-install-failed", &"bad signature rejected");
+
+        let captured = CAPTURED.lock().unwrap();
+        assert!(
+            captured
+                .iter()
+                .any(|line| line.contains("update-install-failed")
+                    && line.contains("bad signature rejected")),
+            "expected an update-install-failed log line, got: {captured:?}"
+        );
+    }
 }
