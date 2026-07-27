@@ -1,0 +1,73 @@
+name: Dependency vulnerability scan
+
+on:
+  schedule:
+    # Weekly, Monday 06:00 UTC. Cron-driven so an advisory published after a
+    # dependency was last touched still gets caught, not just on the next PR.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+# No-fix-available advisory policy (#54, see SECURITY.md): this workflow
+# never fails the build over an advisory with no available fix -- each scan
+# step below is allowed to fail independently (`continue-on-error: true`)
+# and the final step opens (or updates, if one is already open) a single
+# tracking issue summarizing what was found, rather than blocking anything.
+# Once a real fix is available, Dependabot (.github/dependabot.yml) or a
+# manual bump resolves it and the issue can be closed.
+jobs:
+  audit:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tauri-build
+
+      - name: cargo audit (Rust workspace)
+        id: cargo_audit
+        continue-on-error: true
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
+
+      - name: pnpm audit (npm workspace)
+        id: pnpm_audit
+        continue-on-error: true
+        run: corepack pnpm audit
+
+      - name: pip-audit (Python workspace members)
+        id: pip_audit
+        continue-on-error: true
+        run: |
+          uv export --no-hashes --all-packages -o requirements-audit.txt
+          uvx pip-audit -r requirements-audit.txt
+
+      - name: Open or update a tracking issue if any scan flagged an advisory
+        if: |
+          steps.cargo_audit.outcome == 'failure' ||
+          steps.pnpm_audit.outcome == 'failure' ||
+          steps.pip_audit.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Dependency vulnerability scan flagged an advisory"
+          body="The scheduled dependency-audit workflow found at least one advisory.
+
+          - cargo audit: ${{ steps.cargo_audit.outcome }}
+          - pnpm audit: ${{ steps.pnpm_audit.outcome }}
+          - pip-audit: ${{ steps.pip_audit.outcome }}
+
+          Run log: ${RUN_URL}
+
+          Per SECURITY.md's advisory policy: if no fix is available yet, leave this
+          issue open as a tracking item rather than failing any build. Close it once
+          resolved (dependency bump, or an explicit decision that it doesn't apply)."
+          existing=$(gh issue list --search "${title} in:title" --state open --json number --jq '.[0].number // empty')
+          if [[ -n "${existing}" ]]; then
+            gh issue comment "${existing}" --body "${body}"
+          else
+            gh issue create --title "${title}" --body "${body}"
+          fi

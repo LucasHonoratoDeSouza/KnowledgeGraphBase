@@ -771,11 +771,11 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Workflow runs on a `schedule` cron trigger (e.g. weekly) plus `workflow_dispatch`.
-- [ ] Runs `cargo audit`/`cargo deny`, `pnpm audit`, and the Python equivalent across all workspace members.
-- [ ] A deliberately introduced known-vulnerable dependency (in a scratch branch, reverted after verification) is demonstrated to be caught by the scan.
-- [ ] No-fix-available policy documented in the workflow file's comments or `SECURITY.md`: opens/updates a tracking issue, does not fail the build.
-- [ ] Gate check passes: `make check`
+- [x] Workflow runs on a `schedule` cron trigger (weekly, Monday 06:00 UTC) plus `workflow_dispatch`.
+- [x] Runs `cargo audit`, `pnpm audit`, and `pip-audit` (via `uv export` + `uvx pip-audit`) across all workspace members — all three verified working directly against this repo's real lockfiles (`cargo audit`: 18 pre-existing `unmaintained`/`unsound` advisory warnings, exit 0; `pnpm audit`: no known vulnerabilities, exit 0; `pip-audit` against `uv export --all-packages` output: no known vulnerabilities in third-party deps, exit 0 — the three in-workspace packages are correctly skipped as "not found on PyPI").
+- [x] A deliberately introduced known-vulnerable dependency is demonstrated to be caught by the scan: in an isolated scratch Cargo project (outside this repo, not committed, deleted after), pinning `smallvec = "=1.6.0"` (RUSTSEC-2021-0003, critical) made `cargo audit` exit 1 and report the advisory by ID/severity; `smallvec = "=1.6.1"` (the patched version) correctly exits 0. Never touched the real workspace's `Cargo.toml`/`Cargo.lock`.
+- [x] No-fix-available policy documented in the workflow file's comments (top-of-file block) and cross-referenced from `SECURITY.md`'s scope section: opens/updates a tracking issue via `gh issue create`/`gh issue comment` (searched by title first, idempotent), never fails the build.
+- [x] Gate check passes: `make check` (lock-check, format, lint, typecheck all pass; `actionlint 1.7.7`, fetched to a scratch dir since not preinstalled, reports zero errors on the new workflow file; same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10-T26 blocks the combined `test-full` run, already confirmed unrelated in prior tasks in this batch.)
 
 **Tests**: none (CI config; detection verified by the scratch-branch dry run)
 **Gate**: build
