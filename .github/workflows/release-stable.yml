@@ -112,7 +112,8 @@ jobs:
             -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
             SHA256SUMS
           gh release upload "${{ needs.check-version.outputs.version }}" SHA256SUMS SHA256SUMS.sig --clobber
-          gh release upload "${{ needs.check-version.outputs.version }}" ../CHANGELOG.md --clobber
+          cp ../CHANGELOG.md CHANGELOG.md
+          gh release upload "${{ needs.check-version.outputs.version }}" CHANGELOG.md --clobber
 
       - name: Generate and publish SBOM (#54)
         env:
