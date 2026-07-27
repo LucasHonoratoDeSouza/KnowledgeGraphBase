@@ -83,6 +83,7 @@ impl UpdateStatusState {
 /// Version, channel, and update status of the running build, exposed to the
 /// frontend.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppInfo {
     pub version: String,
     pub channel: &'static str,
@@ -180,6 +181,32 @@ mod tests {
             UpdateStatus::Failed {
                 message: "network timeout".to_owned()
             }
+        );
+    }
+
+    /// Regression test for a real bug: `AppInfo` serialized `update_status`
+    /// (Serde's `snake_case` default) while the frontend's `About` component
+    /// reads `appInfo.updateStatus` -- the mismatch made `updateStatus`
+    /// always `undefined`, and `appInfo?.updateStatus.status` threw
+    /// uncaught, crashing the whole Settings panel to a blank screen with no
+    /// error boundary to catch it.
+    #[test]
+    fn app_info_serializes_update_status_as_camel_case() {
+        let info = AppInfo {
+            version: "0.1.0".to_owned(),
+            channel: "stable",
+            update_status: UpdateStatus::PendingRestart,
+        };
+
+        let json = serde_json::to_value(&info).unwrap();
+
+        assert!(
+            json.get("updateStatus").is_some(),
+            "expected a camelCase `updateStatus` key, got: {json}"
+        );
+        assert!(
+            json.get("update_status").is_none(),
+            "the snake_case key must not also be present: {json}"
         );
     }
 }
