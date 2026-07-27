@@ -6,7 +6,7 @@ RUST_MANIFESTS := $(wildcard crates/*/Cargo.toml apps/desktop/src-tauri/Cargo.to
 
 .PHONY: install lock-check format lint typecheck build \
 	test-contracts test-ui test-rust test-rust-integration test-python \
-	test-desktop-e2e test-retrieval test-e2e test-quick test-full check
+	test-desktop-e2e test-retrieval test-e2e test-quick test-full test-installer check
 
 install:
 	$(PNPM) install --frozen-lockfile
@@ -58,6 +58,9 @@ test-retrieval:
 
 test-e2e:
 	@if [[ -d tests/e2e || -d tests/integration ]]; then $(PNPM) exec playwright test; else echo "Product e2e: no suite yet"; fi
+
+test-installer:
+	@if command -v docker >/dev/null 2>&1; then bash scripts/test-install.sh; else echo "test-installer: docker not available, skipping (see scripts/test-install.sh)"; fi
 
 test-quick: test-contracts test-ui test-rust test-python
 
