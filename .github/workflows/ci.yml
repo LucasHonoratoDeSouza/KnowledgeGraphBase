@@ -52,7 +52,7 @@ jobs:
         run: make test-desktop-e2e
       - name: Upload Playwright traces/screenshots
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-test-results
           path: test-results/
