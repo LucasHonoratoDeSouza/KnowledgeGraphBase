@@ -113,3 +113,17 @@ jobs:
             -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
             SHA256SUMS
           gh release upload "${{ needs.check-version.outputs.version }}" SHA256SUMS SHA256SUMS.sig --clobber
+
+      - name: Generate and publish SBOM (#54)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b /usr/local/bin v1.49.0
+          # Single tool covering the Rust (Cargo.lock), npm (pnpm-lock.yaml),
+          # and Python (uv.lock/pyproject.toml) dependency trees in one pass,
+          # rather than three separate ecosystem-specific SBOM generators.
+          syft . -o "cyclonedx-json=knowledge-os-${{ needs.check-version.outputs.version }}.cdx.json"
+          gh release upload "${{ needs.check-version.outputs.version }}" \
+            "knowledge-os-${{ needs.check-version.outputs.version }}.cdx.json" --clobber
