@@ -25,6 +25,7 @@ runs:
     - uses: astral-sh/setup-uv@v3
       with:
         enable-cache: true
+        version-file: pyproject.toml
 
     - name: Install Tauri Linux build dependencies
       shell: bash
