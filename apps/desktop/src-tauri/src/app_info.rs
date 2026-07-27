@@ -31,17 +31,62 @@
     reason = "Tauri command handlers deserialize owned IPC arguments and inject State by value"
 )]
 
+use std::sync::Mutex;
+
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 
 /// Build-time channel override, baked in via `KNOWLEDGE_OS_CHANNEL`.
 const CHANNEL_ENV: Option<&str> = option_env!("KNOWLEDGE_OS_CHANNEL");
 
-/// Version and channel of the running build, exposed to the frontend.
+/// The self-update path's current state, as observable in Settings → About
+/// (T23). Updated by `check_for_updates` in `lib.rs` and read by
+/// [`get_app_info`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum UpdateStatus {
+    /// No update check has found anything actionable (yet, or the vault is
+    /// already current).
+    #[default]
+    Idle,
+    /// An update check is currently in flight.
+    Checking,
+    /// An update finished downloading and installing; relaunching applies
+    /// it.
+    PendingRestart,
+    /// The most recent update check or install attempt failed.
+    Failed { message: String },
+}
+
+/// Shared, thread-safe holder for the current [`UpdateStatus`], managed via
+/// `app.manage(...)`.
+#[derive(Default)]
+pub struct UpdateStatusState(Mutex<UpdateStatus>);
+
+impl UpdateStatusState {
+    /// Replaces the current status.
+    pub fn set(&self, status: UpdateStatus) {
+        if let Ok(mut guard) = self.0.lock() {
+            *guard = status;
+        }
+    }
+
+    /// Returns a clone of the current status.
+    #[must_use]
+    pub fn get(&self) -> UpdateStatus {
+        self.0
+            .lock()
+            .map_or(UpdateStatus::Idle, |guard| guard.clone())
+    }
+}
+
+/// Version, channel, and update status of the running build, exposed to the
+/// frontend.
 #[derive(Debug, Clone, Serialize)]
 pub struct AppInfo {
     pub version: String,
     pub channel: &'static str,
+    pub update_status: UpdateStatus,
 }
 
 /// Returns this build's release channel: `"stable"` or `"dev"`.
@@ -59,14 +104,23 @@ fn resolve_channel(raw: Option<&str>) -> &'static str {
     }
 }
 
-/// Returns the running build's version and channel.
+/// Returns the running build's version, channel, and current update status.
 #[must_use]
 #[tauri::command]
-pub fn get_app_info(app: AppHandle) -> AppInfo {
+pub fn get_app_info(app: AppHandle, update_status: State<'_, UpdateStatusState>) -> AppInfo {
     AppInfo {
         version: app.package_info().version.to_string(),
         channel: channel(),
+        update_status: update_status.get(),
     }
+}
+
+/// Relaunches the app to apply an already-downloaded, installed update
+/// (Settings → About's "Restart now" action, T23). In practice the process
+/// exits and restarts before this ever returns to its caller.
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.restart()
 }
 
 /// Returns the rotating log file's path (T22), for Settings' "copy log
@@ -100,5 +154,32 @@ mod tests {
     #[test]
     fn resolves_dev_channel_for_the_explicit_dev_value() {
         assert_eq!(resolve_channel(Some("dev")), "dev");
+    }
+
+    #[test]
+    fn update_status_state_defaults_to_idle() {
+        let state = UpdateStatusState::default();
+        assert_eq!(state.get(), UpdateStatus::Idle);
+    }
+
+    #[test]
+    fn update_status_state_round_trips_pending_restart() {
+        let state = UpdateStatusState::default();
+        state.set(UpdateStatus::PendingRestart);
+        assert_eq!(state.get(), UpdateStatus::PendingRestart);
+    }
+
+    #[test]
+    fn update_status_state_round_trips_a_failure_message() {
+        let state = UpdateStatusState::default();
+        state.set(UpdateStatus::Failed {
+            message: "network timeout".to_owned(),
+        });
+        assert_eq!(
+            state.get(),
+            UpdateStatus::Failed {
+                message: "network timeout".to_owned()
+            }
+        );
     }
 }

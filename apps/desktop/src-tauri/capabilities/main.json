@@ -32,6 +32,7 @@
     "allow-provider-remove",
     "allow-get-app-info",
     "allow-get-log-path",
+    "allow-restart-app",
     "dialog:allow-open",
     "core:path:default",
     "core:window:allow-minimize",

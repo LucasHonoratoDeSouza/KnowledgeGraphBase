@@ -666,12 +666,14 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] About section displays current version and channel, sourced from T9's command.
-- [ ] A pending-restart state renders as a non-modal, non-blocking indicator with a "Restart now" action (unit test asserts non-modal rendering — no focus trap/overlay).
-- [ ] Repeated update failures (from T13's logged events) surface in Settings → About.
-- [ ] A test (existing startup timing assertion or a new one) confirms the app's first interactive render is not gated on the update check/download completing.
-- [ ] Gate check passes: `make test-ui`, `make test-desktop-e2e`
-- [ ] **This is the last task in Phase 4a — natural checkpoint before 4b, since this completes all data-safety and observability work.**
+- [x] About section displays current version and channel, sourced from T9's command. `get_app_info` extended to also return `update_status`; `About.tsx` renders "Version {version} · {channel} channel". `About.test.tsx::"displays the current version and channel from get_app_info"`.
+- [x] A pending-restart state renders as a non-modal, non-blocking indicator with a "Restart now" action (unit test asserts non-modal rendering — no focus trap/overlay). `About.test.tsx::"renders a non-modal, non-blocking pending-restart indicator with a working Restart now action"` — asserts a `role="status"` region, no `role="dialog"`/`aria-modal="true"` anywhere, and that clicking "Restart now" calls the client's `restart()` (→ `restart_app` → `AppHandle::restart()`).
+- [x] Repeated update failures (from T13's logged events) surface in Settings → About. `check_for_updates` (`lib.rs`) now sets a shared `UpdateStatusState` to `Failed { message }` on every `Err` branch (in addition to T13's existing `log_update_error` call), which `get_app_info` reads; `About.tsx` renders it as a `role="alert"`. `About.test.tsx::"surfaces a repeated update failure's message"`.
+- [x] A test (existing startup timing assertion or a new one) confirms the app's first interactive render is not gated on the update check/download completing. New Playwright case `"keeps the app interactive immediately, never gated on the update check completing"` — asserts the setup UI is visible/interactive immediately after `page.goto("/")`, documented as a regression guard for `check_for_updates` staying spawned (not awaited) in `setup()`.
+- [x] Gate check passes: `make test-ui` (179/179 pass, apps/desktop + packages/ui), `make test-desktop-e2e` (35/35 pass -- 33 pre-existing + 2 new: the About case above and the version/channel/log-path case).
+- [x] **This is the last task in Phase 4a — natural checkpoint before 4b, since this completes all data-safety and observability work.**
+
+**SPEC_DEVIATION / necessary wiring beyond the listed `Where`**: `About.tsx` was previously never mounted anywhere in the real app -- `apps/desktop/src/app/AppShell.tsx` now renders it alongside `AISettings` when Settings is open (new `aboutClient` prop, defaulting to `ipcAboutClient`), and `apps/desktop/src/main.tsx`/`apps/desktop/src/e2e/client.ts` gained a `browserE2EAboutClient` (mirroring every other e2e-mode fake client) so the new Playwright cases don't hit a real, unavailable `invoke()` in the browser-only e2e harness. Backend: `app_info.rs` gained `UpdateStatus`/`UpdateStatusState`/`restart_app`; `lib.rs`'s `check_for_updates` now updates that shared state on every branch; `build.rs`/`capabilities/main.json`/`ipc.rs`/`tests/ipc_contract.rs` gained the `restart_app` command entry (same pattern established in T22 for `get_app_info`/`get_log_path`).
 
 **Tests**: unit + e2e
 **Gate**: full

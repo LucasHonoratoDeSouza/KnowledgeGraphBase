@@ -25,6 +25,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(editor::DocumentCommandState::default())
+        .manage(app_info::UpdateStatusState::default())
         .setup(|app| {
             logging::init_logging(app)?;
             let data_directory = app.path().app_local_data_dir()?;
@@ -39,6 +40,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info::get_app_info,
             app_info::get_log_path,
+            app_info::restart_app,
             commands::workspace_get_state,
             commands::search_execute,
             commands::source_capture,
@@ -70,34 +72,59 @@ pub fn run() {
         .expect("error while running Knowledge OS");
 }
 
-/// Silently installs any available update and relaunches.
+/// Checks for, downloads, and installs any available update -- applying it
+/// requires the user to relaunch (Settings → About's "Restart now", T23).
 ///
-/// Runs once at startup so a closed-and-reopened build always ends up on
-/// the latest push for its channel without any user interaction. Every
-/// failure branch is logged via `logging::log_error` (T8) before returning
-/// -- this is observability only; the update/install flow itself is
-/// unchanged from before (each branch still returns silently to the
-/// caller).
+/// Runs once at startup, spawned rather than awaited by `setup()`, so
+/// startup is never gated on this (MVP-48 AC4). Every outcome -- success or
+/// failure -- updates the shared `UpdateStatusState` Settings → About reads
+/// (T23) and is logged via `logging` (T8/T13): failures keep their existing
+/// `log_update_error` call, a successful install is logged too (MVP-48
+/// AC5's "success or failure" wording).
 async fn check_for_updates(app: &tauri::AppHandle) {
+    let status = app.state::<app_info::UpdateStatusState>();
+    status.set(app_info::UpdateStatus::Checking);
+
     let updater = match app.updater() {
         Ok(updater) => updater,
         Err(error) => {
             log_update_error("updater-unavailable", &error);
+            status.set(app_info::UpdateStatus::Failed {
+                message: error.to_string(),
+            });
             return;
         }
     };
 
     let update = match updater.check().await {
         Ok(Some(update)) => update,
-        Ok(None) => return,
+        Ok(None) => {
+            status.set(app_info::UpdateStatus::Idle);
+            return;
+        }
         Err(error) => {
             log_update_error("update-check-failed", &error);
+            status.set(app_info::UpdateStatus::Failed {
+                message: error.to_string(),
+            });
             return;
         }
     };
 
-    if let Err(error) = update.download_and_install(|_, _| {}, || {}).await {
-        log_update_error("update-install-failed", &error);
+    match update.download_and_install(|_, _| {}, || {}).await {
+        Ok(()) => {
+            logging::log_event(
+                "update-installed",
+                "update downloaded and installed; restart pending",
+            );
+            status.set(app_info::UpdateStatus::PendingRestart);
+        }
+        Err(error) => {
+            log_update_error("update-install-failed", &error);
+            status.set(app_info::UpdateStatus::Failed {
+                message: error.to_string(),
+            });
+        }
     }
 }
 
