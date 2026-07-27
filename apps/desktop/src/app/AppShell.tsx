@@ -52,8 +52,11 @@ import {
 } from "../editor";
 import {
   AISettings,
+  About,
   Onboarding,
+  ipcAboutClient,
   ipcSettingsClient,
+  type AboutClient,
   type FolderPicker,
   type ModelProfile,
   type SettingsClient,
@@ -93,6 +96,7 @@ import {
 export type PrimaryMode = "Ingest" | "Retrieve";
 
 interface AppShellProps {
+  aboutClient?: AboutClient;
   editorClient?: EditorClient;
   folderPicker?: FolderPicker;
   initialMode?: PrimaryMode;
@@ -1754,6 +1758,7 @@ function RetrieveSurface({
 }
 
 export function AppShell({
+  aboutClient = ipcAboutClient,
   editorClient = ipcEditorClient,
   folderPicker,
   initialMode = "Ingest",
@@ -2035,11 +2040,14 @@ export function AppShell({
           <WindowControls chrome={windowChrome} maximized={maximized} />
         </header>
         {settingsOpen ? (
-          <AISettings
-            client={settingsClient}
-            initial={settings}
-            onChange={setSettings}
-          />
+          <>
+            <AISettings
+              client={settingsClient}
+              initial={settings}
+              onChange={setSettings}
+            />
+            <About client={aboutClient} />
+          </>
         ) : (
           <div
             aria-labelledby={`${mode.toLowerCase()}-tab`}

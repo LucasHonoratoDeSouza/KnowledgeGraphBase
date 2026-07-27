@@ -29,6 +29,7 @@ pub const DECLARED_COMMANDS: &[&str] = &[
     "provider_remove",
     "get_app_info",
     "get_log_path",
+    "restart_app",
 ];
 
 #[derive(Debug, Clone, Copy)]
