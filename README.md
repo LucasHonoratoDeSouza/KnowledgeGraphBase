@@ -46,4 +46,6 @@ pnpm tauri dev
 
 ## License
 
-Not yet set.
+MIT — see [`LICENSE`](LICENSE).
+
+MIT is permissive: you may redistribute the AppImage (or any built artifact), modified or not, for free or for a fee, without asking permission — the only requirement is keeping the copyright notice and license text with any copy you distribute. This is what makes third-party packaging (AUR, Flathub, Homebrew, etc.) and mirroring the installer legally unambiguous.
