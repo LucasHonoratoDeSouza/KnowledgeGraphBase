@@ -820,11 +820,15 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] README's "Linux system dependencies" block states the exact `apt` line and notes it's kept in sync with `.github/actions/setup-tauri-build/action.yml` (the shared source of truth), plus notes for non-Debian distros.
-- [ ] README documents install, upgrade, data location, and uninstall in one place.
-- [ ] A contributor following only the README from a clean Ubuntu container reaches a running app (final end-to-end validation of the whole epic's onboarding promise) — this is the Verifier's job to confirm independently, not self-certified here.
-- [ ] Gate check passes: `make check`
-- [ ] **This is the last task in Phase 4b and the last task overall — the Verifier runs automatically after this commit.**
+- [x] README's new "Linux system dependencies" block (under "Getting started") states the exact `apt` line verbatim from `.github/actions/setup-tauri-build/action.yml`'s "Install Tauri Linux build dependencies" step, links that file as the shared source of truth, and gives Fedora/`dnf` and Arch/`pacman` package-name notes for non-Debian distros.
+- [x] README documents install ("Installing Knowledge OS"), upgrade ("Run it again any time to upgrade in place"), data location ("Vault layout and data locations"), and uninstall (`--uninstall`, same section) all within `README.md`, cross-linked rather than duplicated (vault layout from T21, uninstall behavior from T17).
+- [x] A contributor following only the README from a clean Ubuntu container reaches a running app — self-certification explicitly out of scope per this criterion; left for the Verifier to confirm independently, per the batch orchestrator's instruction not to dispatch the Verifier from within this batch.
+- [x] Gate check passes: `make check` (lock-check, format, lint, typecheck all pass; `make test-desktop-e2e` 35/35 and `make build` both directly confirmed green; same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10-T28 blocks the combined `test-full` run — this worktree's root is `agent-a736a81a6b4f53276` instead of `Knowledge GraphBase`, unrelated to this doc-only task.)
+- [x] **This is the last task in Phase 4b and the last task overall for this batch — per the orchestrator's instructions, the Verifier is dispatched separately after this batch's work is merged, not by this worker.**
+
+**Additional fixes made during the final full read-through (within this task's `README.md` scope):**
+- Corrected a stale reference to `.github/workflows/dev-build.yml` (deleted in T10 and replaced by `release-dev.yml`) in the "Dev channel" section — it still named the old, now-nonexistent file.
+- Added a "Contributing and security" section linking `CONTRIBUTING.md` and `SECURITY.md`, neither of which README linked to previously, despite both existing (T6, T25).
 
 **Tests**: none (doc)
 **Gate**: build

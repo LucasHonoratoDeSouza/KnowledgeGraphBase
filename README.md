@@ -58,6 +58,19 @@ The installer targets any Linux distribution with a POSIX `sh`, `curl`, and stan
 
 Prerequisites: Node (see `.node-version`) with Corepack enabled, Rust (see `rust-toolchain.toml`), and `uv` for the optional Python services.
 
+### Linux system dependencies
+
+Building the desktop app from source needs Tauri's Linux system libraries. On Debian/Ubuntu:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
+```
+
+This exact line is kept in sync with [`.github/actions/setup-tauri-build/action.yml`](.github/actions/setup-tauri-build/action.yml) — the single source of truth CI, `release-dev.yml`, and `release-stable.yml` all use, so it can never silently drift from what actually builds the app. If you're on a non-Debian distro, install the equivalent packages for your package manager (e.g. `webkit2gtk4.1-devel`, `libappindicator-gtk3-devel`, `librsvg2-devel`, `patchelf`, `gtk3-devel` on Fedora/`dnf`, or `webkit2gtk-4.1`, `libappindicator-gtk3`, `librsvg`, `patchelf`, `gtk3` on Arch/`pacman`) — these aren't tested in CI (which runs on Ubuntu), so names may differ slightly.
+
+(The one-line installer above doesn't need any of this — it downloads a prebuilt binary. This section is only for building from source.)
+
 ```bash
 make install       # pnpm + uv workspace install
 make test-quick     # contracts, UI, Rust unit, Python — fast gate
@@ -108,7 +121,7 @@ Never attach your vault's Markdown files or a screenshot of Settings' provider s
 
 ## Dev channel
 
-`.github/workflows/dev-build.yml` builds and publishes a signed `dev` prerelease on every push to `dev`. The installed `.AppImage` silently checks for and installs updates from that release on startup — close and reopen the app to pick up the latest push. The `.deb` package does not self-update; use the AppImage for the auto-updating dev channel.
+`.github/workflows/release-dev.yml` builds and publishes a signed `dev` prerelease on every push to `dev`. The installed `.AppImage` silently checks for and installs updates from that release on startup — close and reopen the app to pick up the latest push. The `.deb` package does not self-update; use the AppImage for the auto-updating dev channel.
 
 ## Verifying a downloaded release
 
@@ -133,6 +146,10 @@ RWQl26FzFJHvxw74sO1pttlHfyHfvsLRNH1y/SU001pRcHTeh/sb2YRd
 minisign -Vm SHA256SUMS -P RWQl26FzFJHvxw74sO1pttlHfyHfvsLRNH1y/SU001pRcHTeh/sb2YRd
 minisign -Vm Knowledge.OS_<version>_amd64.AppImage -P RWQl26FzFJHvxw74sO1pttlHfyHfvsLRNH1y/SU001pRcHTeh/sb2YRd
 ```
+
+## Contributing and security
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the branch model, commit conventions, and local gate; see [`SECURITY.md`](SECURITY.md) to report a vulnerability privately.
 
 ## License
 
