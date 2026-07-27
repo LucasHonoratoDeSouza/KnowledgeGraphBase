@@ -17,9 +17,22 @@
 //! takes one explicit, deliberate branch instead of silently reading
 //! (possibly incompatible) data.
 
-use std::path::Path;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use thiserror::Error;
+
+/// Directory name (under `<vault>/.knowledge-os/`) holding timestamped
+/// pre-migration Markdown backups.
+const BACKUPS_DIR_NAME: &str = "backups";
+
+/// Directory names never treated as vault content when walking for
+/// Markdown files to back up (the `SQLite` metadata directory and any
+/// prior backups).
+const EXCLUDED_DIR_NAMES: [&str; 1] = [".knowledge-os"];
 
 /// The `SQLite` schema version this binary expects. Bump alongside
 /// `knowledge-storage`'s own `PRAGMA user_version` (currently set by
@@ -50,13 +63,16 @@ pub enum CompatibilityDecision {
     Refuse(String),
 }
 
-/// Failure reading either persisted version from the vault's `SQLite` file.
+/// Failure reading either persisted version from the vault's `SQLite` file,
+/// or backing up its Markdown content before a migration.
 #[derive(Debug, Error)]
 pub enum MigrationError {
     #[error("could not read the vault's SQLite schema version: {0}")]
     SqliteSchema(String),
     #[error("could not read the vault's format version: {0}")]
     VaultFormat(String),
+    #[error("could not back up the vault's Markdown content: {0}")]
+    Backup(String),
 }
 
 /// Reads both persisted versions from the vault at `vault_root` and
@@ -100,6 +116,73 @@ pub fn check_vault_compatibility(
         EXPECTED_VAULT_FORMAT_VERSION,
         migration_defined,
     ))
+}
+
+/// Creates a timestamped, faithful copy of every Markdown file in the vault
+/// (mirroring its relative directory structure) under
+/// `<vault>/.knowledge-os/backups/markdown-<unix-nanos>/`, and returns that
+/// backup directory's path.
+///
+/// **Contract**: no vault-format migration exists yet that rewrites
+/// Markdown content (only version 1 has ever existed -- see
+/// [`vault_format_migration_defined`]'s doc comment). This function
+/// establishes the mechanism a future one is required to call *before*
+/// writing anything, per design.md's Error Handling Strategy ("cache is
+/// disposable, rebuilt... swapped only on success" applies to `SQLite`;
+/// Markdown is the durable source of truth per AD-002 and must never be
+/// rewritten without a recoverable backup first).
+///
+/// # Errors
+///
+/// Returns [`MigrationError::Backup`] if the backup directory cannot be
+/// created or any Markdown file cannot be read/copied.
+pub fn backup_markdown_before_migration(vault_root: &Path) -> Result<PathBuf, MigrationError> {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| MigrationError::Backup(error.to_string()))?
+        .as_nanos();
+    let backup_dir = vault_root
+        .join(".knowledge-os")
+        .join(BACKUPS_DIR_NAME)
+        .join(format!("markdown-{nanos}"));
+    fs::create_dir_all(&backup_dir).map_err(|error| MigrationError::Backup(error.to_string()))?;
+
+    for markdown_path in find_markdown_files(vault_root)? {
+        let relative = markdown_path
+            .strip_prefix(vault_root)
+            .map_err(|error| MigrationError::Backup(error.to_string()))?;
+        let destination = backup_dir.join(relative);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| MigrationError::Backup(error.to_string()))?;
+        }
+        fs::copy(&markdown_path, &destination)
+            .map_err(|error| MigrationError::Backup(error.to_string()))?;
+    }
+
+    Ok(backup_dir)
+}
+
+/// Recursively collects every `.md` file under `current`, skipping the
+/// `SQLite`/backups metadata directory.
+fn find_markdown_files(current: &Path) -> Result<Vec<PathBuf>, MigrationError> {
+    let mut found = Vec::new();
+    let entries =
+        fs::read_dir(current).map_err(|error| MigrationError::Backup(error.to_string()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| MigrationError::Backup(error.to_string()))?;
+        let path = entry.path();
+        if path.is_dir() {
+            let name = entry.file_name();
+            if EXCLUDED_DIR_NAMES.iter().any(|excluded| name == *excluded) {
+                continue;
+            }
+            found.extend(find_markdown_files(&path)?);
+        } else if path.extension().is_some_and(|extension| extension == "md") {
+            found.push(path);
+        }
+    }
+    Ok(found)
 }
 
 /// Whether a defined migration exists to carry a vault-format version
