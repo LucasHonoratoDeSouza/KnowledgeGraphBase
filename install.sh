@@ -206,10 +206,19 @@ verify_download() {
 }
 
 install_binary() {
+  # Installs via a same-directory temp file + atomic rename rather than an
+  # in-place `cp` over an existing target. A currently-running instance of
+  # Knowledge OS keeps its AppImage mapped into memory by inode; overwriting
+  # that inode's contents in place (what a plain `cp` onto an existing file
+  # does) would corrupt the running process. `mv` within the same filesystem
+  # is a rename() that repoints the path to a new inode, leaving any process
+  # still holding the old inode open and unaffected until it exits.
   appimage="$1"
   mkdir -p "$INSTALL_DIR"
-  cp "$appimage" "${INSTALL_DIR}/${BIN_NAME}"
-  chmod +x "${INSTALL_DIR}/${BIN_NAME}"
+  tmp_target="$(mktemp "${INSTALL_DIR}/.${BIN_NAME}.XXXXXX")"
+  cp "$appimage" "$tmp_target"
+  chmod +x "$tmp_target"
+  mv -f "$tmp_target" "${INSTALL_DIR}/${BIN_NAME}"
 }
 
 # Extracts a launcher icon straight from the verified AppImage
