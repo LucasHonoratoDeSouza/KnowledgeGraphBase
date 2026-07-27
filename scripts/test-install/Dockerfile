@@ -16,8 +16,12 @@ RUN apt-get update \
 
 RUN useradd --create-home --shell /bin/sh tester
 
+# Installed outside $HOME so tests that bind-mount a host directory onto
+# $HOME (to make install state persist across separate `docker run`
+# invocations, e.g. for the idempotent-upgrade and --uninstall checks) don't
+# shadow the script itself.
+COPY install.sh /opt/install.sh
+RUN chmod +x /opt/install.sh
+
 USER tester
 WORKDIR /home/tester
-
-COPY --chown=tester:tester install.sh /home/tester/install.sh
-RUN chmod +x /home/tester/install.sh

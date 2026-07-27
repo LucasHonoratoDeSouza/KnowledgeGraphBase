@@ -139,7 +139,7 @@ test_happy_path() {
   # This expands inside the container's `sh -c`, not here.
   # shellcheck disable=SC2016
   if out=$(run_in_container "-e KNOWLEDGE_OS_INSTALL_API_BASE=http://127.0.0.1:${MOCK_PORT} -e KNOWLEDGE_OS_INSTALL_PUBKEY=${TEST_PUBKEY}" \
-      sh -c './install.sh && test -x "$HOME/.local/bin/knowledge-os" && test -f "$HOME/.local/share/applications/knowledge-os.desktop" && test -f "$HOME/.local/share/icons/hicolor/256x256/apps/knowledge-os.png" && echo ALL_CHECKS_OK' 2>&1); then
+      sh -c '/opt/install.sh && test -x "$HOME/.local/bin/knowledge-os" && test -f "$HOME/.local/share/applications/knowledge-os.desktop" && test -f "$HOME/.local/share/icons/hicolor/256x256/apps/knowledge-os.png" && echo ALL_CHECKS_OK' 2>&1); then
     if printf '%s' "$out" | grep -q "ALL_CHECKS_OK"; then
       pass "happy path: AppImage installed, executable, .desktop entry + icon present"
     else
@@ -178,7 +178,7 @@ PY
   local out status
   set +e
   out=$(run_in_container "-e KNOWLEDGE_OS_INSTALL_API_BASE=http://127.0.0.1:${tamper_port} -e KNOWLEDGE_OS_INSTALL_PUBKEY=${TEST_PUBKEY}" \
-      sh -c './install.sh' 2>&1)
+      sh -c '/opt/install.sh' 2>&1)
   status=$?
   set -e
   kill "$tamper_pid" >/dev/null 2>&1 || true
@@ -201,7 +201,7 @@ test_non_amd64_guard() {
   # This expands inside the container's `sh -c`, not here.
   # shellcheck disable=SC2016
   out=$(run_in_container "-e KNOWLEDGE_OS_INSTALL_API_BASE=http://127.0.0.1:1" \
-      sh -c 'mkdir -p /tmp/fakebin && printf "#!/bin/sh\ncase \"\$1\" in -s) echo Linux;; -m) echo aarch64;; *) echo Linux;; esac\n" > /tmp/fakebin/uname && chmod +x /tmp/fakebin/uname && PATH="/tmp/fakebin:$PATH" ./install.sh' 2>&1)
+      sh -c 'mkdir -p /tmp/fakebin && printf "#!/bin/sh\ncase \"\$1\" in -s) echo Linux;; -m) echo aarch64;; *) echo Linux;; esac\n" > /tmp/fakebin/uname && chmod +x /tmp/fakebin/uname && PATH="/tmp/fakebin:$PATH" /opt/install.sh' 2>&1)
   status=$?
   set -e
 
@@ -210,6 +210,78 @@ test_non_amd64_guard() {
   else
     fail "non-amd64 guard: expected an early unsupported-architecture exit, got status=${status}"
     printf '%s\n' "$out"
+  fi
+}
+
+test_idempotent_upgrade() {
+  local home_dir out1 out2 mtime1 mtime2 desktop_count
+  home_dir="${WORK_DIR}/home-idempotent"
+  mkdir -p "$home_dir"
+
+  out1=$(docker run --rm --network host -v "${home_dir}:/home/tester" \
+      -e KNOWLEDGE_OS_INSTALL_API_BASE="http://127.0.0.1:${MOCK_PORT}" \
+      -e KNOWLEDGE_OS_INSTALL_PUBKEY="$TEST_PUBKEY" \
+      "$IMAGE_TAG" sh -c '/opt/install.sh' 2>&1)
+  mtime1=$(stat -c '%Y' "${home_dir}/.local/bin/knowledge-os" 2>/dev/null || echo "")
+
+  sleep 2
+  out2=$(docker run --rm --network host -v "${home_dir}:/home/tester" \
+      -e KNOWLEDGE_OS_INSTALL_API_BASE="http://127.0.0.1:${MOCK_PORT}" \
+      -e KNOWLEDGE_OS_INSTALL_PUBKEY="$TEST_PUBKEY" \
+      "$IMAGE_TAG" sh -c '/opt/install.sh' 2>&1)
+  mtime2=$(stat -c '%Y' "${home_dir}/.local/bin/knowledge-os" 2>/dev/null || echo "")
+  desktop_count=$(find "${home_dir}/.local/share/applications" -name '*.desktop' 2>/dev/null | wc -l)
+
+  if [ -x "${home_dir}/.local/bin/knowledge-os" ] \
+      && [ "$desktop_count" -eq 1 ] \
+      && [ -n "$mtime1" ] && [ -n "$mtime2" ] && [ "$mtime2" -ge "$mtime1" ] \
+      && printf '%s' "$out2" | grep -qi "upgrading existing install"; then
+    pass "idempotent upgrade: second run replaces the binary in place, exactly one .desktop entry, no duplication"
+  else
+    fail "idempotent upgrade: expected exactly one .desktop entry and a replaced (not duplicated) binary"
+    printf 'run1: %s\nrun2: %s\ndesktop_count=%s\n' "$out1" "$out2" "$desktop_count"
+  fi
+}
+
+test_uninstall_preserves_vault() {
+  local home_dir out status
+  home_dir="${WORK_DIR}/home-uninstall"
+  mkdir -p "${home_dir}/my-vault"
+  echo "important vault data" > "${home_dir}/my-vault/marker.txt"
+
+  docker run --rm --network host -v "${home_dir}:/home/tester" \
+      -e KNOWLEDGE_OS_INSTALL_API_BASE="http://127.0.0.1:${MOCK_PORT}" \
+      -e KNOWLEDGE_OS_INSTALL_PUBKEY="$TEST_PUBKEY" \
+      "$IMAGE_TAG" sh -c '/opt/install.sh' >/dev/null 2>&1
+
+  set +e
+  out=$(docker run --rm --network host -v "${home_dir}:/home/tester" \
+      "$IMAGE_TAG" sh -c '/opt/install.sh --uninstall' 2>&1)
+  status=$?
+  set -e
+
+  if [ "$status" -eq 0 ] \
+      && [ ! -e "${home_dir}/.local/bin/knowledge-os" ] \
+      && [ ! -e "${home_dir}/.local/share/applications/knowledge-os.desktop" ] \
+      && [ ! -e "${home_dir}/.local/share/icons/hicolor/256x256/apps/knowledge-os.png" ] \
+      && [ -f "${home_dir}/my-vault/marker.txt" ] \
+      && [ "$(cat "${home_dir}/my-vault/marker.txt")" = "important vault data" ]; then
+    pass "--uninstall: removes binary/.desktop/icon, leaves the vault marker file untouched"
+  else
+    fail "--uninstall: expected binary/.desktop/icon removed and vault marker preserved"
+    printf '%s\n' "$out"
+  fi
+}
+
+test_no_sudo_invocation() {
+  # Static check on the real script, not the container -- MVP-49 AC10.
+  # `sudo` only appears inside printed instructional strings (the exact
+  # command a user would run themselves for libfuse2), never executed by
+  # the script itself.
+  if grep -n 'sudo' "${ROOT_DIR}/install.sh" | grep -qv -E '^\s*[0-9]+:\s*#|log "'; then
+    fail "no-sudo check: found a 'sudo' usage outside comments/printed instructional text"
+  else
+    pass "no-sudo check: install.sh never invokes sudo (only mentions it in comments/user-facing instructions)"
   fi
 }
 
@@ -236,6 +308,15 @@ main() {
 
   echo "== T16: non-amd64 guard =="
   test_non_amd64_guard
+
+  echo "== T17: idempotent upgrade =="
+  test_idempotent_upgrade
+
+  echo "== T17: --uninstall preserves the vault =="
+  test_uninstall_preserves_vault
+
+  echo "== T17: no-sudo static check =="
+  test_no_sudo_invocation
 
   if [ "$FAILURES" -gt 0 ]; then
     echo "${FAILURES} check(s) failed"
