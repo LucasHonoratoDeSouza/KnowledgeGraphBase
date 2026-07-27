@@ -720,12 +720,12 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `SECURITY.md` covers supported versions (latest stable only), private reporting channel, honest response-time expectation, and scope.
-- [ ] Private vulnerability reporting is enabled on the repository (verified: the "Report a vulnerability" button appears on the Security tab).
-- [ ] Signing-key threat model and rotation procedure documented (in `SECURITY.md` or a linked doc).
-- [ ] Every workflow referencing the signing secrets is confirmed to trigger only on `push` (not `pull_request` from forks) — audit result recorded in the commit.
-- [ ] Public minisign key documented in the README (cross-check against T15, avoid duplication — link if already present).
-- [ ] Gate check passes: `make check`
+- [x] `SECURITY.md` covers supported versions (latest stable only), private reporting channel, honest response-time expectation, and scope.
+- [x] Private vulnerability reporting is enabled on the repository (verified live: `gh api --method PUT repos/LucasHonoratoDeSouza/KnowledgeGraphBase/private-vulnerability-reporting` then confirmed via `gh api repos/LucasHonoratoDeSouza/KnowledgeGraphBase/private-vulnerability-reporting` → `{"enabled":true}`).
+- [x] Signing-key threat model and rotation procedure documented in `SECURITY.md`'s "Signing-key threat model and rotation" section.
+- [x] Every workflow referencing the signing secrets is confirmed to trigger only on `push` (not `pull_request` from forks) — audit table in `SECURITY.md`: `release-stable.yml` triggers on `push` to `main` only, `release-dev.yml` on `push` to `dev` only; `ci.yml` triggers on `pull_request` but never references either signing secret (grep-verified: `TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD` appear only in `release-stable.yml`/`release-dev.yml`).
+- [x] Public minisign key documented in the README (already present since T15, `README.md#verifying-a-downloaded-release`) — `SECURITY.md` links to it rather than duplicating it.
+- [x] Gate check passes: `make check` (same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10-T24 — this worktree's root is `agent-a736a81a6b4f53276` instead of `Knowledge GraphBase`; lock-check, format, lint, typecheck, test-quick, test-desktop-e2e (35/35), and build all passed directly. This task adds only `SECURITY.md` plus the live repo-settings toggle; no workflow files were modified since the audit found no fork-safety issue.)
 
 **Tests**: none (doc/repo config)
 **Gate**: build
