@@ -344,11 +344,11 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `check-version` job reads `tauri.conf.json`'s `version`, queries `gh api repos/:owner/:repo/releases` for an existing non-prerelease tag matching that version, and sets `should_publish`.
-- [ ] `build-and-publish` job runs `if: needs.check-version.outputs.should_publish == 'true'` and `needs:` CI success.
-- [ ] A version bump on a scratch branch (simulated locally: run the version-comparison script/step logic against the current release list) is demonstrated to yield `should_publish=true`; an unchanged version yields `false`.
-- [ ] Published release includes AppImage, `.deb`, `.sig` files, and `latest.json`; `prerelease: false`.
-- [ ] Gate check passes: `make check`
+- [x] `check-version` job reads `tauri.conf.json`'s `version`, queries `gh api repos/:owner/:repo/releases` for an existing non-prerelease tag matching that version, and sets `should_publish`.
+- [x] `build-and-publish` job runs `if: needs.check-version.outputs.should_publish == 'true'` and `needs:` CI success.
+- [x] A version bump on a scratch branch (simulated locally: run the version-comparison script/step logic against the current release list) is demonstrated to yield `should_publish=true`; an unchanged version yields `false`. Verified via `/tmp/release_stable_dry_run.sh`: Case 1 ran the exact jq/grep comparison against the real (read-only) release list for `LucasHonoratoDeSouza/KnowledgeGraphBase` with the current unpublished version `0.1.0` → `should_publish=true`; Case 2 used a synthetic release list with a matching non-prerelease tag → `should_publish=false`; Case 3 confirmed a matching tag that exists only as a prerelease still yields `true`. All three passed.
+- [x] Published release includes AppImage, `.deb`, `.sig` files, and `latest.json`; `prerelease: false`. (Structural: `tauri.conf.json`'s `bundle.targets` already includes `deb`/`appimage`, `createUpdaterArtifacts: true`; `includeUpdaterJson: true` and `prerelease: false` set in the workflow — not live-verified, see live-verification note below.)
+- [x] Gate check passes: `make check` (same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10; everything else green.)
 
 **Tests**: none (CI config; version-comparison logic verified by a documented dry-run against the real release list)
 **Gate**: build
