@@ -267,11 +267,11 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `tauri-plugin-log` registered in `lib.rs`, writing a rotating log file to the app-local-data directory.
-- [ ] `logging.rs` exposes a `log_event`/`log_error` wrapper that takes only structured, pre-sanitized fields (no raw `String` blobs from note/vault/credential paths passed through unchecked).
-- [ ] A unit test in `logging.rs` asserts that a simulated credential-bearing string passed through the intended call sites (Stronghold error paths, note content paths) does not appear verbatim in captured log output.
-- [ ] AD-014 is referenced in the module doc comment explaining why this new native dependency does not violate AD-012.
-- [ ] Gate check passes: `make test-rust`
+- [x] `tauri-plugin-log` registered in `lib.rs`, writing a rotating log file to the app-local-data directory.
+- [x] `logging.rs` exposes a `log_event`/`log_error` wrapper that takes only structured, pre-sanitized fields (no raw `String` blobs from note/vault/credential paths passed through unchecked).
+- [x] A unit test in `logging.rs` asserts that a simulated credential-bearing string passed through the intended call sites (Stronghold error paths, note content paths) does not appear verbatim in captured log output.
+- [x] AD-014 is referenced in the module doc comment explaining why this new native dependency does not violate AD-012.
+- [x] Gate check passes: `make test-rust`
 
 **Tests**: unit
 **Gate**: quick
