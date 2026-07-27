@@ -84,6 +84,7 @@ jobs:
             \( -name '*.AppImage' -o -name '*.deb' -o -name '*.sig' -o -name 'latest.json' \) \
             -exec sha256sum {} \; \
             | sed -E 's#  .*/([^/]+)$#  \1#' \
+            | awk '{hash=substr($0,1,64); name=substr($0,67); gsub(/ /,".",name); print hash"  "name}' \
             | sort -k2 > SHA256SUMS
           corepack pnpm exec tauri signer sign \
             -k "$TAURI_SIGNING_PRIVATE_KEY" \
