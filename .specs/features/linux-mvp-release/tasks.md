@@ -501,13 +501,13 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Script warns with the exact `PATH`-append line when `~/.local/bin` is absent from `PATH`.
-- [ ] Script detects missing `libfuse2` and prints the precise apt/dnf/pacman line for the detected distro.
-- [ ] Running the installer twice upgrades in place (verified by the container test: run once, note the binary's mtime/version, run again, confirm no duplicate `.desktop` entries and the binary is replaced not appended).
-- [ ] `install.sh --uninstall` removes the binary, `.desktop` entry, and icon; prints the vault location; does not touch the vault directory (container test creates a dummy vault marker file and asserts it survives uninstall).
-- [ ] No step in the script invokes or requires `sudo` (verified by `grep -n sudo install.sh` returning nothing, or only comments).
-- [ ] Successful install prints the installed version and how to launch.
-- [ ] Gate check passes: `make test-installer`
+- [x] Script warns with the exact `PATH`-append line when `~/.local/bin` is absent from `PATH`. `check_path_warning()`; verified in a local (non-container) run with `PATH` restricted to `/usr/bin:/bin`: printed `export PATH="<install_dir>:$PATH"` exactly.
+- [x] Script detects missing `libfuse2` and prints the precise apt/dnf/pacman line for the detected distro. `check_libfuse2()`, keyed off `/etc/os-release`'s `ID`; verified in the same local run (no `libfuse2` present) -- printed the exact `apt-get install -y libfuse2` line.
+- [x] Running the installer twice upgrades in place (verified by the container test: run once, note the binary's mtime/version, run again, confirm no duplicate `.desktop` entries and the binary is replaced not appended). `scripts/test-install.sh`'s `test_idempotent_upgrade` (container, not run live here -- see live-verification note). Also verified locally (non-container, real signed fixtures, real AppImage): ran `install.sh` twice against the same `HOME`; second run printed "upgrading existing install", binary's mtime advanced (content replaced, not appended), exactly one `.desktop` file present after both runs.
+- [x] `install.sh --uninstall` removes the binary, `.desktop` entry, and icon; prints the vault location; does not touch the vault directory (container test creates a dummy vault marker file and asserts it survives uninstall). `uninstall()`/`print_vault_location()`. `scripts/test-install.sh`'s `test_uninstall_preserves_vault` (container, not run live here). Verified locally: created a dummy `my-vault/marker.txt`, ran `install.sh --uninstall` -- binary/.desktop/icon all removed, marker file byte-for-byte unchanged, vault location message printed pointing at the settings database. Re-running `--uninstall` on an already-clean install prints "was not installed (nothing to remove)" rather than erroring.
+- [x] No step in the script invokes or requires `sudo` (verified by `grep -n sudo install.sh` returning nothing, or only comments). `grep -n sudo install.sh` matches only a doc comment and three `log "..."` printed strings that tell the user the exact command *they* should run for a missing `libfuse2` -- `install.sh` itself never executes `sudo`. `scripts/test-install.sh`'s `test_no_sudo_invocation` encodes this same distinction as an automated static check (any `sudo` match outside a `#` comment or a `log "` line fails the check); run directly against the real `install.sh`, it passes.
+- [x] Successful install prints the installed version and how to launch. Already present from T16 (`Knowledge OS ${version} installed successfully.` / upgraded variant + launch line); re-verified in this task's local runs.
+- [x] Gate check passes: `make test-installer` (exits 0 -- skip path; `docker` unavailable in this environment. See T16's live-verification note; the same human/Docker run also exercises this task's `test_idempotent_upgrade`/`test_uninstall_preserves_vault`/`test_no_sudo_invocation`.)
 
 **Tests**: e2e (container-based, extending T16's harness)
 **Gate**: full

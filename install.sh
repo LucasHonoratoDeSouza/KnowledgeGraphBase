@@ -69,6 +69,51 @@ check_os() {
   fi
 }
 
+# Warns (does not fail) when ~/.local/bin isn't on PATH, so the freshly
+# installed launcher command is actually runnable from a shell.
+check_path_warning() {
+  case ":${PATH}:" in
+    *":${INSTALL_DIR}:"*) ;;
+    *)
+      log ""
+      log "warning: ${INSTALL_DIR} is not on your PATH. Add this to your shell's rc file:"
+      log "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+      ;;
+  esac
+}
+
+# Detects a missing libfuse2 (required by the AppImage runtime to mount
+# itself) and prints the exact distro-appropriate install line, rather than
+# letting the AppImage fail later with a baffling generic error. Detection
+# only; never installs anything itself (no sudo -- MVP-49 AC10).
+check_libfuse2() {
+  if command -v ldconfig >/dev/null 2>&1 && ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
+    return
+  fi
+
+  distro_id=""
+  if [ -r /etc/os-release ]; then
+    distro_id="$(sed -n 's/^ID=//p' /etc/os-release | tr -d '"')"
+  fi
+
+  log ""
+  log "warning: libfuse2 was not detected -- the AppImage may fail to run without it."
+  case "$distro_id" in
+    ubuntu | debian)
+      log "  Install it with: sudo apt-get install -y libfuse2"
+      ;;
+    fedora)
+      log "  Install it with: sudo dnf install -y fuse-libs"
+      ;;
+    arch)
+      log "  Install it with: sudo pacman -S fuse2"
+      ;;
+    *)
+      log "  Install your distribution's FUSE2 runtime package (commonly named libfuse2, fuse-libs, or fuse2)."
+      ;;
+  esac
+}
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command '$1' not found -- please install it and re-run"
 }
@@ -201,7 +246,62 @@ install_desktop_entry() {
   fi
 }
 
+# The Tauri app data directory, derived from tauri.conf.json's `identifier`
+# (dev.knowledge-os.desktop), following Tauri's documented Linux convention
+# of `$XDG_DATA_HOME/<identifier>` (default `~/.local/share/<identifier>`).
+app_data_dir() {
+  printf '%s/dev.knowledge-os.desktop' "${XDG_DATA_HOME:-${HOME}/.local/share}"
+}
+
+# Prints the user's vault location without touching it. Reads `vault_root`
+# out of the local settings database when possible (best-effort: no hard
+# dependency on `sqlite3` being installed); otherwise points the user at the
+# app data directory where that setting lives.
+print_vault_location() {
+  data_dir="$(app_data_dir)"
+  settings_db="${data_dir}/settings.sqlite3"
+  vault_root=""
+  if [ -f "$settings_db" ] && command -v sqlite3 >/dev/null 2>&1; then
+    vault_root="$(sqlite3 "$settings_db" "SELECT vault_root FROM workspace_settings LIMIT 1;" 2>/dev/null || true)"
+  fi
+
+  if [ -n "$vault_root" ]; then
+    log "Your vault lives at: ${vault_root} -- it has not been touched by this uninstall."
+  else
+    log "Your vault's location is recorded in ${settings_db} (vault_root) -- it has not been touched by this uninstall."
+  fi
+}
+
+# Removes the binary, .desktop entry, and icon. Never touches the vault
+# (MVP-49 AC9) -- nothing here reads or writes any path the vault could live
+# under.
+uninstall() {
+  removed_any=0
+  for path in "${INSTALL_DIR}/${BIN_NAME}" "${DESKTOP_DIR}/${BIN_NAME}.desktop" "${ICON_DIR}/${BIN_NAME}.png"; do
+    if [ -e "$path" ]; then
+      rm -f "$path"
+      removed_any=1
+    fi
+  done
+
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
+  fi
+
+  if [ "$removed_any" -eq 1 ]; then
+    log "Knowledge OS has been uninstalled."
+  else
+    log "Knowledge OS was not installed (nothing to remove)."
+  fi
+  print_vault_location
+}
+
 main() {
+  if [ "${1:-}" = "--uninstall" ]; then
+    uninstall
+    return
+  fi
+
   check_os
   check_arch
   require_cmd curl
@@ -210,6 +310,9 @@ main() {
   require_cmd tar
 
   mkdir -p "$CACHE_DIR"
+
+  already_installed=0
+  [ -x "${INSTALL_DIR}/${BIN_NAME}" ] && already_installed=1
 
   log "resolving the latest stable Knowledge OS release..."
   release_json="$(resolve_latest_stable_release)"
@@ -244,12 +347,22 @@ main() {
   ensure_minisign
   verify_download "$appimage_path" "$appimage_sig_path" "$sums_path" "$sums_sig_path"
 
-  log "installing to ${INSTALL_DIR}/${BIN_NAME}..."
+  if [ "$already_installed" -eq 1 ]; then
+    log "upgrading existing install at ${INSTALL_DIR}/${BIN_NAME}..."
+  else
+    log "installing to ${INSTALL_DIR}/${BIN_NAME}..."
+  fi
   install_binary "$appimage_path"
   install_desktop_entry
+  check_libfuse2
+  check_path_warning
 
   log ""
-  log "Knowledge OS ${version} installed successfully."
+  if [ "$already_installed" -eq 1 ]; then
+    log "Knowledge OS upgraded to ${version} successfully."
+  else
+    log "Knowledge OS ${version} installed successfully."
+  fi
   log "Launch it from your application launcher, or run: ${INSTALL_DIR}/${BIN_NAME}"
 }
 
