@@ -8,7 +8,9 @@ describe("VaultCompatibilityNotice", () => {
     render(<VaultCompatibilityNotice status={{ kind: "rebuilding" }} />);
 
     // Observable: a status region with visible text.
-    expect(screen.getByRole("status")).toHaveTextContent("Preparing your vault");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Preparing your vault",
+    );
 
     // Not a frozen window: no dialog role, no aria-modal anywhere in the
     // rendered output -- the rest of the app stays interactive.
@@ -29,7 +31,8 @@ describe("VaultCompatibilityNotice", () => {
       <VaultCompatibilityNotice
         status={{
           kind: "refused",
-          message: "This vault was last opened by a newer version of Knowledge OS.",
+          message:
+            "This vault was last opened by a newer version of Knowledge OS.",
         }}
       />,
     );

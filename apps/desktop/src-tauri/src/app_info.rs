@@ -69,6 +69,20 @@ pub fn get_app_info(app: AppHandle) -> AppInfo {
     }
 }
 
+/// Returns the rotating log file's path (T22), for Settings' "copy log
+/// path" action and the bug-report path documented in the README.
+///
+/// # Errors
+///
+/// Returns a renderer-safe string error when the app-local-data directory
+/// cannot be resolved.
+#[tauri::command]
+pub fn get_log_path(app: AppHandle) -> Result<String, String> {
+    crate::logging::log_file_path(&app)
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

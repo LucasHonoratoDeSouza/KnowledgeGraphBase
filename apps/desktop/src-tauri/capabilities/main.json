@@ -30,6 +30,8 @@
     "allow-provider-rotate",
     "allow-provider-test",
     "allow-provider-remove",
+    "allow-get-app-info",
+    "allow-get-log-path",
     "dialog:allow-open",
     "core:path:default",
     "core:window:allow-minimize",

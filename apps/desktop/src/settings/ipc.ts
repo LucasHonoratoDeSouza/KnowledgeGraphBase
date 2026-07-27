@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import type { AboutClient } from "./About";
 import type {
   AiConfiguration,
   OnboardingRequest,
@@ -31,4 +32,9 @@ export const ipcSettingsClient: SettingsClient = {
     invoke<SettingsSnapshot>("provider_test", { provider }),
   removeProvider: (provider: ProviderId) =>
     invoke<SettingsSnapshot>("provider_remove", { provider }),
+};
+
+/** Settings → About's IPC client (T22/T23). */
+export const ipcAboutClient: AboutClient = {
+  getLogPath: () => invoke<string>("get_log_path"),
 };

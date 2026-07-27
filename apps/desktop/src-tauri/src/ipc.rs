@@ -27,6 +27,8 @@ pub const DECLARED_COMMANDS: &[&str] = &[
     "provider_rotate",
     "provider_test",
     "provider_remove",
+    "get_app_info",
+    "get_log_path",
 ];
 
 #[derive(Debug, Clone, Copy)]

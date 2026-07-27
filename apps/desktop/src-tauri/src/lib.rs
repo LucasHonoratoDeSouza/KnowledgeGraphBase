@@ -20,6 +20,7 @@ use tauri_plugin_updater::UpdaterExt;
 ///
 /// Panics when Tauri cannot initialize or run the application event loop.
 pub fn run() {
+    logging::install_panic_hook();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -37,6 +38,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info::get_app_info,
+            app_info::get_log_path,
             commands::workspace_get_state,
             commands::search_execute,
             commands::source_capture,
@@ -190,6 +192,35 @@ mod update_error_logging_tests {
                 .any(|line| line.contains("update-install-failed")
                     && line.contains("bad signature rejected")),
             "expected an update-install-failed log line, got: {captured:?}"
+        );
+    }
+
+    /// End-to-end: a real, installed panic hook (T22) catches a panic
+    /// triggered from a code path touching credential data and logs it
+    /// through the same capturing sink as the tests above, without the
+    /// credential appearing verbatim.
+    #[test]
+    fn installed_panic_hook_logs_a_panic_without_leaking_a_credential() {
+        init_capture();
+        super::logging::install_panic_hook();
+
+        let credential = "sk-live-abcdef0123456789";
+        let previous_hook_output = std::panic::catch_unwind(|| {
+            panic!("stronghold unlock failed: invalid secret '{credential}'");
+        });
+        assert!(
+            previous_hook_output.is_err(),
+            "the panic must have occurred"
+        );
+
+        let captured = CAPTURED.lock().unwrap();
+        assert!(
+            captured.iter().any(|line| line.starts_with("panic:")),
+            "expected a panic log line, got: {captured:?}"
+        );
+        assert!(
+            captured.iter().all(|line| !line.contains(credential)),
+            "credential leaked verbatim into a captured log line: {captured:?}"
         );
     }
 }

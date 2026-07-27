@@ -1,5 +1,7 @@
 export { AISettings } from "./AISettings";
-export { ipcSettingsClient } from "./ipc";
+export { About } from "./About";
+export type { AboutClient } from "./About";
+export { ipcSettingsClient, ipcAboutClient } from "./ipc";
 export { tauriFolderPicker } from "./folderPicker";
 export type { FolderPicker } from "./folderPicker";
 export { Onboarding } from "./Onboarding";
