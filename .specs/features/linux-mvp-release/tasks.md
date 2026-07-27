@@ -139,9 +139,9 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Composite action defined with the same steps (checkout is NOT included — remains the caller's first step), producing an identical toolchain state to today's `dev-build.yml`.
-- [ ] `actionlint` (or `yamllint` fallback) reports no errors on the new file.
-- [ ] Gate check passes: `make check` (no functional app code changed, build gate only)
+- [x] Composite action defined with the same steps (checkout is NOT included — remains the caller's first step), producing an identical toolchain state to today's `dev-build.yml`.
+- [x] `actionlint` (or `yamllint` fallback) reports no errors on the new file.
+- [x] Gate check passes: `make check` (no functional app code changed, build gate only)
 
 **Tests**: none (CI config)
 **Gate**: build
