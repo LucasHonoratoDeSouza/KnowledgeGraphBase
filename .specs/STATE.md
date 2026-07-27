@@ -96,7 +96,7 @@
 - **Trade-off**: Menos recursos prontos (sem Markdown completo, sem d3-force) em troca de controle, tamanho e reprodutibilidade.
 - **Scope**: renderer do desktop
 - **Date**: 2026-07-25
-- **Status**: active
+- **Status**: active — clarified by AD-014 (scope confirmed as renderer-only)
 
 ### AD-013
 - **Decision**: A organização tem duas metades explícitas: o arquivador incremental por captura (barato, todo capture) e o passe Librarian escopado a uma pasta (raro, deliberado, desfazível em uma ação). Ambos leem apenas a mini-summary `context:` de cada nota, nunca o corpo.
@@ -106,13 +106,21 @@
 - **Date**: 2026-07-25
 - **Status**: active
 
+### AD-014
+- **Decision**: AD-012 ("nenhuma dependência nova de runtime entra no app") aplica-se ao renderer do desktop (o bundle JS/React), não a plugins nativos Tauri do lado Rust. Plugins nativos para responsabilidades de backend (logging, updater etc.) são avaliados caso a caso pelo julgamento normal de revisão de dependências, e não bloqueados por AD-012.
+- **Reason**: O design da feature Linux MVP (#39) precisa de `tauri-plugin-log` (plugin oficial Tauri) para logging local de erros/crashes e observabilidade de updates. Sem esta clarificação, a redação de AD-012 é ambígua o suficiente para bloquear até o próprio updater plugin já em uso (`tauri-plugin-updater`, já wired em `lib.rs:22`), o que não foi a intenção original.
+- **Trade-off**: Abre a porta para outros plugins nativos Tauri no futuro sem uma revisão de arquitetura formal — mitigado por permanecer sujeito a julgamento normal de revisão de dependências (não é um cheque em branco).
+- **Scope**: dependências nativas Rust/Tauri do app desktop
+- **Date**: 2026-07-26
+- **Status**: active
+
 ## Handoff
 
-- **Feature**: Ready backlog / `.specs/features/ready-backlog/`
-- **Phase / Task**: Execute complete — all 25 tasks done, independent validation pass written to `validation.md` (PASS)
-- **Completed**: issues #4, #5, #7, #10, #12, #13, #14, #15, #17, #18 and #29, each with tests; full gates green (lint, typecheck, format, 117 desktop + 45 package unit tests, 26 Playwright e2e, Rust workspace suite, clippy, builds)
-- **In-progress**: none
-- **Next step**: owner testing of the branch, then PR into `dev`; remaining board items are the Blocked agent epic (#19–#26)
-- **Blockers**: none. Pre-existing repo drift: `cargo fmt --check` disagrees with five files this branch never touched (newer rustfmt)
-- **Uncommitted files**: none
-- **Branch**: `feat/ready-backlog`
+- **Feature**: Linux MVP release / `.specs/features/linux-mvp-release/`
+- **Phase / Task**: Execute complete — all 29 tasks done across 4 sequential batches, independent Verifier pass written to `validation.md` (PASS ✅, 79/89 ACs matched with evidence, 5/5 discrimination-sensor mutations killed), 3 ranked follow-up gaps closed directly in a post-verification fix commit
+- **Completed**: issues #40, #41, #42, #43, #44, #45, #46, #47, #49, #50, #51, #52, #53, #54, #55, #48, #56 (the full #39 epic except items that require publishing real releases — see below); branch protection genuinely applied live to `main`/`dev`; private vulnerability reporting genuinely enabled live
+- **In-progress**: none — PR #57 (`feat/linux-mvp-release` → `dev`) opened, pushed, and **all 4 CI checks (static/unit/integration/e2e) are green** on the real GitHub Actions run. Getting there took 3 follow-up fix commits after the first real CI run exposed bugs no local/sandboxed run could catch: (1) the composite action never installed Python's `uv` toolchain at all, (2) `settings_security.rs`'s `onboarding_persists_only_a_vault_display_name_publicly` test hardcoded this dev machine's folder name (`"Knowledge GraphBase"`) instead of deriving the expected value the same way the production code does — every agent, including the independent Verifier, had wrongly written this off as an "environment quirk" without checking a real checkout, (3) `astral-sh/setup-uv@v3`'s `version-file` input doesn't exist on that pinned major version — fixed by reading `pyproject.toml`'s pinned uv version directly and passing it via `version` instead.
+- **Next step**: owner review/merge of PR #57 (CI is green, branch protection requires these checks, no required review). After merge: (1) run `make test-installer` with Docker to exercise the container-based installer test no agent sandbox had Docker for, (2) work through `docs/release-checklist.md` before cutting the first real stable release — the stable updater endpoint (`releases/latest/download/latest.json`) is baked into every binary from that point forward and cannot be casually changed afterward, (3) one-time manual cleanup of the ~61 accumulated `dev` release assets, (4) confirm `dependency-audit.yml` and the SBOM step run cleanly on real GitHub Actions.
+- **Blockers**: none. One pre-existing, environment-name-dependent Rust test (`settings_security.rs::onboarding_persists_only_a_vault_display_name_publicly`) fails in any checkout not literally named `Knowledge GraphBase` — confirmed unrelated to this feature by every batch and the Verifier.
+- **Uncommitted files**: none on `feat/linux-mvp-release`. Note: `.specs/features/fluid-knowledge-graph/validation.md` has a pre-existing uncommitted change from an unrelated earlier session, present on multiple branches including this one — deliberately left untouched throughout this feature's work.
+- **Branch**: `feat/linux-mvp-release` (pushed to origin, PR #57 open against `dev`)

@@ -492,6 +492,39 @@ test("keeps AI settings sections navigable and distinct", async ({ page }) => {
   ]);
 });
 
+test("surfaces version, channel, and a working log-path action in Settings → About", async ({
+  page,
+}) => {
+  await createLocalKnowledgeBase(page);
+  await openSettings(page);
+
+  const about = page.getByRole("region", { name: "About" });
+  await expect(about.getByText(/^Version .+ · .+ channel$/)).toBeVisible();
+  await expect(about.getByText(/Log file:/)).toBeVisible();
+  await expect(
+    about.getByRole("button", { name: "Copy log path" }),
+  ).toBeEnabled();
+});
+
+test("keeps the app interactive immediately, never gated on the update check completing", async ({
+  page,
+}) => {
+  // MVP-48 AC4: startup must not block on the update check/download. This
+  // is structurally true (`check_for_updates` is spawned, never awaited, by
+  // `setup()`) -- this test is the regression guard: if that ever changed
+  // to an awaited call, a real network-bound update check would make the
+  // very first interactive control take far longer to appear than this
+  // default assertion timeout allows.
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("radio", { name: "Create local knowledge base" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open workspace" }),
+  ).toBeEnabled();
+});
+
 test("supports masked provider connect, test, rotate and remove lifecycle", async ({
   page,
 }) => {

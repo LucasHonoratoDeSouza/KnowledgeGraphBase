@@ -120,8 +120,13 @@ fn onboarding_persists_only_a_vault_display_name_publicly() {
     let repository = configured_repository();
     let snapshot = repository.public_snapshot().unwrap();
 
+    let expected_vault_name = vault_root()
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_owned);
+
     assert!(snapshot.setup_complete);
-    assert_eq!(snapshot.vault_name.as_deref(), Some("Knowledge GraphBase"));
+    assert_eq!(snapshot.vault_name, expected_vault_name);
     assert!(
         !serde_json::to_string(&snapshot)
             .unwrap()

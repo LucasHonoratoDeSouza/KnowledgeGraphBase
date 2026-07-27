@@ -36,6 +36,9 @@ fn manifest_declares_only_scoped_desktop_foundation_commands() {
             "provider_rotate",
             "provider_test",
             "provider_remove",
+            "get_app_info",
+            "get_log_path",
+            "restart_app",
         ],
     );
 }

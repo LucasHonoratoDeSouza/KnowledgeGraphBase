@@ -27,6 +27,9 @@ fn main() {
             "provider_rotate",
             "provider_test",
             "provider_remove",
+            "get_app_info",
+            "get_log_path",
+            "restart_app",
         ]),
     ))
     .expect("failed to prepare the Tauri application manifest");

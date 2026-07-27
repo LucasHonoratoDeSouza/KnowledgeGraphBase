@@ -800,6 +800,20 @@ fn open_store(vault_root: &Path) -> Result<KnowledgeStore, String> {
     }
     let metadata = vault_root.join(".knowledge-os");
     fs::create_dir_all(&metadata).map_err(command_error)?;
+
+    // A newer-than-binary vault (or one whose format has no defined
+    // migration) must never be opened at all -- `KnowledgeStore::open`
+    // unconditionally migrates on open, so this check runs first and, on
+    // `Refuse`, returns before that call ever touches the file (#52).
+    // `UpToDate`/`RebuildCache` both fall through to the normal open below:
+    // `KnowledgeStore::open`'s own migration is already the non-destructive,
+    // additive-only upgrade path (see `migration.rs`'s module docs).
+    if let Ok(crate::migration::CompatibilityDecision::Refuse(message)) =
+        crate::migration::check_vault_compatibility(vault_root)
+    {
+        return Err(message);
+    }
+
     KnowledgeStore::open(metadata.join("knowledge.sqlite3")).map_err(command_error)
 }
 

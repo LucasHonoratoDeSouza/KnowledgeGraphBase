@@ -52,8 +52,11 @@ import {
 } from "../editor";
 import {
   AISettings,
+  About,
   Onboarding,
+  ipcAboutClient,
   ipcSettingsClient,
+  type AboutClient,
   type FolderPicker,
   type ModelProfile,
   type SettingsClient,
@@ -93,6 +96,7 @@ import {
 export type PrimaryMode = "Ingest" | "Retrieve";
 
 interface AppShellProps {
+  aboutClient?: AboutClient;
   editorClient?: EditorClient;
   folderPicker?: FolderPicker;
   initialMode?: PrimaryMode;
@@ -370,12 +374,16 @@ interface RetrieveSurfaceProps {
 function PaneDivider({
   collapsed,
   label,
+  onDragEnd,
+  onDragStart,
   onResize,
   pane,
   width,
 }: {
   collapsed: boolean;
   label: string;
+  onDragEnd?: () => void;
+  onDragStart?: () => void;
   onResize: (delta: number) => void;
   pane: "explorer" | "assistant";
   width: number;
@@ -404,6 +412,7 @@ function PaneDivider({
         event.preventDefault();
         last.current = event.clientX;
         event.currentTarget.setPointerCapture(event.pointerId);
+        onDragStart?.();
       }}
       onPointerMove={(event) => {
         if (last.current === null) return;
@@ -415,6 +424,7 @@ function PaneDivider({
       onPointerUp={(event) => {
         last.current = null;
         event.currentTarget.releasePointerCapture(event.pointerId);
+        onDragEnd?.();
       }}
       role="separator"
       tabIndex={0}
@@ -1352,6 +1362,11 @@ function RetrieveSurface({
   );
   const [crowded, setCrowded] = useState<string[]>([]);
   const [librarian, setLibrarian] = useState<LibrarianOutcome | null>(null);
+  // The workspace grid animates column-width changes for collapse/expand
+  // (#35), but that same transition makes an active divider drag lag a
+  // frame behind the pointer and race the value a test reads right after
+  // pointerup (#43) — suppress it only while a drag is in progress.
+  const [resizingPane, setResizingPane] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1528,7 +1543,9 @@ function RetrieveSurface({
         </div>
       </div>
       <div
-        className="retrieve-workspace"
+        className={
+          resizingPane ? "retrieve-workspace resizing" : "retrieve-workspace"
+        }
         style={{
           gridTemplateColumns: `${explorerColumn} ${
             explorer.collapsed ? "0px" : "3px"
@@ -1581,6 +1598,12 @@ function RetrieveSurface({
           label="Resize Explorer"
           pane="explorer"
           width={explorer.width}
+          onDragEnd={() => {
+            setResizingPane(false);
+          }}
+          onDragStart={() => {
+            setResizingPane(true);
+          }}
           onResize={(delta) => {
             onLayoutChange(
               resizePane(layout, "explorer", explorer.width + delta),
@@ -1710,6 +1733,12 @@ function RetrieveSurface({
           label="Resize Assistant"
           pane="assistant"
           width={assistant.width}
+          onDragEnd={() => {
+            setResizingPane(false);
+          }}
+          onDragStart={() => {
+            setResizingPane(true);
+          }}
           onResize={(delta) => {
             onLayoutChange(
               resizePane(layout, "assistant", assistant.width - delta),
@@ -1729,6 +1758,7 @@ function RetrieveSurface({
 }
 
 export function AppShell({
+  aboutClient = ipcAboutClient,
   editorClient = ipcEditorClient,
   folderPicker,
   initialMode = "Ingest",
@@ -2010,11 +2040,14 @@ export function AppShell({
           <WindowControls chrome={windowChrome} maximized={maximized} />
         </header>
         {settingsOpen ? (
-          <AISettings
-            client={settingsClient}
-            initial={settings}
-            onChange={setSettings}
-          />
+          <>
+            <AISettings
+              client={settingsClient}
+              initial={settings}
+              onChange={setSettings}
+            />
+            <About client={aboutClient} />
+          </>
         ) : (
           <div
             aria-labelledby={`${mode.toLowerCase()}-tab`}

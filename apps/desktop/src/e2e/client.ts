@@ -1,5 +1,6 @@
 import type { EditorClient, NoteDocument } from "../editor";
 import type {
+  AboutClient,
   AiConfiguration,
   FolderPicker,
   ProviderConnectRequest,
@@ -20,6 +21,18 @@ const initialNotes: Record<string, string> = {
     "# Knowledge OS\n\nLocal-first retrieval, organization and grounded knowledge.\n",
   "Projects/AI Research.md":
     "# AI Research\n\nResearch notes about agents, RAG and language models.\n",
+};
+
+export const browserE2EAboutClient: AboutClient = {
+  getLogPath: () =>
+    Promise.resolve("/tmp/knowledge-os-e2e/knowledge-os-desktop.log"),
+  getAppInfo: () =>
+    Promise.resolve({
+      version: "0.1.0",
+      channel: "dev",
+      updateStatus: { status: "idle" },
+    }),
+  restart: () => Promise.resolve(),
 };
 
 export const browserE2EFolderPicker: FolderPicker = {

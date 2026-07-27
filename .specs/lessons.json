@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "promote_threshold": 2,
+  "window_days": 45,
+  "quarantine_threshold": 2,
+  "next_id": 5,
+  "lessons": [
+    {
+      "id": "L-001",
+      "key": "ac_gap::when a spec names an exact file for a load bearing irreversible config warning e g readme contributing grep that file for the note before marking the ac done a doc comment elsewhere does not satisfy it",
+      "text": "When a spec names an exact file for a load-bearing/irreversible-config warning (e.g. README/CONTRIBUTING), grep that file for the note before marking the AC done — a doc comment elsewhere does not satisfy it.",
+      "signal": "ac_gap",
+      "scope": "docs",
+      "status": "candidate",
+      "features": [
+        "linux-mvp-release"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MVP-44 AC5 (docs)"
+      ],
+      "created": "2026-07-27T11:31:06Z",
+      "last_seen": "2026-07-27T11:31:06Z"
+    },
+    {
+      "id": "L-002",
+      "key": "spec_precision_gap::when a spec ac says a data migration rebuild path must work at realistic size add a fixture sized well beyond the happy path minimum an empty near empty fixture does not exercise the scale the spec is asking about",
+      "text": "When a spec AC says a data-migration/rebuild path must work 'at realistic size', add a fixture sized well beyond the happy-path minimum — an empty/near-empty fixture does not exercise the scale the spec is asking about.",
+      "signal": "spec_precision_gap",
+      "scope": "test-fixtures",
+      "status": "candidate",
+      "features": [
+        "linux-mvp-release"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MVP-52 AC5 (test-fixtures)"
+      ],
+      "created": "2026-07-27T11:31:06Z",
+      "last_seen": "2026-07-27T11:31:06Z"
+    },
+    {
+      "id": "L-003",
+      "key": "ac_gap::an installer updater script that replaces a running binary must either verify the replace strategy is safe against an in use process or explicitly document that a restart is required silence on this edge case is itself a gap even when no failure has been observed",
+      "text": "An installer/updater script that replaces a running binary must either verify the replace strategy is safe against an in-use process, or explicitly document that a restart is required — silence on this edge case is itself a gap even when no failure has been observed.",
+      "signal": "ac_gap",
+      "scope": "install.sh",
+      "status": "candidate",
+      "features": [
+        "linux-mvp-release"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md Edge Cases: installer re-run while app running (install.sh)"
+      ],
+      "created": "2026-07-27T11:31:06Z",
+      "last_seen": "2026-07-27T11:31:06Z"
+    },
+    {
+      "id": "L-004",
+      "key": "spec_deviation::tasks that gate a new command workflow on a config value tauri config keys workflow call triggers recur needing one extra file beyond the task s listed where write tasks md s where field to include the module registration trigger wiring file up front not just the primary new file",
+      "text": "Tasks that gate a new command/workflow on a config value (Tauri config keys, workflow_call triggers) recur needing one extra file beyond the task's listed Where — write tasks.md's Where field to include the module-registration/trigger-wiring file up front, not just the primary new file.",
+      "signal": "spec_deviation",
+      "scope": "tasks-authoring",
+      "status": "candidate",
+      "features": [
+        "linux-mvp-release"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "T9 app_info.rs SPEC_DEVIATION; T10 ci.yml workflow_call SPEC_DEVIATION (tasks-authoring)"
+      ],
+      "created": "2026-07-27T11:31:16Z",
+      "last_seen": "2026-07-27T11:31:16Z"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+  # SPEC_DEVIATION (T10): release-dev.yml/release-stable.yml gate their
+  # publish jobs on this exact workflow via `uses: ./.github/workflows/ci.yml`
+  # (a reusable workflow call), per design's Tech Decisions -- this
+  # guarantees the exact commit that passed CI is the exact commit that gets
+  # published, rather than a decoupled `workflow_run` trigger. T10's own
+  # Where field only names release-dev.yml, but the `workflow_call` trigger
+  # is the mechanism its Done-when criteria explicitly require, so this
+  # one-line addition to ci.yml is a necessary companion change.
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tauri-build
+      - name: Static checks
+        run: make lock-check format lint typecheck
+
+  unit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tauri-build
+      - name: Unit tests
+        run: make test-quick
+
+  integration:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tauri-build
+      - name: Rust integration tests
+        run: make test-rust-integration
+
+  e2e:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tauri-build
+      - name: Desktop e2e tests
+        run: make test-desktop-e2e
+      - name: Upload Playwright traces/screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7

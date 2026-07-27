@@ -1,0 +1,129 @@
+name: Stable channel release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: stable-channel-release
+  cancel-in-progress: true
+
+jobs:
+  check-version:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.compare.outputs.version }}
+      should_publish: ${{ steps.compare.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare tauri.conf.json version against published stable releases
+        id: compare
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(jq -r '.version' apps/desktop/src-tauri/tauri.conf.json)
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+          if gh api "repos/${{ github.repository }}/releases" --paginate \
+              --jq '.[] | select(.prerelease == false) | .tag_name' \
+              | grep -Fxq -- "${version}"; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Reusable-workflow call, not a `workflow_run` trigger -- same rationale as
+  # release-dev.yml: guarantees the exact commit that passes CI here is the
+  # exact commit `build-and-publish` below publishes.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build-and-publish:
+    needs: [check-version, ci]
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-tauri-build
+
+      - name: Generate release notes for this version
+        id: release_notes
+        uses: orhun/git-cliff-action@v4
+        env:
+          OUTPUT: RELEASE_NOTES.md
+        with:
+          config: cliff.toml
+          args: --unreleased --tag ${{ needs.check-version.outputs.version }} --strip all
+
+      - name: Update CHANGELOG.md
+        uses: orhun/git-cliff-action@v4
+        env:
+          OUTPUT: CHANGELOG.md
+        with:
+          config: cliff.toml
+          args: --tag ${{ needs.check-version.outputs.version }}
+
+      - name: Commit updated CHANGELOG.md
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs(changelog): update for ${{ needs.check-version.outputs.version }} [skip ci]"
+            git push origin HEAD:main
+          fi
+
+      - name: Build and publish stable release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Bakes the "stable" channel string into `app_info::channel()` (T9).
+          KNOWLEDGE_OS_CHANNEL: stable
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ needs.check-version.outputs.version }}
+          releaseName: "Knowledge OS ${{ needs.check-version.outputs.version }}"
+          releaseBody: ${{ steps.release_notes.outputs.content }}
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config '{"plugins":{"updater":{"endpoints":["https://github.com/LucasHonoratoDeSouza/KnowledgeGraphBase/releases/latest/download/latest.json"]}}}'
+
+      - name: Generate and publish SHA256SUMS (#50)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          find src-tauri/target/release/bundle -maxdepth 2 -type f \
+            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.sig' -o -name 'latest.json' \) \
+            -exec sha256sum {} \; \
+            | sed -E 's#  .*/([^/]+)$#  \1#' \
+            | sort -k2 > SHA256SUMS
+          corepack pnpm exec tauri signer sign \
+            -k "$TAURI_SIGNING_PRIVATE_KEY" \
+            -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+            SHA256SUMS
+          gh release upload "${{ needs.check-version.outputs.version }}" SHA256SUMS SHA256SUMS.sig --clobber
+
+      - name: Generate and publish SBOM (#54)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b /usr/local/bin v1.49.0
+          # Single tool covering the Rust (Cargo.lock), npm (pnpm-lock.yaml),
+          # and Python (uv.lock/pyproject.toml) dependency trees in one pass,
+          # rather than three separate ecosystem-specific SBOM generators.
+          syft . -o "cyclonedx-json=knowledge-os-${{ needs.check-version.outputs.version }}.cdx.json"
+          gh release upload "${{ needs.check-version.outputs.version }}" \
+            "knowledge-os-${{ needs.check-version.outputs.version }}.cdx.json" --clobber
