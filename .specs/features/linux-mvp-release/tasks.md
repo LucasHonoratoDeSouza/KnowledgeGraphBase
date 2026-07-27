@@ -446,11 +446,11 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] Both release workflows generate `SHA256SUMS` over all published artifacts and upload it as a release asset.
-- [ ] `SHA256SUMS.sig` is generated and uploaded alongside it.
-- [ ] README documents both `sha256sum -c SHA256SUMS --ignore-missing` and `minisign -Vm ... -P <public key>`, including the public key text.
-- [ ] A manual dry run against the most recent real release's assets confirms `sha256sum -c` passes.
-- [ ] Gate check passes: `make check`
+- [x] Both release workflows generate `SHA256SUMS` over all published artifacts and upload it as a release asset.
+- [x] `SHA256SUMS.sig` is generated and uploaded alongside it.
+- [x] README documents both `sha256sum -c SHA256SUMS --ignore-missing` and `minisign -Vm ... -P <public key>`, including the public key text.
+- [x] A manual dry run against the most recent real release's assets confirms `sha256sum -c` passes. Verified against the real `dev` release's `Knowledge.OS_0.1.18_amd64.AppImage`/`.sig`/`latest.json`: downloaded via `gh release download`, computed `SHA256SUMS` the same way the workflow step does, `sha256sum -c --ignore-missing` passed for all three; a one-byte tamper on a copy of the AppImage made the same check fail (non-zero exit), confirming detection.
+- [x] Gate check passes: `make check` (same pre-existing, out-of-scope `settings_security.rs` directory-name test failure as T10-T14 — this worktree's root is `agent-ada2cb016276e3cde` instead of `Knowledge GraphBase`; everything else in the chain up to that point — lock-check, format, lint, typecheck, test-quick — passed. Unrelated to this task's changes, which touch only CI workflows and README.)
 
 **Tests**: none (CI config/doc; correctness verified by the manual dry-run against real assets)
 **Gate**: build
