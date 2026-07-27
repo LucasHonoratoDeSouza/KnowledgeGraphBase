@@ -293,9 +293,9 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] A Rust unit test confirms the new `get_app_info` (or equivalent) command returns the correct channel string given a build-time env var/config value (test both `stable` and `dev` cases via cfg or injected config).
-- [ ] `tauri.conf.json` documents (inline comment or adjacent doc) that the `endpoints` array value is overridden per channel at build time by `release-dev.yml`/`release-stable.yml` (built in T10/T11) and that changing it post-first-stable-release is load-bearing/irreversible for existing installs.
-- [ ] Gate check passes: `make test-rust`
+- [x] A Rust unit test confirms the new `get_app_info` (or equivalent) command returns the correct channel string given a build-time env var/config value (test both `stable` and `dev` cases via cfg or injected config).
+- [x] `tauri.conf.json` documents (inline comment or adjacent doc) that the `endpoints` array value is overridden per channel at build time by `release-dev.yml`/`release-stable.yml` (built in T10/T11) and that changing it post-first-stable-release is load-bearing/irreversible for existing installs. (SPEC_DEVIATION: documented as an adjacent doc comment in `app_info.rs` instead of inline in `tauri.conf.json`, since Tauri's config parser rejects unknown JSON keys — see the marker in `app_info.rs`.)
+- [x] Gate check passes: `make test-rust`
 
 **Tests**: unit
 **Gate**: quick

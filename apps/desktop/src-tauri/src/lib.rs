@@ -1,3 +1,4 @@
+pub mod app_info;
 mod commands;
 pub mod editor;
 mod enrichment;
@@ -34,6 +35,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            app_info::get_app_info,
             commands::workspace_get_state,
             commands::search_execute,
             commands::source_capture,
