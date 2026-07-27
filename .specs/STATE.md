@@ -96,7 +96,7 @@
 - **Trade-off**: Menos recursos prontos (sem Markdown completo, sem d3-force) em troca de controle, tamanho e reprodutibilidade.
 - **Scope**: renderer do desktop
 - **Date**: 2026-07-25
-- **Status**: active
+- **Status**: active — clarified by AD-014 (scope confirmed as renderer-only)
 
 ### AD-013
 - **Decision**: A organização tem duas metades explícitas: o arquivador incremental por captura (barato, todo capture) e o passe Librarian escopado a uma pasta (raro, deliberado, desfazível em uma ação). Ambos leem apenas a mini-summary `context:` de cada nota, nunca o corpo.
@@ -104,6 +104,14 @@
 - **Trade-off**: Toda nota gerada precisa carregar `context:`, e o Librarian depende dessa qualidade.
 - **Scope**: ingestão, organização, Explorer
 - **Date**: 2026-07-25
+- **Status**: active
+
+### AD-014
+- **Decision**: AD-012 ("nenhuma dependência nova de runtime entra no app") aplica-se ao renderer do desktop (o bundle JS/React), não a plugins nativos Tauri do lado Rust. Plugins nativos para responsabilidades de backend (logging, updater etc.) são avaliados caso a caso pelo julgamento normal de revisão de dependências, e não bloqueados por AD-012.
+- **Reason**: O design da feature Linux MVP (#39) precisa de `tauri-plugin-log` (plugin oficial Tauri) para logging local de erros/crashes e observabilidade de updates. Sem esta clarificação, a redação de AD-012 é ambígua o suficiente para bloquear até o próprio updater plugin já em uso (`tauri-plugin-updater`, já wired em `lib.rs:22`), o que não foi a intenção original.
+- **Trade-off**: Abre a porta para outros plugins nativos Tauri no futuro sem uma revisão de arquitetura formal — mitigado por permanecer sujeito a julgamento normal de revisão de dependências (não é um cheque em branco).
+- **Scope**: dependências nativas Rust/Tauri do app desktop
+- **Date**: 2026-07-26
 - **Status**: active
 
 ## Handoff
