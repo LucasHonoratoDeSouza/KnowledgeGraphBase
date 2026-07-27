@@ -15,7 +15,7 @@ jobs:
       version: ${{ steps.compare.outputs.version }}
       should_publish: ${{ steps.compare.outputs.should_publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compare tauri.conf.json version against published stable releases
         id: compare
@@ -46,7 +46,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-tauri-build
 

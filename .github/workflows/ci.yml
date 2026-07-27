@@ -22,7 +22,7 @@ jobs:
   static:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-tauri-build
       - name: Static checks
         run: make lock-check format lint typecheck
@@ -30,7 +30,7 @@ jobs:
   unit:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-tauri-build
       - name: Unit tests
         run: make test-quick
@@ -38,7 +38,7 @@ jobs:
   integration:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-tauri-build
       - name: Rust integration tests
         run: make test-rust-integration
@@ -46,7 +46,7 @@ jobs:
   e2e:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-tauri-build
       - name: Desktop e2e tests
         run: make test-desktop-e2e
