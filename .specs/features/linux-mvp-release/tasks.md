@@ -113,11 +113,11 @@ T24 → T25 → T26 → T27 → T28 → T29
 - Skill: NONE
 
 **Done when**:
-- [ ] `LICENSE` exists at repo root with full MIT text and correct copyright holder/year.
-- [ ] README's "License" section states MIT and links to `LICENSE` (replacing "Not yet set.").
-- [ ] Every `package.json` listed above declares `"license": "MIT"` (note: these are all `"private": true` — set regardless, per design's Risks table; do not treat "publish to npm" as in scope).
-- [ ] README includes a short note on what MIT means for redistributing the AppImage.
-- [ ] Gate check passes: `make check`
+- [x] `LICENSE` exists at repo root with full MIT text and correct copyright holder/year.
+- [x] README's "License" section states MIT and links to `LICENSE` (replacing "Not yet set.").
+- [x] Every `package.json` listed above declares `"license": "MIT"` (note: these are all `"private": true` — set regardless, per design's Risks table; do not treat "publish to npm" as in scope).
+- [x] README includes a short note on what MIT means for redistributing the AppImage.
+- [x] Gate check passes: `make check`
 
 **Tests**: none (config/doc)
 **Gate**: build
